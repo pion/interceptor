@@ -10,7 +10,8 @@ func (i *Registry) Add(icpr Interceptor) {
 	i.interceptors = append(i.interceptors, icpr)
 }
 
-func (i *Registry) build() Interceptor {
+// Build constructs a single Interceptor from a InterceptorRegistry
+func (i *Registry) Build() Interceptor {
 	if len(i.interceptors) == 0 {
 		return &NoOp{}
 	}
