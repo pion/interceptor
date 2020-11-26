@@ -1,6 +1,8 @@
+// +build !js
+
 package interceptor
 
-// InterceptorRegistry is a collector for interceptors.
+// Registry is a collector for interceptors.
 type Registry struct {
 	interceptors []Interceptor
 }
