@@ -28,6 +28,7 @@ Check out the **[contributing wiki](https://github.com/pion/webrtc/wiki/Contribu
 
 * [Adam Kiss](https://github.com/masterada) - *Original Author*
 * [Sean DuBois](https://github.com/sean-der) - *Original Author*
+* [Atsushi Watanabe](https://github.com/at-wat) - *Original Author*
 
 ### License
 MIT License - see [LICENSE](LICENSE) for full text
