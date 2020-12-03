@@ -5,7 +5,6 @@
 package interceptor
 
 import (
-	"context"
 	"io"
 
 	"github.com/pion/rtcp"
@@ -44,60 +43,60 @@ type Interceptor interface {
 // RTPWriter is used by Interceptor.BindLocalStream.
 type RTPWriter interface {
 	// Write a rtp packet
-	Write(ctx context.Context, p *rtp.Packet, attributes Attributes) (int, error)
+	Write(p *rtp.Packet, attributes Attributes) (int, error)
 }
 
 // RTPReader is used by Interceptor.BindRemoteStream.
 type RTPReader interface {
 	// Read a rtp packet
-	Read(ctx context.Context) (*rtp.Packet, Attributes, error)
+	Read() (*rtp.Packet, Attributes, error)
 }
 
 // RTCPWriter is used by Interceptor.BindRTCPWriter.
 type RTCPWriter interface {
 	// Write a batch of rtcp packets
-	Write(ctx context.Context, pkts []rtcp.Packet, attributes Attributes) (int, error)
+	Write(pkts []rtcp.Packet, attributes Attributes) (int, error)
 }
 
 // RTCPReader is used by Interceptor.BindRTCPReader.
 type RTCPReader interface {
 	// Read a batch of rtcp packets
-	Read(ctx context.Context) ([]rtcp.Packet, Attributes, error)
+	Read() ([]rtcp.Packet, Attributes, error)
 }
 
 // Attributes are a generic key/value store used by interceptors
 type Attributes map[interface{}]interface{}
 
 // RTPWriterFunc is an adapter for RTPWrite interface
-type RTPWriterFunc func(ctx context.Context, p *rtp.Packet, attributes Attributes) (int, error)
+type RTPWriterFunc func(p *rtp.Packet, attributes Attributes) (int, error)
 
 // RTPReaderFunc is an adapter for RTPReader interface
-type RTPReaderFunc func(ctx context.Context) (*rtp.Packet, Attributes, error)
+type RTPReaderFunc func() (*rtp.Packet, Attributes, error)
 
 // RTCPWriterFunc is an adapter for RTCPWriter interface
-type RTCPWriterFunc func(ctx context.Context, pkts []rtcp.Packet, attributes Attributes) (int, error)
+type RTCPWriterFunc func(pkts []rtcp.Packet, attributes Attributes) (int, error)
 
 // RTCPReaderFunc is an adapter for RTCPReader interface
-type RTCPReaderFunc func(ctx context.Context) ([]rtcp.Packet, Attributes, error)
+type RTCPReaderFunc func() ([]rtcp.Packet, Attributes, error)
 
 // Write a rtp packet
-func (f RTPWriterFunc) Write(ctx context.Context, p *rtp.Packet, attributes Attributes) (int, error) {
-	return f(ctx, p, attributes)
+func (f RTPWriterFunc) Write(p *rtp.Packet, attributes Attributes) (int, error) {
+	return f(p, attributes)
 }
 
 // Read a rtp packet
-func (f RTPReaderFunc) Read(ctx context.Context) (*rtp.Packet, Attributes, error) {
-	return f(ctx)
+func (f RTPReaderFunc) Read() (*rtp.Packet, Attributes, error) {
+	return f()
 }
 
 // Write a batch of rtcp packets
-func (f RTCPWriterFunc) Write(ctx context.Context, pkts []rtcp.Packet, attributes Attributes) (int, error) {
-	return f(ctx, pkts, attributes)
+func (f RTCPWriterFunc) Write(pkts []rtcp.Packet, attributes Attributes) (int, error) {
+	return f(pkts, attributes)
 }
 
 // Read a batch of rtcp packets
-func (f RTCPReaderFunc) Read(ctx context.Context) ([]rtcp.Packet, Attributes, error) {
-	return f(ctx)
+func (f RTCPReaderFunc) Read() ([]rtcp.Packet, Attributes, error) {
+	return f()
 }
 
 // Get returns the attribute associated with key.
