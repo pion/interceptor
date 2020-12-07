@@ -59,6 +59,16 @@ func (i *Chain) BindRemoteStream(ctx *StreamInfo, reader RTPReader) RTPReader {
 	return reader
 }
 
+// BindRemoteRawStream lets you modify any incoming RTP raw packets. It is called once for per RemoteStream. The returned method
+// will be called once per rtp packet.
+func (i *Chain) BindRemoteRawStream(ctx *StreamInfo, reader RTPRawReader) RTPRawReader {
+	for _, interceptor := range i.interceptors {
+		reader = interceptor.BindRemoteRawStream(ctx, reader)
+	}
+
+	return reader
+}
+
 // UnbindRemoteStream is called when the Stream is removed. It can be used to clean up any data related to that track.
 func (i *Chain) UnbindRemoteStream(ctx *StreamInfo) {
 	for _, interceptor := range i.interceptors {
