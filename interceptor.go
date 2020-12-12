@@ -43,13 +43,13 @@ type Interceptor interface {
 // RTPWriter is used by Interceptor.BindLocalStream.
 type RTPWriter interface {
 	// Write a rtp packet
-	Write(p *rtp.Packet, attributes Attributes) (int, error)
+	Write(header *rtp.Header, payload []byte, attributes Attributes) (int, error)
 }
 
 // RTPReader is used by Interceptor.BindRemoteStream.
 type RTPReader interface {
 	// Read a rtp packet
-	Read() (*rtp.Packet, Attributes, error)
+	Read([]byte, Attributes) (int, Attributes, error)
 }
 
 // RTCPWriter is used by Interceptor.BindRTCPWriter.
@@ -61,32 +61,32 @@ type RTCPWriter interface {
 // RTCPReader is used by Interceptor.BindRTCPReader.
 type RTCPReader interface {
 	// Read a batch of rtcp packets
-	Read() ([]rtcp.Packet, Attributes, error)
+	Read([]byte, Attributes) (int, Attributes, error)
 }
 
 // Attributes are a generic key/value store used by interceptors
 type Attributes map[interface{}]interface{}
 
 // RTPWriterFunc is an adapter for RTPWrite interface
-type RTPWriterFunc func(p *rtp.Packet, attributes Attributes) (int, error)
+type RTPWriterFunc func(header *rtp.Header, payload []byte, attributes Attributes) (int, error)
 
 // RTPReaderFunc is an adapter for RTPReader interface
-type RTPReaderFunc func() (*rtp.Packet, Attributes, error)
+type RTPReaderFunc func([]byte, Attributes) (int, Attributes, error)
 
 // RTCPWriterFunc is an adapter for RTCPWriter interface
 type RTCPWriterFunc func(pkts []rtcp.Packet, attributes Attributes) (int, error)
 
 // RTCPReaderFunc is an adapter for RTCPReader interface
-type RTCPReaderFunc func() ([]rtcp.Packet, Attributes, error)
+type RTCPReaderFunc func([]byte, Attributes) (int, Attributes, error)
 
 // Write a rtp packet
-func (f RTPWriterFunc) Write(p *rtp.Packet, attributes Attributes) (int, error) {
-	return f(p, attributes)
+func (f RTPWriterFunc) Write(header *rtp.Header, payload []byte, attributes Attributes) (int, error) {
+	return f(header, payload, attributes)
 }
 
 // Read a rtp packet
-func (f RTPReaderFunc) Read() (*rtp.Packet, Attributes, error) {
-	return f()
+func (f RTPReaderFunc) Read(b []byte, a Attributes) (int, Attributes, error) {
+	return f(b, a)
 }
 
 // Write a batch of rtcp packets
@@ -95,8 +95,8 @@ func (f RTCPWriterFunc) Write(pkts []rtcp.Packet, attributes Attributes) (int, e
 }
 
 // Read a batch of rtcp packets
-func (f RTCPReaderFunc) Read() ([]rtcp.Packet, Attributes, error) {
-	return f()
+func (f RTCPReaderFunc) Read(b []byte, a Attributes) (int, Attributes, error) {
+	return f(b, a)
 }
 
 // Get returns the attribute associated with key.
