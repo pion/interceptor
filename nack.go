@@ -1,5 +1,3 @@
-// +build !js
-
 package interceptor
 
 // NACK interceptor generates/responds to nack messages.

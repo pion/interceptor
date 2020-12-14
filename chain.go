@@ -1,5 +1,3 @@
-// +build !js
-
 package interceptor
 
 // Chain is an interceptor that runs all child interceptors in order.

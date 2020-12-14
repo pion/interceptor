@@ -1,5 +1,3 @@
-// +build !js
-
 // Package interceptor contains the Interceptor interface, with some useful interceptors that should be safe to use
 // in most cases.
 package interceptor

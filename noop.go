@@ -1,5 +1,3 @@
-// +build !js
-
 package interceptor
 
 // NoOp is an Interceptor that does not modify any packets. It can embedded in other interceptors, so it's

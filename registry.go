@@ -1,5 +1,3 @@
-// +build !js
-
 package interceptor
 
 // Registry is a collector for interceptors.

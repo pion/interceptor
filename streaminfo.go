@@ -1,5 +1,3 @@
-// +build !js
-
 package interceptor
 
 // RTPHeaderExtension represents a negotiated RFC5285 RTP header extension.
