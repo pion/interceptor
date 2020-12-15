@@ -22,8 +22,6 @@ type GeneratorInterceptor struct {
 	wg          sync.WaitGroup
 	close       chan struct{}
 	log         logging.LeveledLogger
-
-	remoteStreamBuf rtp.Packet
 }
 
 // NewGeneratorInterceptor returns a new GeneratorInterceptor interceptor
@@ -84,10 +82,11 @@ func (n *GeneratorInterceptor) BindRemoteStream(info *interceptor.StreamInfo, re
 			return 0, nil, err
 		}
 
-		if err = n.remoteStreamBuf.Unmarshal(b[:i]); err != nil {
+		pkt := rtp.Packet{}
+		if err = pkt.Unmarshal(b[:i]); err != nil {
 			return 0, nil, err
 		}
-		receiveLog.add(n.remoteStreamBuf.Header.SequenceNumber)
+		receiveLog.add(pkt.Header.SequenceNumber)
 
 		return i, attr, nil
 	})

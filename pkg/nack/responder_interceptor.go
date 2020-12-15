@@ -82,7 +82,6 @@ func (n *ResponderInterceptor) BindLocalStream(info *interceptor.StreamInfo, wri
 
 	return interceptor.RTPWriterFunc(func(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
 		sendBuffer.add(&rtp.Packet{Header: *header, Payload: payload})
-
 		return writer.Write(header, payload, attributes)
 	})
 }
