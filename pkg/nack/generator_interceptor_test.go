@@ -52,7 +52,7 @@ func TestGeneratorInterceptor(t *testing.T) {
 
 	select {
 	case pkts := <-stream.WrittenRTCP():
-		assert.Equal(t, len(pkts), 1, "single packet RTCP Compound Packet expected")
+		assert.Equal(t, 1, len(pkts), "single packet RTCP Compound Packet expected")
 
 		p, ok := pkts[0].(*rtcp.TransportLayerNack)
 		assert.True(t, ok, "TransportLayerNack rtcp packet expected, found: %T", pkts[0])
