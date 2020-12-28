@@ -17,7 +17,7 @@ type GeneratorInterceptor struct {
 	size        uint16
 	skipLastN   uint16
 	interval    time.Duration
-	receiveLogs *sync.Map
+	receiveLogs sync.Map
 	m           sync.Mutex
 	wg          sync.WaitGroup
 	close       chan struct{}
@@ -27,12 +27,11 @@ type GeneratorInterceptor struct {
 // NewGeneratorInterceptor returns a new GeneratorInterceptor interceptor
 func NewGeneratorInterceptor(opts ...GeneratorOption) (*GeneratorInterceptor, error) {
 	r := &GeneratorInterceptor{
-		size:        8192,
-		skipLastN:   0,
-		interval:    time.Millisecond * 100,
-		receiveLogs: &sync.Map{},
-		close:       make(chan struct{}),
-		log:         logging.NewDefaultLoggerFactory().NewLogger("nack_generator"),
+		size:      8192,
+		skipLastN: 0,
+		interval:  time.Millisecond * 100,
+		close:     make(chan struct{}),
+		log:       logging.NewDefaultLoggerFactory().NewLogger("nack_generator"),
 	}
 
 	for _, opt := range opts {

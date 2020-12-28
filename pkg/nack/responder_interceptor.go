@@ -13,7 +13,7 @@ import (
 type ResponderInterceptor struct {
 	interceptor.NoOp
 	size    uint16
-	streams *sync.Map
+	streams sync.Map
 	log     logging.LeveledLogger
 }
 
@@ -25,9 +25,8 @@ type localStream struct {
 // NewResponderInterceptor returns a new GeneratorInterceptor interceptor
 func NewResponderInterceptor(opts ...ResponderOption) (*ResponderInterceptor, error) {
 	r := &ResponderInterceptor{
-		size:    8192,
-		streams: &sync.Map{},
-		log:     logging.NewDefaultLoggerFactory().NewLogger("nack_responder"),
+		size: 8192,
+		log:  logging.NewDefaultLoggerFactory().NewLogger("nack_responder"),
 	}
 
 	for _, opt := range opts {
