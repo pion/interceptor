@@ -12,9 +12,11 @@ import (
 // ResponderInterceptor responds to nack feedback messages
 type ResponderInterceptor struct {
 	interceptor.NoOp
-	size    uint16
-	streams sync.Map
-	log     logging.LeveledLogger
+	size uint16
+	log  logging.LeveledLogger
+
+	streams   map[uint32]*localStream
+	streamsMu sync.Mutex
 }
 
 type localStream struct {
@@ -25,8 +27,9 @@ type localStream struct {
 // NewResponderInterceptor returns a new GeneratorInterceptor interceptor
 func NewResponderInterceptor(opts ...ResponderOption) (*ResponderInterceptor, error) {
 	r := &ResponderInterceptor{
-		size: 8192,
-		log:  logging.NewDefaultLoggerFactory().NewLogger("nack_responder"),
+		size:    8192,
+		log:     logging.NewDefaultLoggerFactory().NewLogger("nack_responder"),
+		streams: map[uint32]*localStream{},
 	}
 
 	for _, opt := range opts {
@@ -77,7 +80,9 @@ func (n *ResponderInterceptor) BindLocalStream(info *interceptor.StreamInfo, wri
 
 	// error is already checked in NewGeneratorInterceptor
 	sendBuffer, _ := newSendBuffer(n.size)
-	n.streams.Store(info.SSRC, &localStream{sendBuffer: sendBuffer, rtpWriter: writer})
+	n.streamsMu.Lock()
+	n.streams[info.SSRC] = &localStream{sendBuffer: sendBuffer, rtpWriter: writer}
+	n.streamsMu.Unlock()
 
 	return interceptor.RTPWriterFunc(func(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
 		sendBuffer.add(&rtp.Packet{Header: *header, Payload: payload})
@@ -87,16 +92,18 @@ func (n *ResponderInterceptor) BindLocalStream(info *interceptor.StreamInfo, wri
 
 // UnbindLocalStream is called when the Stream is removed. It can be used to clean up any data related to that track.
 func (n *ResponderInterceptor) UnbindLocalStream(info *interceptor.StreamInfo) {
-	n.streams.Delete(info.SSRC)
+	n.streamsMu.Lock()
+	delete(n.streams, info.SSRC)
+	n.streamsMu.Unlock()
 }
 
 func (n *ResponderInterceptor) resendPackets(nack *rtcp.TransportLayerNack) {
-	v, ok := n.streams.Load(nack.MediaSSRC)
+	n.streamsMu.Lock()
+	stream, ok := n.streams[nack.MediaSSRC]
+	n.streamsMu.Unlock()
 	if !ok {
 		return
 	}
-
-	stream := v.(*localStream)
 
 	for i := range nack.Nacks {
 		nack.Nacks[i].Range(func(seq uint16) bool {
