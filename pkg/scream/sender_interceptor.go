@@ -107,18 +107,18 @@ func (s *SenderInterceptor) BindLocalStream(info *interceptor.StreamInfo, writer
 	rtpQueue := s.newRTPQueue()
 	localStream := &localStream{
 		queue:       rtpQueue,
-		newFrame:    make(chan struct{}, 1024), // TODO: remove hardcoded limit?
-		newFeedback: make(chan struct{}, 1024), // TODO: remove hardcoded limit?
+		newFrame:    make(chan struct{}),
+		newFeedback: make(chan struct{}),
 	}
 	s.rtpStreamsMu.Lock()
 	s.rtpStreams[info.SSRC] = localStream
 	s.rtpStreamsMu.Unlock()
 
 	// TODO: Somehow set these attributes per stream
-	priority := float64(1)               // highest priority
-	minBitrate := float64(1_000)         // 1Kbps
-	startBitrate := float64(1_000)       // 1Kbps
-	maxBitrate := float64(1_000_000_000) // 1Mbps
+	priority := float64(1)            // highest priority
+	minBitrate := float64(1_000)      // 1Kbps
+	startBitrate := float64(1_000)    // 1Kbps
+	maxBitrate := float64(50_000_000) // 50Mbps
 
 	s.tx.RegisterNewStream(rtpQueue, info.SSRC, priority, minBitrate, startBitrate, maxBitrate)
 
