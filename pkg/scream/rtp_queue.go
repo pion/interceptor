@@ -21,7 +21,7 @@ type queue struct {
 	queue        *list.List
 }
 
-func newQueue() *queue {
+func newQueue() RTPQueue {
 	return &queue{queue: list.New()}
 }
 
@@ -97,7 +97,7 @@ func (q *queue) Clear() {
 	q.queue.Init()
 }
 
-func (q *queue) enqueue(packet *rtp.Packet, ts uint64) {
+func (q *queue) Enqueue(packet *rtp.Packet, ts uint64) {
 	q.m.Lock()
 	defer q.m.Unlock()
 
@@ -108,7 +108,7 @@ func (q *queue) enqueue(packet *rtp.Packet, ts uint64) {
 	})
 }
 
-func (q *queue) dequeue() *rtp.Packet {
+func (q *queue) Dequeue() *rtp.Packet {
 	q.m.Lock()
 	defer q.m.Unlock()
 

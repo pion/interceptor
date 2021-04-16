@@ -38,13 +38,19 @@ type ReceiverInterceptor struct {
 }
 
 // NewReceiverInterceptor returns a new ReceiverInterceptor
-func NewReceiverInterceptor() *ReceiverInterceptor {
-	return &ReceiverInterceptor{
+func NewReceiverInterceptor(opts ...ReceiverOption) (*ReceiverInterceptor, error) {
+	r := &ReceiverInterceptor{
 		interval: time.Millisecond * 10,
 		close:    make(chan struct{}),
 		log:      logging.NewDefaultLoggerFactory().NewLogger("scream_receiver"),
 		screamRx: map[uint32]*scream.Rx{},
 	}
+	for _, opt := range opts {
+		if err := opt(r); err != nil {
+			return nil, err
+		}
+	}
+	return r, nil
 }
 
 // BindRTCPWriter lets you modify any outgoing RTCP packets. It is called once per PeerConnection. The returned method
@@ -67,7 +73,9 @@ func (r *ReceiverInterceptor) BindRTCPWriter(writer interceptor.RTCPWriter) inte
 // BindRemoteStream lets you modify any incoming RTP packets. It is called once for per RemoteStream. The returned method
 // will be called once per rtp packet.
 func (r *ReceiverInterceptor) BindRemoteStream(info *interceptor.StreamInfo, reader interceptor.RTPReader) interceptor.RTPReader {
-	// TODO: Check if stream supports scream?
+	if !streamSupportSCReAM(info) {
+		return reader
+	}
 
 	rx := scream.NewRx(info.SSRC)
 	r.screamRxMu.Lock()

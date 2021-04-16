@@ -13,14 +13,17 @@ import (
 	"github.com/pion/rtp"
 )
 
-type rtpQueue interface {
+// RTPQueue implements the packet queue which will be used by SCReAM to buffer packets
+type RTPQueue interface {
 	scream.RTPQueue
-	enqueue(packet *rtp.Packet, ts uint64)
-	dequeue() *rtp.Packet
+	// Enqueue adds a new packet to the end of the queue.
+	Enqueue(packet *rtp.Packet, ts uint64)
+	// Dequeue removes and returns the first packet in the queue.
+	Dequeue() *rtp.Packet
 }
 
 type localStream struct {
-	queue       rtpQueue
+	queue       RTPQueue
 	newFrame    chan struct{}
 	newFeedback chan struct{}
 	close       chan struct{}
@@ -35,18 +38,26 @@ type SenderInterceptor struct {
 	close chan struct{}
 	log   logging.LeveledLogger
 
+	newRTPQueue  func() RTPQueue
 	rtpStreams   map[uint32]*localStream
 	rtpStreamsMu sync.Mutex
 }
 
 // NewSenderInterceptor returns a new SenderInterceptor
-func NewSenderInterceptor() *SenderInterceptor {
-	return &SenderInterceptor{
-		tx:         scream.NewTx(),
-		close:      make(chan struct{}),
-		log:        logging.NewDefaultLoggerFactory().NewLogger("scream_sender"),
-		rtpStreams: map[uint32]*localStream{},
+func NewSenderInterceptor(opts ...SenderOption) (*SenderInterceptor, error) {
+	s := &SenderInterceptor{
+		tx:          scream.NewTx(),
+		close:       make(chan struct{}),
+		log:         logging.NewDefaultLoggerFactory().NewLogger("scream_sender"),
+		newRTPQueue: newQueue,
+		rtpStreams:  map[uint32]*localStream{},
 	}
+	for _, opt := range opts {
+		if err := opt(s); err != nil {
+			return nil, err
+		}
+	}
+	return s, nil
 }
 
 // BindRTCPReader lets you modify any incoming RTCP packets. It is called once per sender/receiver, however this might
@@ -80,6 +91,10 @@ func (s *SenderInterceptor) BindRTCPReader(reader interceptor.RTCPReader) interc
 // BindLocalStream lets you modify any outgoing RTP packets. It is called once for per LocalStream. The returned method
 // will be called once per rtp packet.
 func (s *SenderInterceptor) BindLocalStream(info *interceptor.StreamInfo, writer interceptor.RTPWriter) interceptor.RTPWriter {
+	if !streamSupportSCReAM(info) {
+		return writer
+	}
+
 	s.m.Lock()
 	defer s.m.Unlock()
 
@@ -89,7 +104,7 @@ func (s *SenderInterceptor) BindLocalStream(info *interceptor.StreamInfo, writer
 
 	s.wg.Add(1)
 
-	rtpQueue := newQueue() // TODO: Use a configurable factory?
+	rtpQueue := s.newRTPQueue()
 	localStream := &localStream{
 		queue:       rtpQueue,
 		newFrame:    make(chan struct{}, 1024), // TODO: remove hardcoded limit?
@@ -112,7 +127,9 @@ func (s *SenderInterceptor) BindLocalStream(info *interceptor.StreamInfo, writer
 	return interceptor.RTPWriterFunc(func(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
 		t := ntpTime(time.Now())
 		pkt := &rtp.Packet{Header: *header, Payload: payload}
-		rtpQueue.enqueue(pkt, t)
+
+		// TODO: should attributes be stored in the queue, so we can pass them on later (see below)?
+		rtpQueue.Enqueue(pkt, t)
 		size := pkt.MarshalSize()
 		s.m.Lock()
 		s.tx.NewMediaFrame(t, header.SSRC, size)
@@ -147,8 +164,8 @@ func (s *SenderInterceptor) loop(writer interceptor.RTPWriter, ssrc uint32) {
 	stream := s.rtpStreams[ssrc]
 	s.rtpStreamsMu.Unlock()
 
-	// TODO: A bit ugly? We need a timer so that case <-timer.C doesn't segfault.
-	// however, that case only applies after the timer has explicitly been set in one
+	// This is a bit ugly, because we need a timer so that case <-timer.C doesn't segfault.
+	// However, that case only applies after the timer has explicitly been set in one
 	// of the other cases first. So the timer will be disabled by default in the beginning.
 	// The algorithm implemented here is documented in detail (a flow chart) here:
 	// https://github.com/EricssonResearch/scream/blob/master/SCReAM-description.pptx
@@ -189,7 +206,7 @@ func (s *SenderInterceptor) loop(writer interceptor.RTPWriter, ssrc uint32) {
 
 		case transmit <= 1e-3:
 			// send packet
-			packet := stream.queue.dequeue()
+			packet := stream.queue.Dequeue()
 			if packet == nil {
 				continue
 			}
