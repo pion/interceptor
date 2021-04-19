@@ -69,13 +69,9 @@ func (q *queue) GetDelay(ts float32) float32 {
 		return 0
 	}
 	pkt := q.queue.Front().Value.(rtpQueueItem)
-	ntpTime := pkt.ts
-	// First convert 64 bit NTP timestamp to 32 bit NTP timestamp as used by scream
-	q16Time := uint32((ntpTime >> 16) & 0xFFFFFFFF)
-	// Then scale the timestamp to seconds as done by scream and calculate the difference to given ts
-	delay := ts - float32(q16Time)/65536.0
 
-	return delay
+	// SCReAM expects a diff in seconds, thus we take the NTP seconds from the packet timestamp
+	return ts - float32((pkt.ts>>32)&0xFFFFFFFF_FFFFFFFF)
 }
 
 func (q *queue) GetSizeOfLastFrame() int {
