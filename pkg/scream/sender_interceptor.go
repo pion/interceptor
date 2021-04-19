@@ -160,6 +160,7 @@ func (s *SenderInterceptor) Close() error {
 }
 
 func (s *SenderInterceptor) loop(writer interceptor.RTPWriter, ssrc uint32) {
+	defer s.wg.Done()
 	s.rtpStreamsMu.Lock()
 	stream := s.rtpStreams[ssrc]
 	s.rtpStreamsMu.Unlock()
