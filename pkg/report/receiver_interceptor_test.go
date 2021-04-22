@@ -12,7 +12,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// Ensure ReceiverInterceptor satisfies the Interceptor interface.
+var _ interceptor.Interceptor = &ReceiverInterceptor{}
+
 func TestReceiverInterceptor(t *testing.T) {
+	sessionID := interceptor.SessionID("test")
+
 	t.Run("before any packet", func(t *testing.T) {
 		mt := test.MockTime{}
 		i, err := NewReceiverInterceptor(
@@ -23,11 +28,12 @@ func TestReceiverInterceptor(t *testing.T) {
 		assert.NoError(t, err)
 
 		stream := test.NewMockStream(&interceptor.StreamInfo{
+			SessionID: sessionID,
 			SSRC:      123456,
 			ClockRate: 90000,
 		}, i)
 		defer func() {
-			assert.NoError(t, stream.Close())
+			assert.NoError(t, stream.Close(sessionID))
 		}()
 
 		pkts := <-stream.WrittenRTCP()
@@ -58,11 +64,12 @@ func TestReceiverInterceptor(t *testing.T) {
 		assert.NoError(t, err)
 
 		stream := test.NewMockStream(&interceptor.StreamInfo{
+			SessionID: sessionID,
 			SSRC:      123456,
 			ClockRate: 90000,
 		}, i)
 		defer func() {
-			assert.NoError(t, stream.Close())
+			assert.NoError(t, stream.Close(sessionID))
 		}()
 
 		for i := 0; i < 10; i++ {
@@ -97,11 +104,12 @@ func TestReceiverInterceptor(t *testing.T) {
 		assert.NoError(t, err)
 
 		stream := test.NewMockStream(&interceptor.StreamInfo{
+			SessionID: sessionID,
 			SSRC:      123456,
 			ClockRate: 90000,
 		}, i)
 		defer func() {
-			assert.NoError(t, stream.Close())
+			assert.NoError(t, stream.Close(sessionID))
 		}()
 
 		for i := 0; i < 10; i++ {
@@ -147,11 +155,12 @@ func TestReceiverInterceptor(t *testing.T) {
 		assert.NoError(t, err)
 
 		stream := test.NewMockStream(&interceptor.StreamInfo{
+			SessionID: sessionID,
 			SSRC:      123456,
 			ClockRate: 90000,
 		}, i)
 		defer func() {
-			assert.NoError(t, stream.Close())
+			assert.NoError(t, stream.Close(sessionID))
 		}()
 
 		stream.ReceiveRTP(&rtp.Packet{Header: rtp.Header{
@@ -188,11 +197,12 @@ func TestReceiverInterceptor(t *testing.T) {
 		assert.NoError(t, err)
 
 		stream := test.NewMockStream(&interceptor.StreamInfo{
+			SessionID: sessionID,
 			SSRC:      123456,
 			ClockRate: 90000,
 		}, i)
 		defer func() {
-			assert.NoError(t, stream.Close())
+			assert.NoError(t, stream.Close(sessionID))
 		}()
 
 		stream.ReceiveRTP(&rtp.Packet{Header: rtp.Header{
@@ -255,11 +265,12 @@ func TestReceiverInterceptor(t *testing.T) {
 		assert.NoError(t, err)
 
 		stream := test.NewMockStream(&interceptor.StreamInfo{
+			SessionID: sessionID,
 			SSRC:      123456,
 			ClockRate: 90000,
 		}, i)
 		defer func() {
-			assert.NoError(t, stream.Close())
+			assert.NoError(t, stream.Close(sessionID))
 		}()
 
 		stream.ReceiveRTP(&rtp.Packet{Header: rtp.Header{
@@ -296,11 +307,12 @@ func TestReceiverInterceptor(t *testing.T) {
 		assert.NoError(t, err)
 
 		stream := test.NewMockStream(&interceptor.StreamInfo{
+			SessionID: sessionID,
 			SSRC:      123456,
 			ClockRate: 90000,
 		}, i)
 		defer func() {
-			assert.NoError(t, stream.Close())
+			assert.NoError(t, stream.Close(sessionID))
 		}()
 
 		for _, seqNum := range []uint16{0x01, 0x03, 0x02, 0x04} {
@@ -335,11 +347,12 @@ func TestReceiverInterceptor(t *testing.T) {
 		assert.NoError(t, err)
 
 		stream := test.NewMockStream(&interceptor.StreamInfo{
+			SessionID: sessionID,
 			SSRC:      123456,
 			ClockRate: 90000,
 		}, i)
 		defer func() {
-			assert.NoError(t, stream.Close())
+			assert.NoError(t, stream.Close(sessionID))
 		}()
 
 		mt.SetNow(time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC))
@@ -381,11 +394,12 @@ func TestReceiverInterceptor(t *testing.T) {
 		assert.NoError(t, err)
 
 		stream := test.NewMockStream(&interceptor.StreamInfo{
+			SessionID: sessionID,
 			SSRC:      123456,
 			ClockRate: 90000,
 		}, i)
 		defer func() {
-			assert.NoError(t, stream.Close())
+			assert.NoError(t, stream.Close(sessionID))
 		}()
 
 		mt.SetNow(time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC))

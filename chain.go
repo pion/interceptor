@@ -1,5 +1,7 @@
 package interceptor
 
+import "fmt"
+
 // Chain is an interceptor that runs all child interceptors in order.
 type Chain struct {
 	interceptors []Interceptor
@@ -10,11 +12,27 @@ func NewChain(interceptors []Interceptor) *Chain {
 	return &Chain{interceptors: interceptors}
 }
 
+// NewChainFromFactories returns a new Chain interceptor.
+func NewChainFromFactories(factories []Factory, sessionID SessionID) (*Chain, error) {
+	interceptors := make([]Interceptor, len(factories))
+
+	for i, f := range factories {
+		intcp, err := f.NewInterceptor(sessionID)
+		if err != nil {
+			return nil, fmt.Errorf("creating interceptor for sessionID: %s: %w", sessionID, err)
+		}
+
+		interceptors[i] = intcp
+	}
+
+	return NewChain(interceptors), nil
+}
+
 // BindRTCPReader lets you modify any incoming RTCP packets. It is called once per sender/receiver, however this might
 // change in the future. The returned method will be called once per packet batch.
-func (i *Chain) BindRTCPReader(reader RTCPReader) RTCPReader {
+func (i *Chain) BindRTCPReader(sessionID SessionID, reader RTCPReader) RTCPReader {
 	for _, interceptor := range i.interceptors {
-		reader = interceptor.BindRTCPReader(reader)
+		reader = interceptor.BindRTCPReader(sessionID, reader)
 	}
 
 	return reader
@@ -22,9 +40,9 @@ func (i *Chain) BindRTCPReader(reader RTCPReader) RTCPReader {
 
 // BindRTCPWriter lets you modify any outgoing RTCP packets. It is called once per PeerConnection. The returned method
 // will be called once per packet batch.
-func (i *Chain) BindRTCPWriter(writer RTCPWriter) RTCPWriter {
+func (i *Chain) BindRTCPWriter(sessionID SessionID, writer RTCPWriter) RTCPWriter {
 	for _, interceptor := range i.interceptors {
-		writer = interceptor.BindRTCPWriter(writer)
+		writer = interceptor.BindRTCPWriter(sessionID, writer)
 	}
 
 	return writer
@@ -65,10 +83,10 @@ func (i *Chain) UnbindRemoteStream(ctx *StreamInfo) {
 }
 
 // Close closes the Interceptor, cleaning up any data if necessary.
-func (i *Chain) Close() error {
+func (i *Chain) Close(sessionID SessionID) error {
 	var errs []error
 	for _, interceptor := range i.interceptors {
-		errs = append(errs, interceptor.Close())
+		errs = append(errs, interceptor.Close(sessionID))
 	}
 
 	return flattenErrs(errs)

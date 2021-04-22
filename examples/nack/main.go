@@ -24,6 +24,8 @@ func main() {
 }
 
 func receiveRoutine() {
+	sessionID := interceptor.SessionID("recv")
+
 	serverAddr, err := net.ResolveUDPAddr("udp4", fmt.Sprintf("127.0.0.1:%d", listenPort))
 	if err != nil {
 		panic(err)
@@ -46,6 +48,7 @@ func receiveRoutine() {
 	// Create the writer just for a single SSRC stream
 	// this is a callback that is fired everytime a RTP packet is ready to be sent
 	streamReader := chain.BindRemoteStream(&interceptor.StreamInfo{
+		SessionID:    sessionID,
 		SSRC:         ssrc,
 		RTCPFeedback: []interceptor.RTCPFeedback{{Type: "nack", Parameter: ""}},
 	}, interceptor.RTPReaderFunc(func(b []byte, _ interceptor.Attributes) (int, interceptor.Attributes, error) { return len(b), nil, nil }))
@@ -65,7 +68,7 @@ func receiveRoutine() {
 		// Set the interceptor wide RTCP Writer
 		// this is a callback that is fired everytime a RTCP packet is ready to be sent
 		if !rtcpBound {
-			chain.BindRTCPWriter(interceptor.RTCPWriterFunc(func(pkts []rtcp.Packet, _ interceptor.Attributes) (int, error) {
+			chain.BindRTCPWriter(sessionID, interceptor.RTCPWriterFunc(func(pkts []rtcp.Packet, _ interceptor.Attributes) (int, error) {
 				buf, err := rtcp.Marshal(pkts)
 				if err != nil {
 					return 0, err
@@ -80,6 +83,8 @@ func receiveRoutine() {
 }
 
 func sendRoutine() {
+	sessionID := interceptor.SessionID("send")
+
 	// Dial our UDP listener that we create in receiveRoutine
 	serverAddr, err := net.ResolveUDPAddr("udp4", fmt.Sprintf("127.0.0.1:%d", listenPort))
 	if err != nil {
@@ -102,7 +107,7 @@ func sendRoutine() {
 
 	// Set the interceptor wide RTCP Reader
 	// this is a handle to send NACKs back into the interceptor.
-	rtcpWriter := chain.BindRTCPReader(interceptor.RTCPReaderFunc(func(in []byte, _ interceptor.Attributes) (int, interceptor.Attributes, error) {
+	rtcpWriter := chain.BindRTCPReader(sessionID, interceptor.RTCPReaderFunc(func(in []byte, _ interceptor.Attributes) (int, interceptor.Attributes, error) {
 		return len(in), nil, nil
 	}))
 

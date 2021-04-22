@@ -12,6 +12,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// Ensure ResponderInterceptor satisfies the Interceptor interface.
+var _ interceptor.Interceptor = &ResponderInterceptor{}
+
 func TestResponderInterceptor(t *testing.T) {
 	i, err := NewResponderInterceptor(
 		ResponderSize(8),
@@ -19,12 +22,15 @@ func TestResponderInterceptor(t *testing.T) {
 	)
 	assert.NoError(t, err)
 
+	sessionID := interceptor.SessionID("test")
+
 	stream := test.NewMockStream(&interceptor.StreamInfo{
+		SessionID:    sessionID,
 		SSRC:         1,
 		RTCPFeedback: []interceptor.RTCPFeedback{{Type: "nack"}},
 	}, i)
 	defer func() {
-		assert.NoError(t, stream.Close())
+		assert.NoError(t, stream.Close(sessionID))
 	}()
 
 	for _, seqNum := range []uint16{10, 11, 12, 14, 15} {

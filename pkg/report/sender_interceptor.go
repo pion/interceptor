@@ -25,11 +25,15 @@ type SenderInterceptor struct {
 	interceptor.NoOp
 	interval time.Duration
 	now      func() time.Time
-	streams  sync.Map
+	sessions map[interceptor.SessionID]*senderSessionCtx
 	log      logging.LeveledLogger
-	m        sync.Mutex
-	wg       sync.WaitGroup
-	close    chan struct{}
+	mu       sync.Mutex
+}
+
+type senderSessionCtx struct {
+	streams  sync.Map
+	teardown chan struct{}
+	torndown chan struct{}
 }
 
 // NewSenderInterceptor returns a new SenderInterceptor interceptor.
@@ -37,8 +41,8 @@ func NewSenderInterceptor(opts ...SenderOption) (*SenderInterceptor, error) {
 	s := &SenderInterceptor{
 		interval: 1 * time.Second,
 		now:      time.Now,
+		sessions: map[interceptor.SessionID]*senderSessionCtx{},
 		log:      logging.NewDefaultLoggerFactory().NewLogger("sender_interceptor"),
-		close:    make(chan struct{}),
 	}
 
 	for _, opt := range opts {
@@ -50,47 +54,57 @@ func NewSenderInterceptor(opts ...SenderOption) (*SenderInterceptor, error) {
 	return s, nil
 }
 
-func (s *SenderInterceptor) isClosed() bool {
-	select {
-	case <-s.close:
-		return true
-	default:
-		return false
+// newSession finds the current session by ID or creates a new one if it
+// doesn't exist. The caller must hold the lock.
+func (s *SenderInterceptor) newSession(sessionID interceptor.SessionID) *senderSessionCtx {
+	sCtx := &senderSessionCtx{
+		streams:  sync.Map{},
+		teardown: make(chan struct{}),
+		torndown: make(chan struct{}),
 	}
+	s.sessions[sessionID] = sCtx
+
+	return sCtx
 }
 
 // Close closes the interceptor.
-func (s *SenderInterceptor) Close() error {
-	defer s.wg.Wait()
-	s.m.Lock()
-	defer s.m.Unlock()
+func (s *SenderInterceptor) Close(sessionID interceptor.SessionID) error {
+	s.mu.Lock()
+	sCtx, ok := s.sessions[sessionID]
+	delete(s.sessions, sessionID)
+	s.mu.Unlock()
 
-	if !s.isClosed() {
-		close(s.close)
+	if !ok {
+		return nil
 	}
+
+	// Close loop goroutine.
+	close(sCtx.teardown)
+
+	// Wait for the goroutine to exit.
+	<-sCtx.torndown
 
 	return nil
 }
 
 // BindRTCPWriter lets you modify any outgoing RTCP packets. It is called once per PeerConnection. The returned method
 // will be called once per packet batch.
-func (s *SenderInterceptor) BindRTCPWriter(writer interceptor.RTCPWriter) interceptor.RTCPWriter {
-	s.m.Lock()
-	defer s.m.Unlock()
+func (s *SenderInterceptor) BindRTCPWriter(sessionID interceptor.SessionID, writer interceptor.RTCPWriter) interceptor.RTCPWriter {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	if s.isClosed() {
-		return writer
-	}
+	sCtx := s.newSession(sessionID)
+	sCtx.torndown = make(chan struct{})
 
-	s.wg.Add(1)
-
-	go s.loop(writer)
+	// TODO(jeremija) figure out if there's a way to run a single loop for all
+	// sessions.
+	go s.loop(sCtx, writer)
 
 	return writer
 }
 
-func (s *SenderInterceptor) loop(rtcpWriter interceptor.RTCPWriter) {
-	defer s.wg.Done()
+func (s *SenderInterceptor) loop(sCtx *senderSessionCtx, rtcpWriter interceptor.RTCPWriter) {
+	defer close(sCtx.torndown)
 
 	ticker := time.NewTicker(s.interval)
 	defer ticker.Stop()
@@ -98,7 +112,7 @@ func (s *SenderInterceptor) loop(rtcpWriter interceptor.RTCPWriter) {
 		select {
 		case <-ticker.C:
 			now := s.now()
-			s.streams.Range(func(key, value interface{}) bool {
+			sCtx.streams.Range(func(key, value interface{}) bool {
 				ssrc := key.(uint32)
 				stream := value.(*senderStream)
 
@@ -120,7 +134,7 @@ func (s *SenderInterceptor) loop(rtcpWriter interceptor.RTCPWriter) {
 				return true
 			})
 
-		case <-s.close:
+		case <-sCtx.teardown:
 			return
 		}
 	}
@@ -130,11 +144,28 @@ func (s *SenderInterceptor) loop(rtcpWriter interceptor.RTCPWriter) {
 // will be called once per rtp packet.
 func (s *SenderInterceptor) BindLocalStream(info *interceptor.StreamInfo, writer interceptor.RTPWriter) interceptor.RTPWriter {
 	stream := newSenderStream(info.ClockRate)
-	s.streams.Store(info.SSRC, stream)
+
+	s.mu.Lock()
+	// TODO(jeremija) what if BindRTCPWriter was not called before? Current code
+	// would panic. I think we need to bail out either by returning an error or
+	// just silently return the writer without intercepting (meh).
+	sCtx := s.sessions[info.SessionID]
+	s.mu.Unlock()
+
+	sCtx.streams.Store(info.SSRC, stream)
 
 	return interceptor.RTPWriterFunc(func(header *rtp.Header, payload []byte, a interceptor.Attributes) (int, error) {
 		stream.processRTP(s.now(), header, payload)
 
 		return writer.Write(header, payload, a)
 	})
+}
+
+// UnbindLocalStream is called when the Stream is removed. It can be used to clean up any data related to that track.
+func (s *SenderInterceptor) UnbindLocalStream(info *interceptor.StreamInfo) {
+	s.mu.Lock()
+	if sCtx, ok := s.sessions[info.SessionID]; ok {
+		sCtx.streams.Delete(info.SSRC)
+	}
+	s.mu.Unlock()
 }

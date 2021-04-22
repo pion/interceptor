@@ -12,6 +12,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// Ensure GeneratorInterceptor satisfies the Interceptor interface.
+var _ interceptor.Interceptor = &GeneratorInterceptor{}
+
 func TestGeneratorInterceptor(t *testing.T) {
 	const interval = time.Millisecond * 10
 	i, err := NewGeneratorInterceptor(
@@ -22,12 +25,15 @@ func TestGeneratorInterceptor(t *testing.T) {
 	)
 	assert.NoError(t, err)
 
+	sessionID := interceptor.SessionID("test")
+
 	stream := test.NewMockStream(&interceptor.StreamInfo{
+		SessionID:    sessionID,
 		SSRC:         1,
 		RTCPFeedback: []interceptor.RTCPFeedback{{Type: "nack"}},
 	}, i)
 	defer func() {
-		assert.NoError(t, stream.Close())
+		assert.NoError(t, stream.Close(sessionID))
 	}()
 
 	for _, seqNum := range []uint16{10, 11, 12, 14, 16, 18} {

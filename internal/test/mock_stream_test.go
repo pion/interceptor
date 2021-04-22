@@ -11,7 +11,13 @@ import (
 )
 
 func TestMockStream(t *testing.T) {
-	s := NewMockStream(&interceptor.StreamInfo{}, &interceptor.NoOp{})
+	sessionID := interceptor.SessionID("test")
+	s := NewMockStream(
+		&interceptor.StreamInfo{
+			SessionID: sessionID,
+		},
+		&interceptor.NoOp{},
+	)
 
 	assert.NoError(t, s.WriteRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{}}))
 
@@ -69,5 +75,5 @@ func TestMockStream(t *testing.T) {
 	case <-time.After(10 * time.Millisecond):
 	}
 
-	assert.NoError(t, s.Close())
+	assert.NoError(t, s.Close(sessionID))
 }
