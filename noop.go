@@ -6,13 +6,13 @@ type NoOp struct{}
 
 // BindRTCPReader lets you modify any incoming RTCP packets. It is called once per sender/receiver, however this might
 // change in the future. The returned method will be called once per packet batch.
-func (i *NoOp) BindRTCPReader(reader RTCPReader) RTCPReader {
+func (i *NoOp) BindRTCPReader(_ SessionID, reader RTCPReader) RTCPReader {
 	return reader
 }
 
 // BindRTCPWriter lets you modify any outgoing RTCP packets. It is called once per PeerConnection. The returned method
 // will be called once per packet batch.
-func (i *NoOp) BindRTCPWriter(writer RTCPWriter) RTCPWriter {
+func (i *NoOp) BindRTCPWriter(_ SessionID, writer RTCPWriter) RTCPWriter {
 	return writer
 }
 
@@ -35,6 +35,6 @@ func (i *NoOp) BindRemoteStream(_ *StreamInfo, reader RTPReader) RTPReader {
 func (i *NoOp) UnbindRemoteStream(_ *StreamInfo) {}
 
 // Close closes the Interceptor, cleaning up any data if necessary.
-func (i *NoOp) Close() error {
+func (i *NoOp) Close(sessionID SessionID) error {
 	return nil
 }

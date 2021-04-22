@@ -9,6 +9,7 @@ type RTPHeaderExtension struct {
 // StreamInfo is the Context passed when a StreamLocal or StreamRemote has been Binded or Unbinded
 type StreamInfo struct {
 	ID                  string
+	SessionID           SessionID
 	Attributes          Attributes
 	SSRC                uint32
 	PayloadType         uint8

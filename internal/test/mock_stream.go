@@ -51,7 +51,7 @@ func NewMockStream(info *interceptor.StreamInfo, i interceptor.Interceptor) *Moc
 		rtcpInModified:  make(chan RTCPWithError, 1000),
 		rtpInModified:   make(chan RTPWithError, 1000),
 	}
-	s.rtcpWriter = i.BindRTCPWriter(interceptor.RTCPWriterFunc(func(pkts []rtcp.Packet, attributes interceptor.Attributes) (int, error) {
+	s.rtcpWriter = i.BindRTCPWriter(info.SessionID, interceptor.RTCPWriterFunc(func(pkts []rtcp.Packet, attributes interceptor.Attributes) (int, error) {
 		select {
 		case s.rtcpOutModified <- pkts:
 		default:
@@ -59,7 +59,7 @@ func NewMockStream(info *interceptor.StreamInfo, i interceptor.Interceptor) *Moc
 
 		return 0, nil
 	}))
-	s.rtcpReader = i.BindRTCPReader(interceptor.RTCPReaderFunc(func(b []byte, a interceptor.Attributes) (int, interceptor.Attributes, error) {
+	s.rtcpReader = i.BindRTCPReader(info.SessionID, interceptor.RTCPReaderFunc(func(b []byte, a interceptor.Attributes) (int, interceptor.Attributes, error) {
 		pkts, ok := <-s.rtcpIn
 		if !ok {
 			return 0, nil, io.EOF
@@ -187,8 +187,8 @@ func (s *MockStream) ReadRTP() chan RTPWithError {
 }
 
 // Close closes the stream and the underlying interceptor
-func (s *MockStream) Close() error {
+func (s *MockStream) Close(sessionID interceptor.SessionID) error {
 	close(s.rtcpIn)
 	close(s.rtpIn)
-	return s.interceptor.Close()
+	return s.interceptor.Close(sessionID)
 }

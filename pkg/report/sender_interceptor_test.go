@@ -12,7 +12,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// Ensure SenderInterceptor satisfies the Interceptor interface.
+var _ interceptor.Interceptor = &SenderInterceptor{}
+
 func TestSenderInterceptor(t *testing.T) {
+	sessionID := interceptor.SessionID("test")
+
 	t.Run("before any packet", func(t *testing.T) {
 		mt := &test.MockTime{}
 		i, err := NewSenderInterceptor(
@@ -23,11 +28,12 @@ func TestSenderInterceptor(t *testing.T) {
 		assert.NoError(t, err)
 
 		stream := test.NewMockStream(&interceptor.StreamInfo{
+			SessionID: sessionID,
 			SSRC:      123456,
 			ClockRate: 90000,
 		}, i)
 		defer func() {
-			assert.NoError(t, stream.Close())
+			assert.NoError(t, stream.Close(sessionID))
 		}()
 
 		mt.SetNow(time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC))
@@ -54,11 +60,12 @@ func TestSenderInterceptor(t *testing.T) {
 		assert.NoError(t, err)
 
 		stream := test.NewMockStream(&interceptor.StreamInfo{
+			SessionID: sessionID,
 			SSRC:      123456,
 			ClockRate: 90000,
 		}, i)
 		defer func() {
-			assert.NoError(t, stream.Close())
+			assert.NoError(t, stream.Close(sessionID))
 		}()
 
 		for i := 0; i < 10; i++ {
