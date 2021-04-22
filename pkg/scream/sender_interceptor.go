@@ -3,6 +3,8 @@
 package scream
 
 import (
+	"encoding/binary"
+	"fmt"
 	"sync"
 	"time"
 
@@ -72,20 +74,58 @@ func (s *SenderInterceptor) BindRTCPReader(reader interceptor.RTCPReader) interc
 		if err != nil {
 			return 0, nil, err
 		}
-		for _, rtcpPacket := range pkts {
+
+		t := ntpTime(time.Now())
+		for _, pkt := range pkts {
+			packet, ok := pkt.(*rtcp.RawPacket)
+			if !ok {
+				s.log.Info("got incorrect packet type, skipping feedback")
+				continue
+			}
+
 			s.m.Lock()
-			s.tx.IncomingStandardizedFeedback(ntpTime(time.Now()), b[:n])
+			s.tx.IncomingStandardizedFeedback(t, b[:n])
 			s.m.Unlock()
 
-			for _, ssrc := range rtcpPacket.DestinationSSRC() {
+			ssrcs := extractSSRCs(*packet)
+
+			for _, ssrc := range ssrcs {
 				s.rtpStreamsMu.Lock()
-				s.rtpStreams[ssrc].newFeedback <- struct{}{}
+				if stream, ok := s.rtpStreams[ssrc]; ok {
+					stream.newFeedback <- struct{}{}
+				}
 				s.rtpStreamsMu.Unlock()
 			}
 		}
 
 		return n, attr, nil
 	})
+}
+
+func extractSSRCs(packet []byte) []uint32 {
+	uniqueSSRCs := make(map[uint32]struct{})
+	var ssrcs []uint32
+
+	offset := 8
+	for offset < len(packet)-4 {
+		ssrc := binary.BigEndian.Uint32(packet[offset:])
+
+		if _, ok := uniqueSSRCs[ssrc]; !ok {
+			ssrcs = append(ssrcs, ssrc)
+			uniqueSSRCs[ssrc] = struct{}{}
+		}
+
+		numReports := binary.BigEndian.Uint16(packet[offset+6:])
+
+		// pad 16 bits 0 if numReports is not a multiple of 2
+		if numReports%2 != 0 {
+			numReports++
+		}
+		offset += 2 * int(numReports) // 2 bytes per report
+		offset += 8                   // 4 byte SSRC + 2 bytes begin_seq + 2 bytes num_reports
+	}
+
+	return ssrcs
 }
 
 // BindLocalStream lets you modify any outgoing RTP packets. It is called once for per LocalStream. The returned method
@@ -231,10 +271,17 @@ func (s *SenderInterceptor) loop(writer interceptor.RTPWriter, ssrc uint32) {
 }
 
 // GetTargetBitrate returns the target bitrate calculated by SCReAM in bps.
-func (s *SenderInterceptor) GetTargetBitrate(ssrc uint32) int64 {
+func (s *SenderInterceptor) GetTargetBitrate(ssrc uint32) (int64, error) {
+	s.rtpStreamsMu.Lock()
+	_, ok := s.rtpStreams[ssrc]
+	s.rtpStreamsMu.Unlock()
+	if !ok {
+		return 0, fmt.Errorf("unknown SSRC, the stream may be unsupported")
+	}
+
 	s.m.Lock()
 	defer s.m.Unlock()
-	return s.tx.GetTargetBitrate(ssrc)
+	return s.tx.GetTargetBitrate(ssrc), nil
 }
 
 func (s *SenderInterceptor) isClosed() bool {
