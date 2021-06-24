@@ -77,6 +77,7 @@ Check out the **[contributing wiki](https://github.com/pion/webrtc/wiki/Contribu
 * [Atsushi Watanabe](https://github.com/at-wat)
 * [Alessandro Ros](https://github.com/aler9)
 * [Mathis Engelbart](https://github.com/mengelbart)
+* [Antoine Baché](https://github.com/Antonito)
 
 ### License
 MIT License - see [LICENSE](LICENSE) for full text
