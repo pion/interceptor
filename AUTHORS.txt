@@ -6,6 +6,7 @@
 Adam Kiss <masterada@gmail.com>
 adamroach <adam@nostrum.com>
 aler9 <46489434+aler9@users.noreply.github.com>
+Antoine Baché <antoine@tenten.app>
 Atsushi Watanabe <atsushi.w@ieee.org>
 Jonathan Müller <jonathan@fotokite.com>
 Mathis Engelbart <mathis.engelbart@gmail.com>
