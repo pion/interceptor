@@ -1,0 +1,146 @@
+package pli
+
+import (
+	"sync"
+	"time"
+
+	"github.com/pion/interceptor"
+	"github.com/pion/logging"
+	"github.com/pion/rtcp"
+)
+
+// GeneratorInterceptor interceptor sends PLI packets.
+// Implements PLI in a naive way: sends a PLI for each new track that support PLI, periodically.
+type GeneratorInterceptor struct {
+	interceptor.NoOp
+
+	interval           time.Duration
+	streams            sync.Map
+	immediatePLINeeded chan []uint32
+
+	log logging.LeveledLogger
+	m   sync.Mutex
+	wg  sync.WaitGroup
+
+	close chan struct{}
+}
+
+// NewGeneratorInterceptor returns a new GeneratorInterceptor interceptor.
+func NewGeneratorInterceptor(opts ...GeneratorOption) (*GeneratorInterceptor, error) {
+	r := &GeneratorInterceptor{
+		interval:           3 * time.Second,
+		log:                logging.NewDefaultLoggerFactory().NewLogger("pli_generator"),
+		immediatePLINeeded: make(chan []uint32, 1),
+		close:              make(chan struct{}),
+	}
+
+	for _, opt := range opts {
+		if err := opt(r); err != nil {
+			return nil, err
+		}
+	}
+
+	return r, nil
+}
+
+func (r *GeneratorInterceptor) isClosed() bool {
+	select {
+	case <-r.close:
+		return true
+	default:
+		return false
+	}
+}
+
+// Close closes the interceptor.
+func (r *GeneratorInterceptor) Close() error {
+	defer r.wg.Wait()
+	r.m.Lock()
+	defer r.m.Unlock()
+
+	if !r.isClosed() {
+		close(r.close)
+	}
+
+	return nil
+}
+
+// BindRTCPWriter lets you modify any outgoing RTCP packets. It is called once per PeerConnection. The returned method
+// will be called once per packet batch.
+func (r *GeneratorInterceptor) BindRTCPWriter(writer interceptor.RTCPWriter) interceptor.RTCPWriter {
+	r.m.Lock()
+	defer r.m.Unlock()
+
+	if r.isClosed() {
+		return writer
+	}
+
+	r.wg.Add(1)
+
+	go r.loop(writer)
+
+	return writer
+}
+
+func (r *GeneratorInterceptor) loop(rtcpWriter interceptor.RTCPWriter) {
+	defer r.wg.Done()
+
+	ticker := time.NewTicker(r.interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case ssrcs := <-r.immediatePLINeeded:
+			pkts := []rtcp.Packet{}
+
+			for _, ssrc := range ssrcs {
+				pkts = append(pkts, &rtcp.PictureLossIndication{MediaSSRC: ssrc})
+			}
+
+			if _, err := rtcpWriter.Write(pkts, interceptor.Attributes{}); err != nil {
+				r.log.Warnf("failed sending: %+v", err)
+			}
+
+		case <-ticker.C:
+			r.streams.Range(func(key, value interface{}) bool {
+				pkts := []rtcp.Packet{&rtcp.PictureLossIndication{
+					MediaSSRC: key.(uint32),
+				}}
+
+				if _, err := rtcpWriter.Write(pkts, interceptor.Attributes{}); err != nil {
+					r.log.Warnf("failed sending: %+v", err)
+				}
+
+				return true
+			})
+
+		case <-r.close:
+			return
+		}
+	}
+}
+
+// BindRemoteStream lets you modify any incoming RTP packets. It is called once for per RemoteStream. The returned method
+// will be called once per rtp packet.
+func (r *GeneratorInterceptor) BindRemoteStream(info *interceptor.StreamInfo, reader interceptor.RTPReader) interceptor.RTPReader {
+	if !streamSupportPli(info) {
+		return reader
+	}
+
+	r.streams.Store(info.SSRC, nil)
+	// New streams need to receive a PLI as soon as possible.
+	r.immediatePLINeeded <- []uint32{info.SSRC}
+
+	return reader
+}
+
+// UnbindLocalStream is called when the Stream is removed. It can be used to clean up any data related to that track.
+func (r *GeneratorInterceptor) UnbindLocalStream(info *interceptor.StreamInfo) {
+	r.streams.Delete(info.SSRC)
+}
+
+// BindRTCPReader lets you modify any incoming RTCP packets. It is called once per sender/receiver, however this might
+// change in the future. The returned method will be called once per packet batch.
+func (r *GeneratorInterceptor) BindRTCPReader(reader interceptor.RTCPReader) interceptor.RTCPReader {
+	return reader
+}
