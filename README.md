@@ -34,13 +34,14 @@ by anyone. With the following tenets in mind.
 * [Transport Wide Congestion Control Feedback](https://github.com/pion/interceptor/tree/master/pkg/twcc)
 * [Packet Dump](https://github.com/pion/interceptor/tree/master/pkg/packetdump)
 * [Google Congestion Control](https://github.com/pion/interceptor/tree/master/pkg/gcc)
+* [Stats](https://github.com/pion/interceptor/tree/master/pkg/stats) A [webrtc-stats](https://www.w3.org/TR/webrtc-stats/) compliant statistics generation
+* [Interval PLI](https://github.com/pion/interceptor/tree/master/pkg/intervalpli) Generate PLI on a interval. Useful when no decoder is available.
 
 ### Planned Interceptors
 * Bandwidth Estimation
   - [NADA](https://tools.ietf.org/html/rfc8698)
 * JitterBuffer, re-order packets and wait for arrival
 * [FlexFec](https://tools.ietf.org/html/draft-ietf-payload-flexible-fec-scheme-20)
-* [webrtc-stats](https://www.w3.org/TR/webrtc-stats/) compliant statistics generation
 * [RTCP Feedback for Congestion Control](https://datatracker.ietf.org/doc/html/rfc8888) the standardized alternative to TWCC.
 
 ### Interceptor Public API

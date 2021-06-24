@@ -8,6 +8,7 @@ Adam Kiss <masterada@gmail.com>
 adamroach <adam@nostrum.com>
 Aditya Kumar <k.aditya00@gmail.com>
 aler9 <46489434+aler9@users.noreply.github.com>
+Antoine <antoine@tenten.app>
 Antoine Baché <antoine@tenten.app>
 Atsushi Watanabe <atsushi.w@ieee.org>
 Bobby Peck <rpeck@mux.com>
@@ -18,8 +19,8 @@ Kevin Caffrey <kcaffrey@gmail.com>
 Maksim Nesterov <msnesterov@avito.ru>
 Mathis Engelbart <mathis.engelbart@gmail.com>
 Sean DuBois <sean@siobud.com>
-ziminghua <565209960@qq.com>
 Steffen Vogel <post@steffenvogel.de>
+ziminghua <565209960@qq.com>
 
 # List of contributors not appearing in Git history
 
