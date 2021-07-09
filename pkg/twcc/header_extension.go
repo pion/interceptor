@@ -4,7 +4,7 @@ import (
 	"sync/atomic"
 
 	"github.com/pion/interceptor"
-	"github.com/pion/rtp"
+	"github.com/pion/rtp/v2"
 )
 
 // HeaderExtensionInterceptor adds transport wide sequence numbers as header extension to each RTP packet
