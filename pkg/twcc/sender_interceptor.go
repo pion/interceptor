@@ -7,7 +7,7 @@ import (
 
 	"github.com/pion/interceptor"
 	"github.com/pion/logging"
-	"github.com/pion/rtp"
+	"github.com/pion/rtp/v2"
 )
 
 // SenderInterceptor sends transport wide congestion control reports as specified in:
