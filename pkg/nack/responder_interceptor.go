@@ -6,7 +6,7 @@ import (
 	"github.com/pion/interceptor"
 	"github.com/pion/logging"
 	"github.com/pion/rtcp"
-	"github.com/pion/rtp/v2"
+	"github.com/pion/rtp"
 )
 
 // ResponderInterceptor responds to nack feedback messages

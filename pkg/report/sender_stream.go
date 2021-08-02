@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pion/rtp/v2"
+	"github.com/pion/rtp"
 )
 
 type senderStream struct {
