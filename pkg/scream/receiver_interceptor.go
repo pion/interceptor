@@ -131,7 +131,7 @@ func (r *ReceiverInterceptor) loop(rtcpWriter interceptor.RTCPWriter) {
 
 				for _, rx := range r.screamRx {
 					// TODO: Check meaning of isMark
-					if ok, feedback := rx.CreateStandardizedFeedback(0, true); ok {
+					if ok, feedback := rx.CreateStandardizedFeedback(ntpTime(time.Now()), true); ok {
 						fb := rtcp.RawPacket(feedback)
 						if _, err := rtcpWriter.Write([]rtcp.Packet{&fb}, interceptor.Attributes{}); err != nil {
 							r.log.Warnf("failed sending scream feedback report: %+v", err)
