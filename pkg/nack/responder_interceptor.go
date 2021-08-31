@@ -24,7 +24,7 @@ type localStream struct {
 	rtpWriter  interceptor.RTPWriter
 }
 
-// NewResponderInterceptor returns a new GeneratorInterceptor interceptor
+// NewResponderInterceptor returns a new ResponderInterceptor interceptor
 func NewResponderInterceptor(opts ...ResponderOption) (*ResponderInterceptor, error) {
 	r := &ResponderInterceptor{
 		size:    8192,
