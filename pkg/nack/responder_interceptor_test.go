@@ -69,3 +69,37 @@ func TestResponderInterceptor_InvalidSize(t *testing.T) {
 	_, err := NewResponderInterceptor(ResponderSize(5))
 	assert.Error(t, err, ErrInvalidSize)
 }
+
+// this test is only useful when being run with the race detector, it won't fail otherwise:
+//
+//     go test -race ./pkg/nack/
+func TestResponderInterceptor_Race(t *testing.T) {
+	i, err := NewResponderInterceptor(
+		ResponderSize(32768),
+		ResponderLog(logging.NewDefaultLoggerFactory().NewLogger("test")),
+	)
+	assert.NoError(t, err)
+
+	stream := test.NewMockStream(&interceptor.StreamInfo{
+		SSRC:         1,
+		RTCPFeedback: []interceptor.RTCPFeedback{{Type: "nack"}},
+	}, i)
+
+	for seqNum := uint16(0); seqNum < 500; seqNum++ {
+		assert.NoError(t, stream.WriteRTP(&rtp.Packet{Header: rtp.Header{SequenceNumber: seqNum}}))
+
+		// 25% packet loss
+		if seqNum%4 == 0 {
+			time.Sleep(time.Duration(seqNum%23) * time.Millisecond)
+			stream.ReceiveRTCP([]rtcp.Packet{
+				&rtcp.TransportLayerNack{
+					MediaSSRC:  1,
+					SenderSSRC: 2,
+					Nacks: []rtcp.NackPair{
+						{PacketID: seqNum, LostPackets: 0},
+					},
+				},
+			})
+		}
+	}
+}

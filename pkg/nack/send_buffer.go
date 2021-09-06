@@ -2,6 +2,7 @@ package nack
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/pion/rtp/v2"
 )
@@ -15,6 +16,8 @@ type sendBuffer struct {
 	size      uint16
 	lastAdded uint16
 	started   bool
+
+	m sync.RWMutex
 }
 
 func newSendBuffer(size uint16) (*sendBuffer, error) {
@@ -39,6 +42,9 @@ func newSendBuffer(size uint16) (*sendBuffer, error) {
 }
 
 func (s *sendBuffer) add(packet *rtp.Packet) {
+	s.m.Lock()
+	defer s.m.Unlock()
+
 	seq := packet.SequenceNumber
 	if !s.started {
 		s.packets[seq%s.size] = packet
@@ -61,6 +67,9 @@ func (s *sendBuffer) add(packet *rtp.Packet) {
 }
 
 func (s *sendBuffer) get(seq uint16) *rtp.Packet {
+	s.m.RLock()
+	defer s.m.RUnlock()
+
 	diff := s.lastAdded - seq
 	if diff >= uint16SizeHalf {
 		return nil
