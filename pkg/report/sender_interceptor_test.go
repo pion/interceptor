@@ -8,7 +8,7 @@ import (
 	"github.com/pion/interceptor/internal/test"
 	"github.com/pion/logging"
 	"github.com/pion/rtcp"
-	"github.com/pion/rtp/v2"
+	"github.com/pion/rtp"
 	"github.com/stretchr/testify/assert"
 )
 
