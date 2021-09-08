@@ -34,9 +34,9 @@ func (h *HeaderExtensionInterceptor) BindLocalStream(info *interceptor.StreamInf
 		return writer
 	}
 	return interceptor.RTPWriterFunc(func(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
-		seqNr := atomic.AddUint32(&h.nextSequenceNr, 1) - 1
+		sequenceNumber := atomic.AddUint32(&h.nextSequenceNr, 1) - 1
 
-		tcc, err := (&rtp.TransportCCExtension{TransportSequence: uint16(seqNr)}).Marshal()
+		tcc, err := (&rtp.TransportCCExtension{TransportSequence: uint16(sequenceNumber)}).Marshal()
 		if err != nil {
 			return 0, err
 		}

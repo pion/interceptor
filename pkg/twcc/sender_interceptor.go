@@ -78,10 +78,10 @@ func (s *SenderInterceptor) BindRTCPWriter(writer interceptor.RTCPWriter) interc
 }
 
 type packet struct {
-	hdr   *rtp.Header
-	seqNr uint16
-	ts    int64
-	ssrc  uint32
+	hdr            *rtp.Header
+	sequenceNumber uint16
+	arrivalTime    int64
+	ssrc           uint32
 }
 
 // BindRemoteStream lets you modify any incoming RTP packets. It is called once for per RemoteStream. The returned method
@@ -115,10 +115,10 @@ func (s *SenderInterceptor) BindRemoteStream(info *interceptor.StreamInfo, reade
 			}
 
 			s.packetChan <- packet{
-				hdr:   &p.Header,
-				seqNr: tccExt.TransportSequence,
-				ts:    time.Now().UnixNano(),
-				ssrc:  info.SSRC,
+				hdr:            &p.Header,
+				sequenceNumber: tccExt.TransportSequence,
+				arrivalTime:    time.Now().UnixNano(),
+				ssrc:           info.SSRC,
 			}
 		}
 
@@ -158,7 +158,7 @@ func (s *SenderInterceptor) loop(w interceptor.RTCPWriter) {
 		case <-s.close:
 			return
 		case p := <-s.packetChan:
-			s.recorder.Record(p.ssrc, p.seqNr, p.ts/1e6) // ns -> ms: divide by 1e6
+			s.recorder.Record(p.ssrc, p.sequenceNumber, p.arrivalTime/1e6) // ns -> ms: divide by 1e6
 
 		case <-ticker.C:
 			// build and send twcc

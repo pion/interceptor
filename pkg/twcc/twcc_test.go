@@ -167,12 +167,12 @@ func Test_feedback(t *testing.T) {
 		got := f.addReceived(1, 1023*1000)
 
 		assert.True(t, got)
-		assert.Equal(t, uint16(2), f.nextSeqNr)
+		assert.Equal(t, uint16(2), f.nextSequenceNumber)
 		assert.Equal(t, int64(15), f.refTimestamp64MS)
 
 		got = f.addReceived(4, 1086*1000)
 		assert.True(t, got)
-		assert.Equal(t, uint16(5), f.nextSeqNr)
+		assert.Equal(t, uint16(5), f.nextSequenceNumber)
 		assert.Equal(t, int64(15), f.refTimestamp64MS)
 
 		assert.True(t, f.lastChunk.hasDifferentTypes)
@@ -315,10 +315,10 @@ func Test_feedback(t *testing.T) {
 
 	t.Run("get RTCP", func(t *testing.T) {
 		testcases := []struct {
-			arrivalTS     int64
-			seqNr         uint16
-			wantRefTime   uint32
-			wantBaseSeqNr uint16
+			arrivalTS              int64
+			sequenceNumber         uint16
+			wantRefTime            uint32
+			wantBaseSequenceNumber uint16
 		}{
 			{320, 1, 5, 1},
 			{1000, 2, 15, 2},
@@ -328,11 +328,11 @@ func Test_feedback(t *testing.T) {
 
 			t.Run("set correct base seq and time", func(t *testing.T) {
 				f := newFeedback(0, 0, 0)
-				f.setBase(tt.seqNr, tt.arrivalTS*1000)
+				f.setBase(tt.sequenceNumber, tt.arrivalTS*1000)
 
 				got := f.getRTCP()
 				assert.Equal(t, tt.wantRefTime, got.ReferenceTime)
-				assert.Equal(t, tt.wantBaseSeqNr, got.BaseSequenceNumber)
+				assert.Equal(t, tt.wantBaseSequenceNumber, got.BaseSequenceNumber)
 			})
 		}
 	})
