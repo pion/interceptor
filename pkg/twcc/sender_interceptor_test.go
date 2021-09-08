@@ -138,7 +138,7 @@ func TestSenderInterceptor(t *testing.T) {
 			assert.NoError(t, stream.Close())
 		}()
 
-		seqNrToDelay := map[int]int{
+		sequenceNumberToDelay := map[int]int{
 			0:  0,
 			1:  10,
 			4:  100,
@@ -148,7 +148,7 @@ func TestSenderInterceptor(t *testing.T) {
 			30: 300,
 		}
 		for _, i := range []int{0, 1, 4, 8, 9, 10, 30} {
-			d := seqNrToDelay[i]
+			d := sequenceNumberToDelay[i]
 			time.Sleep(time.Duration(d) * time.Millisecond)
 
 			hdr := rtp.Header{}
