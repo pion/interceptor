@@ -9,7 +9,7 @@ import (
 
 type pktInfo struct {
 	sequenceNumber uint32
-	timestamp      int64
+	arrivalTime    int64
 }
 
 // Recorder records incoming RTP packets and their delays and creates
@@ -36,14 +36,14 @@ func NewRecorder(senderSSRC uint32) *Recorder {
 }
 
 // Record marks a packet with mediaSSRC and a transport wide sequence number sequenceNumber as received at arrivalTime.
-func (r *Recorder) Record(mediaSSRC uint32, sequenceNumber uint16, arrivalTimeMS int64) {
+func (r *Recorder) Record(mediaSSRC uint32, sequenceNumber uint16, arrivalTime int64) {
 	r.mediaSSRC = mediaSSRC
 	if sequenceNumber < 0x0fff && (r.lastSequenceNumber&0xffff) > 0xf000 {
 		r.cycles += 1 << 16
 	}
 	r.receivedPackets = append(r.receivedPackets, pktInfo{
 		sequenceNumber: r.cycles | uint32(sequenceNumber),
-		timestamp:      arrivalTimeMS,
+		arrivalTime:    arrivalTime,
 	})
 	r.lastSequenceNumber = sequenceNumber
 }
@@ -58,16 +58,16 @@ func (r *Recorder) BuildFeedbackPacket() []rtcp.Packet {
 	sort.Slice(r.receivedPackets, func(i, j int) bool {
 		return r.receivedPackets[i].sequenceNumber < r.receivedPackets[j].sequenceNumber
 	})
-	tlcc.setBase(uint16(r.receivedPackets[0].sequenceNumber&0xffff), r.receivedPackets[0].timestamp*1000)
+	tlcc.setBase(uint16(r.receivedPackets[0].sequenceNumber&0xffff), r.receivedPackets[0].arrivalTime)
 
 	var pkts []rtcp.Packet
 	for _, pkt := range r.receivedPackets {
-		built := tlcc.addReceived(uint16(pkt.sequenceNumber&0xffff), pkt.timestamp*1000)
+		built := tlcc.addReceived(uint16(pkt.sequenceNumber&0xffff), pkt.arrivalTime)
 		if !built {
 			pkts = append(pkts, tlcc.getRTCP())
 			r.fbPktCnt++
 			tlcc = newFeedback(r.senderSSRC, r.mediaSSRC, r.fbPktCnt)
-			tlcc.addReceived(uint16(pkt.sequenceNumber&0xffff), pkt.timestamp*1000)
+			tlcc.addReceived(uint16(pkt.sequenceNumber&0xffff), pkt.arrivalTime)
 		}
 	}
 	r.receivedPackets = []pktInfo{}
