@@ -51,7 +51,7 @@ func (r *Recorder) Record(mediaSSRC uint32, sequenceNumber uint16, arrivalTime i
 // BuildFeedbackPacket creates a new RTCP packet containing a TWCC feedback report.
 func (r *Recorder) BuildFeedbackPacket() []rtcp.Packet {
 	tlcc := newFeedback(r.senderSSRC, r.mediaSSRC, r.fbPktCnt)
-	if len(r.receivedPackets) == 0 {
+	if len(r.receivedPackets) < 2 {
 		return []rtcp.Packet{tlcc.getRTCP()}
 	}
 
