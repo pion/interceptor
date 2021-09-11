@@ -21,7 +21,8 @@ type SenderInterceptor struct {
 	wg    sync.WaitGroup
 	close chan struct{}
 
-	interval time.Duration
+	interval  time.Duration
+	startTime time.Time
 
 	recorder   *Recorder
 	packetChan chan packet
@@ -46,6 +47,7 @@ func NewSenderInterceptor(opts ...Option) (*SenderInterceptor, error) {
 		packetChan: make(chan packet),
 		close:      make(chan struct{}),
 		interval:   100 * time.Millisecond,
+		startTime:  time.Now(),
 	}
 
 	for _, opt := range opts {
@@ -117,7 +119,7 @@ func (s *SenderInterceptor) BindRemoteStream(info *interceptor.StreamInfo, reade
 			s.packetChan <- packet{
 				hdr:            &p.Header,
 				sequenceNumber: tccExt.TransportSequence,
-				arrivalTime:    time.Now().UnixNano(),
+				arrivalTime:    time.Since(s.startTime).Microseconds(),
 				ssrc:           info.SSRC,
 			}
 		}
@@ -158,7 +160,7 @@ func (s *SenderInterceptor) loop(w interceptor.RTCPWriter) {
 		case <-s.close:
 			return
 		case p := <-s.packetChan:
-			s.recorder.Record(p.ssrc, p.sequenceNumber, p.arrivalTime/1e6) // ns -> ms: divide by 1e6
+			s.recorder.Record(p.ssrc, p.sequenceNumber, p.arrivalTime)
 
 		case <-ticker.C:
 			// build and send twcc
