@@ -154,22 +154,19 @@ func (s *SenderInterceptor) loop(w interceptor.RTCPWriter) {
 	defer s.wg.Done()
 
 	ticker := time.NewTicker(s.interval)
-
 	for {
 		select {
 		case <-s.close:
+			ticker.Stop()
 			return
 		case p := <-s.packetChan:
 			s.recorder.Record(p.ssrc, p.sequenceNumber, p.arrivalTime)
 
 		case <-ticker.C:
 			// build and send twcc
-			if s.recorder != nil {
-				pkts := s.recorder.BuildFeedbackPacket()
-				_, err := w.Write(pkts, nil)
-				if err != nil {
-					s.log.Error(err.Error())
-				}
+			pkts := s.recorder.BuildFeedbackPacket()
+			if _, err := w.Write(pkts, nil); err != nil {
+				s.log.Error(err.Error())
 			}
 		}
 	}
