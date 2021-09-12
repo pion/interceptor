@@ -51,28 +51,28 @@ func (r *Recorder) Record(mediaSSRC uint32, sequenceNumber uint16, arrivalTime i
 
 // BuildFeedbackPacket creates a new RTCP packet containing a TWCC feedback report.
 func (r *Recorder) BuildFeedbackPacket() []rtcp.Packet {
-	tlcc := newFeedback(r.senderSSRC, r.mediaSSRC, r.fbPktCnt)
+	feedback := newFeedback(r.senderSSRC, r.mediaSSRC, r.fbPktCnt)
 	if len(r.receivedPackets) < 2 {
-		return []rtcp.Packet{tlcc.getRTCP()}
+		return []rtcp.Packet{feedback.getRTCP()}
 	}
 
 	sort.Slice(r.receivedPackets, func(i, j int) bool {
 		return r.receivedPackets[i].sequenceNumber < r.receivedPackets[j].sequenceNumber
 	})
-	tlcc.setBase(uint16(r.receivedPackets[0].sequenceNumber&0xffff), r.receivedPackets[0].arrivalTime)
+	feedback.setBase(uint16(r.receivedPackets[0].sequenceNumber&0xffff), r.receivedPackets[0].arrivalTime)
 
 	var pkts []rtcp.Packet
 	for _, pkt := range r.receivedPackets {
-		built := tlcc.addReceived(uint16(pkt.sequenceNumber&0xffff), pkt.arrivalTime)
+		built := feedback.addReceived(uint16(pkt.sequenceNumber&0xffff), pkt.arrivalTime)
 		if !built {
-			pkts = append(pkts, tlcc.getRTCP())
+			pkts = append(pkts, feedback.getRTCP())
 			r.fbPktCnt++
-			tlcc = newFeedback(r.senderSSRC, r.mediaSSRC, r.fbPktCnt)
-			tlcc.addReceived(uint16(pkt.sequenceNumber&0xffff), pkt.arrivalTime)
+			feedback = newFeedback(r.senderSSRC, r.mediaSSRC, r.fbPktCnt)
+			feedback.addReceived(uint16(pkt.sequenceNumber&0xffff), pkt.arrivalTime)
 		}
 	}
 	r.receivedPackets = []pktInfo{}
-	pkts = append(pkts, tlcc.getRTCP())
+	pkts = append(pkts, feedback.getRTCP())
 
 	r.fbPktCnt++
 
