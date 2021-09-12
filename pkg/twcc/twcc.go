@@ -2,6 +2,7 @@
 package twcc
 
 import (
+	"math"
 	"sort"
 
 	"github.com/pion/rtcp"
@@ -136,8 +137,7 @@ func (f *feedback) getRTCP() *rtcp.TransportLayerCC {
 func (f *feedback) addReceived(sequenceNumber uint16, timestampUS int64) bool {
 	deltaUS := timestampUS - f.lastTimestampUS
 	delta250US := deltaUS / 250
-	delta16 := uint16(delta250US)
-	if int64(delta16) != delta250US { // delta doesn't fit into 16 bit, need to create new packet
+	if delta250US < math.MinInt16 || delta250US > math.MaxInt16 { // delta doesn't fit into 16 bit, need to create new packet
 		return false
 	}
 
@@ -165,7 +165,7 @@ func (f *feedback) addReceived(sequenceNumber uint16, timestampUS int64) bool {
 	f.lastChunk.add(recvDelta)
 	f.deltas = append(f.deltas, &rtcp.RecvDelta{
 		Type:  recvDelta,
-		Delta: delta250US,
+		Delta: deltaUS,
 	})
 	f.lastTimestampUS = timestampUS
 	f.sequenceNumberCount++
