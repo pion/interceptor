@@ -223,15 +223,15 @@ func Test_feedback(t *testing.T) {
 			},
 			{
 				Type:  rtcp.TypeTCCPacketReceivedLargeDelta,
-				Delta: 0x0200,
+				Delta: 0x0200 * rtcp.TypeTCCDeltaScaleFactor,
 			},
 			{
 				Type:  rtcp.TypeTCCPacketReceivedLargeDelta,
-				Delta: 0x0100,
+				Delta: 0x0100 * rtcp.TypeTCCDeltaScaleFactor,
 			},
 			{
 				Type:  rtcp.TypeTCCPacketReceivedLargeDelta,
-				Delta: 0x0400,
+				Delta: 0x0400 * rtcp.TypeTCCDeltaScaleFactor,
 			},
 		}
 		assert.Equal(t, len(expectedDeltas), len(pkt.RecvDeltas))
@@ -296,15 +296,15 @@ func Test_feedback(t *testing.T) {
 			},
 			{
 				Type:  rtcp.TypeTCCPacketReceivedLargeDelta,
-				Delta: 0x0200,
+				Delta: 0x0200 * rtcp.TypeTCCDeltaScaleFactor,
 			},
 			{
 				Type:  rtcp.TypeTCCPacketReceivedLargeDelta,
-				Delta: 0x0100,
+				Delta: 0x0100 * rtcp.TypeTCCDeltaScaleFactor,
 			},
 			{
 				Type:  rtcp.TypeTCCPacketReceivedLargeDelta,
-				Delta: 0x0400,
+				Delta: 0x0400 * rtcp.TypeTCCDeltaScaleFactor,
 			},
 		}
 		assert.Equal(t, len(expectedDeltas), len(pkt.RecvDeltas))
@@ -407,13 +407,13 @@ func TestBuildFeedbackPacket(t *testing.T) {
 		},
 		RecvDeltas: []*rtcp.RecvDelta{
 			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
-			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 1},
-			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 1},
-			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 1},
-			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 1},
-			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 1},
-			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 1},
-			{Type: rtcp.TypeTCCPacketReceivedLargeDelta, Delta: 256},
+			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: rtcp.TypeTCCDeltaScaleFactor},
+			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: rtcp.TypeTCCDeltaScaleFactor},
+			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: rtcp.TypeTCCDeltaScaleFactor},
+			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: rtcp.TypeTCCDeltaScaleFactor},
+			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: rtcp.TypeTCCDeltaScaleFactor},
+			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: rtcp.TypeTCCDeltaScaleFactor},
+			{Type: rtcp.TypeTCCPacketReceivedLargeDelta, Delta: rtcp.TypeTCCDeltaScaleFactor * 256},
 		},
 	}, rtcpPackets[0].(*rtcp.TransportLayerCC))
 	marshalAll(t, rtcpPackets)
@@ -470,10 +470,10 @@ func TestBuildFeedbackPacket_Rolling(t *testing.T) {
 		},
 		RecvDeltas: []*rtcp.RecvDelta{
 			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
-			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 1},
-			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 1},
-			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 1},
-			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 1},
+			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: rtcp.TypeTCCDeltaScaleFactor},
+			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: rtcp.TypeTCCDeltaScaleFactor},
+			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: rtcp.TypeTCCDeltaScaleFactor},
+			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: rtcp.TypeTCCDeltaScaleFactor},
 		},
 	}, rtcpPackets[0].(*rtcp.TransportLayerCC))
 	marshalAll(t, rtcpPackets)
