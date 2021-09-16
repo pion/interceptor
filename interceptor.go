@@ -9,6 +9,11 @@ import (
 	"github.com/pion/rtp"
 )
 
+// Factory provides an interface for constructing interceptors
+type Factory interface {
+	NewInterceptor(id string) (Interceptor, error)
+}
+
 // Interceptor can be used to add functionality to you PeerConnections by modifying any incoming/outgoing rtp/rtcp
 // packets, or sending your own packets as needed.
 type Interceptor interface {

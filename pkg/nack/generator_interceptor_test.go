@@ -14,12 +14,15 @@ import (
 
 func TestGeneratorInterceptor(t *testing.T) {
 	const interval = time.Millisecond * 10
-	i, err := NewGeneratorInterceptor(
+	f, err := NewGeneratorInterceptor(
 		GeneratorSize(64),
 		GeneratorSkipLastN(2),
 		GeneratorInterval(interval),
 		GeneratorLog(logging.NewDefaultLoggerFactory().NewLogger("test")),
 	)
+	assert.NoError(t, err)
+
+	i, err := f.NewInterceptor("")
 	assert.NoError(t, err)
 
 	stream := test.NewMockStream(&interceptor.StreamInfo{
@@ -65,6 +68,8 @@ func TestGeneratorInterceptor(t *testing.T) {
 }
 
 func TestGeneratorInterceptor_InvalidSize(t *testing.T) {
-	_, err := NewGeneratorInterceptor(GeneratorSize(5))
+	f, _ := NewGeneratorInterceptor(GeneratorSize(5))
+
+	_, err := f.NewInterceptor("")
 	assert.Error(t, err, ErrInvalidSize)
 }

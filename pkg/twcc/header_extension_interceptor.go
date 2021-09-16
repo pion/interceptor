@@ -7,15 +7,24 @@ import (
 	"github.com/pion/rtp"
 )
 
+// HeaderExtensionInterceptorFactory is a interceptor.Factory for a HeaderExtensionInterceptor
+type HeaderExtensionInterceptorFactory struct {
+}
+
+// NewInterceptor constructs a new HeaderExtensionInterceptor
+func (h *HeaderExtensionInterceptorFactory) NewInterceptor(id string) (interceptor.Interceptor, error) {
+	return &HeaderExtensionInterceptor{}, nil
+}
+
+// NewHeaderExtensionInterceptor returns a HeaderExtensionInterceptorFactory
+func NewHeaderExtensionInterceptor() (*HeaderExtensionInterceptorFactory, error) {
+	return &HeaderExtensionInterceptorFactory{}, nil
+}
+
 // HeaderExtensionInterceptor adds transport wide sequence numbers as header extension to each RTP packet
 type HeaderExtensionInterceptor struct {
 	interceptor.NoOp
 	nextSequenceNr uint32
-}
-
-// NewHeaderExtensionInterceptor returns a HeaderExtensionInterceptor
-func NewHeaderExtensionInterceptor() (*HeaderExtensionInterceptor, error) {
-	return &HeaderExtensionInterceptor{}, nil
 }
 
 const transportCCURI = "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"

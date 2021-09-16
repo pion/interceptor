@@ -15,11 +15,14 @@ import (
 func TestSenderInterceptor(t *testing.T) {
 	t.Run("before any packet", func(t *testing.T) {
 		mt := &test.MockTime{}
-		i, err := NewSenderInterceptor(
+		f, err := NewSenderInterceptor(
 			SenderInterval(time.Millisecond*50),
 			SenderLog(logging.NewDefaultLoggerFactory().NewLogger("test")),
 			SenderNow(mt.Now),
 		)
+		assert.NoError(t, err)
+
+		i, err := f.NewInterceptor("")
 		assert.NoError(t, err)
 
 		stream := test.NewMockStream(&interceptor.StreamInfo{
@@ -46,11 +49,14 @@ func TestSenderInterceptor(t *testing.T) {
 
 	t.Run("after RTP packets", func(t *testing.T) {
 		mt := &test.MockTime{}
-		i, err := NewSenderInterceptor(
+		f, err := NewSenderInterceptor(
 			SenderInterval(time.Millisecond*50),
 			SenderLog(logging.NewDefaultLoggerFactory().NewLogger("test")),
 			SenderNow(mt.Now),
 		)
+		assert.NoError(t, err)
+
+		i, err := f.NewInterceptor("")
 		assert.NoError(t, err)
 
 		stream := test.NewMockStream(&interceptor.StreamInfo{

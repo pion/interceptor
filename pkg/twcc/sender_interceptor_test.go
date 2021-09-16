@@ -13,7 +13,10 @@ import (
 
 func TestSenderInterceptor(t *testing.T) {
 	t.Run("before any packets", func(t *testing.T) {
-		i, err := NewSenderInterceptor()
+		f, err := NewSenderInterceptor()
+		assert.NoError(t, err)
+
+		i, err := f.NewInterceptor("")
 		assert.NoError(t, err)
 
 		stream := test.NewMockStream(&interceptor.StreamInfo{SSRC: 1, RTPHeaderExtensions: []interceptor.RTPHeaderExtension{
@@ -40,7 +43,10 @@ func TestSenderInterceptor(t *testing.T) {
 	})
 
 	t.Run("after RTP packets", func(t *testing.T) {
-		i, err := NewSenderInterceptor()
+		f, err := NewSenderInterceptor()
+		assert.NoError(t, err)
+
+		i, err := f.NewInterceptor("")
 		assert.NoError(t, err)
 
 		stream := test.NewMockStream(&interceptor.StreamInfo{SSRC: 1, RTPHeaderExtensions: []interceptor.RTPHeaderExtension{
@@ -77,9 +83,10 @@ func TestSenderInterceptor(t *testing.T) {
 	})
 
 	t.Run("different delays between RTP packets", func(t *testing.T) {
-		i, err := NewSenderInterceptor(
-			SendInterval(500 * time.Millisecond),
-		)
+		f, err := NewSenderInterceptor(SendInterval(500 * time.Millisecond))
+		assert.NoError(t, err)
+
+		i, err := f.NewInterceptor("")
 		assert.NoError(t, err)
 
 		stream := test.NewMockStream(&interceptor.StreamInfo{RTPHeaderExtensions: []interceptor.RTPHeaderExtension{
@@ -123,9 +130,10 @@ func TestSenderInterceptor(t *testing.T) {
 	})
 
 	t.Run("packet loss", func(t *testing.T) {
-		i, err := NewSenderInterceptor(
-			SendInterval(2 * time.Second),
-		)
+		f, err := NewSenderInterceptor(SendInterval(2 * time.Second))
+		assert.NoError(t, err)
+
+		i, err := f.NewInterceptor("")
 		assert.NoError(t, err)
 
 		stream := test.NewMockStream(&interceptor.StreamInfo{RTPHeaderExtensions: []interceptor.RTPHeaderExtension{
@@ -201,9 +209,10 @@ func TestSenderInterceptor(t *testing.T) {
 	})
 
 	t.Run("overflow", func(t *testing.T) {
-		i, err := NewSenderInterceptor(
-			SendInterval(2 * time.Second),
-		)
+		f, err := NewSenderInterceptor(SendInterval(2 * time.Second))
+		assert.NoError(t, err)
+
+		i, err := f.NewInterceptor("")
 		assert.NoError(t, err)
 
 		stream := test.NewMockStream(&interceptor.StreamInfo{RTPHeaderExtensions: []interceptor.RTPHeaderExtension{

@@ -15,11 +15,14 @@ import (
 func TestReceiverInterceptor(t *testing.T) {
 	t.Run("before any packet", func(t *testing.T) {
 		mt := test.MockTime{}
-		i, err := NewReceiverInterceptor(
+		f, err := NewReceiverInterceptor(
 			ReceiverInterval(time.Millisecond*50),
 			ReceiverLog(logging.NewDefaultLoggerFactory().NewLogger("test")),
 			ReceiverNow(mt.Now),
 		)
+		assert.NoError(t, err)
+
+		i, err := f.NewInterceptor("")
 		assert.NoError(t, err)
 
 		stream := test.NewMockStream(&interceptor.StreamInfo{
@@ -50,11 +53,14 @@ func TestReceiverInterceptor(t *testing.T) {
 
 	t.Run("after RTP packets", func(t *testing.T) {
 		mt := test.MockTime{}
-		i, err := NewReceiverInterceptor(
+		f, err := NewReceiverInterceptor(
 			ReceiverInterval(time.Millisecond*50),
 			ReceiverLog(logging.NewDefaultLoggerFactory().NewLogger("test")),
 			ReceiverNow(mt.Now),
 		)
+		assert.NoError(t, err)
+
+		i, err := f.NewInterceptor("")
 		assert.NoError(t, err)
 
 		stream := test.NewMockStream(&interceptor.StreamInfo{
@@ -89,11 +95,14 @@ func TestReceiverInterceptor(t *testing.T) {
 
 	t.Run("after RTP and RTCP packets", func(t *testing.T) {
 		mt := test.MockTime{}
-		i, err := NewReceiverInterceptor(
+		f, err := NewReceiverInterceptor(
 			ReceiverInterval(time.Millisecond*50),
 			ReceiverLog(logging.NewDefaultLoggerFactory().NewLogger("test")),
 			ReceiverNow(mt.Now),
 		)
+		assert.NoError(t, err)
+
+		i, err := f.NewInterceptor("")
 		assert.NoError(t, err)
 
 		stream := test.NewMockStream(&interceptor.StreamInfo{
@@ -139,11 +148,14 @@ func TestReceiverInterceptor(t *testing.T) {
 
 	t.Run("overflow", func(t *testing.T) {
 		mt := test.MockTime{}
-		i, err := NewReceiverInterceptor(
+		f, err := NewReceiverInterceptor(
 			ReceiverInterval(time.Millisecond*50),
 			ReceiverLog(logging.NewDefaultLoggerFactory().NewLogger("test")),
 			ReceiverNow(mt.Now),
 		)
+		assert.NoError(t, err)
+
+		i, err := f.NewInterceptor("")
 		assert.NoError(t, err)
 
 		stream := test.NewMockStream(&interceptor.StreamInfo{
@@ -180,11 +192,14 @@ func TestReceiverInterceptor(t *testing.T) {
 
 	t.Run("packet loss", func(t *testing.T) {
 		mt := test.MockTime{}
-		i, err := NewReceiverInterceptor(
+		f, err := NewReceiverInterceptor(
 			ReceiverInterval(time.Millisecond*50),
 			ReceiverLog(logging.NewDefaultLoggerFactory().NewLogger("test")),
 			ReceiverNow(mt.Now),
 		)
+		assert.NoError(t, err)
+
+		i, err := f.NewInterceptor("")
 		assert.NoError(t, err)
 
 		stream := test.NewMockStream(&interceptor.StreamInfo{
@@ -247,11 +262,14 @@ func TestReceiverInterceptor(t *testing.T) {
 
 	t.Run("overflow and packet loss", func(t *testing.T) {
 		mt := test.MockTime{}
-		i, err := NewReceiverInterceptor(
+		f, err := NewReceiverInterceptor(
 			ReceiverInterval(time.Millisecond*50),
 			ReceiverLog(logging.NewDefaultLoggerFactory().NewLogger("test")),
 			ReceiverNow(mt.Now),
 		)
+		assert.NoError(t, err)
+
+		i, err := f.NewInterceptor("")
 		assert.NoError(t, err)
 
 		stream := test.NewMockStream(&interceptor.StreamInfo{
@@ -288,11 +306,14 @@ func TestReceiverInterceptor(t *testing.T) {
 
 	t.Run("reordered packets", func(t *testing.T) {
 		mt := test.MockTime{}
-		i, err := NewReceiverInterceptor(
+		f, err := NewReceiverInterceptor(
 			ReceiverInterval(time.Millisecond*50),
 			ReceiverLog(logging.NewDefaultLoggerFactory().NewLogger("test")),
 			ReceiverNow(mt.Now),
 		)
+		assert.NoError(t, err)
+
+		i, err := f.NewInterceptor("")
 		assert.NoError(t, err)
 
 		stream := test.NewMockStream(&interceptor.StreamInfo{
@@ -327,11 +348,14 @@ func TestReceiverInterceptor(t *testing.T) {
 
 	t.Run("jitter", func(t *testing.T) {
 		mt := test.MockTime{}
-		i, err := NewReceiverInterceptor(
+		f, err := NewReceiverInterceptor(
 			ReceiverInterval(time.Millisecond*50),
 			ReceiverLog(logging.NewDefaultLoggerFactory().NewLogger("test")),
 			ReceiverNow(mt.Now),
 		)
+		assert.NoError(t, err)
+
+		i, err := f.NewInterceptor("")
 		assert.NoError(t, err)
 
 		stream := test.NewMockStream(&interceptor.StreamInfo{
@@ -373,11 +397,14 @@ func TestReceiverInterceptor(t *testing.T) {
 
 	t.Run("delay", func(t *testing.T) {
 		mt := test.MockTime{}
-		i, err := NewReceiverInterceptor(
+		f, err := NewReceiverInterceptor(
 			ReceiverInterval(time.Millisecond*50),
 			ReceiverLog(logging.NewDefaultLoggerFactory().NewLogger("test")),
 			ReceiverNow(mt.Now),
 		)
+		assert.NoError(t, err)
+
+		i, err := f.NewInterceptor("")
 		assert.NoError(t, err)
 
 		stream := test.NewMockStream(&interceptor.StreamInfo{

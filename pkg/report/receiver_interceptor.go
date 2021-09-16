@@ -10,6 +10,34 @@ import (
 	"github.com/pion/rtp"
 )
 
+// ReceiverInterceptorFactory is a interceptor.Factory for a ReceiverInterceptor
+type ReceiverInterceptorFactory struct {
+	opts []ReceiverOption
+}
+
+// NewInterceptor constructs a new ReceiverInterceptor
+func (r *ReceiverInterceptorFactory) NewInterceptor(id string) (interceptor.Interceptor, error) {
+	i := &ReceiverInterceptor{
+		interval: 1 * time.Second,
+		now:      time.Now,
+		log:      logging.NewDefaultLoggerFactory().NewLogger("receiver_interceptor"),
+		close:    make(chan struct{}),
+	}
+
+	for _, opt := range r.opts {
+		if err := opt(i); err != nil {
+			return nil, err
+		}
+	}
+
+	return i, nil
+}
+
+// NewReceiverInterceptor returns a new ReceiverInterceptorFactory
+func NewReceiverInterceptor(opts ...ReceiverOption) (*ReceiverInterceptorFactory, error) {
+	return &ReceiverInterceptorFactory{opts}, nil
+}
+
 // ReceiverInterceptor interceptor generates receiver reports.
 type ReceiverInterceptor struct {
 	interceptor.NoOp
@@ -20,24 +48,6 @@ type ReceiverInterceptor struct {
 	m        sync.Mutex
 	wg       sync.WaitGroup
 	close    chan struct{}
-}
-
-// NewReceiverInterceptor returns a new ReceiverInterceptor interceptor.
-func NewReceiverInterceptor(opts ...ReceiverOption) (*ReceiverInterceptor, error) {
-	r := &ReceiverInterceptor{
-		interval: 1 * time.Second,
-		now:      time.Now,
-		log:      logging.NewDefaultLoggerFactory().NewLogger("receiver_interceptor"),
-		close:    make(chan struct{}),
-	}
-
-	for _, opt := range opts {
-		if err := opt(r); err != nil {
-			return nil, err
-		}
-	}
-
-	return r, nil
 }
 
 func (r *ReceiverInterceptor) isClosed() bool {
