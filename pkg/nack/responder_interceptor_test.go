@@ -13,10 +13,13 @@ import (
 )
 
 func TestResponderInterceptor(t *testing.T) {
-	i, err := NewResponderInterceptor(
+	f, err := NewResponderInterceptor(
 		ResponderSize(8),
 		ResponderLog(logging.NewDefaultLoggerFactory().NewLogger("test")),
 	)
+	assert.NoError(t, err)
+
+	i, err := f.NewInterceptor("")
 	assert.NoError(t, err)
 
 	stream := test.NewMockStream(&interceptor.StreamInfo{
@@ -66,7 +69,9 @@ func TestResponderInterceptor(t *testing.T) {
 }
 
 func TestResponderInterceptor_InvalidSize(t *testing.T) {
-	_, err := NewResponderInterceptor(ResponderSize(5))
+	f, _ := NewResponderInterceptor(ResponderSize(5))
+
+	_, err := f.NewInterceptor("")
 	assert.Error(t, err, ErrInvalidSize)
 }
 
@@ -74,10 +79,13 @@ func TestResponderInterceptor_InvalidSize(t *testing.T) {
 //
 //     go test -race ./pkg/nack/
 func TestResponderInterceptor_Race(t *testing.T) {
-	i, err := NewResponderInterceptor(
+	f, err := NewResponderInterceptor(
 		ResponderSize(32768),
 		ResponderLog(logging.NewDefaultLoggerFactory().NewLogger("test")),
 	)
+	assert.NoError(t, err)
+
+	i, err := f.NewInterceptor("")
 	assert.NoError(t, err)
 
 	stream := test.NewMockStream(&interceptor.StreamInfo{

@@ -10,6 +10,36 @@ import (
 	"github.com/pion/rtp"
 )
 
+// SenderInterceptorFactory is a interceptor.Factory for a SenderInterceptor
+type SenderInterceptorFactory struct {
+	opts []Option
+}
+
+// NewInterceptor constructs a new SenderInterceptor
+func (s *SenderInterceptorFactory) NewInterceptor(id string) (interceptor.Interceptor, error) {
+	i := &SenderInterceptor{
+		log:        logging.NewDefaultLoggerFactory().NewLogger("twcc_sender_interceptor"),
+		packetChan: make(chan packet),
+		close:      make(chan struct{}),
+		interval:   100 * time.Millisecond,
+		startTime:  time.Now(),
+	}
+
+	for _, opt := range s.opts {
+		err := opt(i)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return i, nil
+}
+
+// NewSenderInterceptor returns a new SenderInterceptorFactory configured with the given options.
+func NewSenderInterceptor(opts ...Option) (*SenderInterceptorFactory, error) {
+	return &SenderInterceptorFactory{opts: opts}, nil
+}
+
 // SenderInterceptor sends transport wide congestion control reports as specified in:
 // https://datatracker.ietf.org/doc/html/draft-holmer-rmcat-transport-wide-cc-extensions-01
 type SenderInterceptor struct {
@@ -38,26 +68,6 @@ func SendInterval(interval time.Duration) Option {
 		s.interval = interval
 		return nil
 	}
-}
-
-// NewSenderInterceptor returns a new SenderInterceptor configured with the given options.
-func NewSenderInterceptor(opts ...Option) (*SenderInterceptor, error) {
-	i := &SenderInterceptor{
-		log:        logging.NewDefaultLoggerFactory().NewLogger("twcc_sender_interceptor"),
-		packetChan: make(chan packet),
-		close:      make(chan struct{}),
-		interval:   100 * time.Millisecond,
-		startTime:  time.Now(),
-	}
-
-	for _, opt := range opts {
-		err := opt(i)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return i, nil
 }
 
 // BindRTCPWriter lets you modify any outgoing RTCP packets. It is called once per PeerConnection. The returned method

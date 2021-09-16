@@ -35,7 +35,12 @@ func receiveRoutine() {
 	}
 
 	// Create NACK Generator
-	generator, err := nack.NewGeneratorInterceptor()
+	generatorFactory, err := nack.NewGeneratorInterceptor()
+	if err != nil {
+		panic(err)
+	}
+
+	generator, err := generatorFactory.NewInterceptor("")
 	if err != nil {
 		panic(err)
 	}
@@ -92,7 +97,12 @@ func sendRoutine() {
 	}
 
 	// Create NACK Responder
-	responder, err := nack.NewResponderInterceptor()
+	responderFactory, err := nack.NewResponderInterceptor()
+	if err != nil {
+		panic(err)
+	}
+
+	responder, err := responderFactory.NewInterceptor("")
 	if err != nil {
 		panic(err)
 	}

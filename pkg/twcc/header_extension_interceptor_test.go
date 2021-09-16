@@ -13,7 +13,10 @@ import (
 
 func TestHeaderExtensionInterceptor(t *testing.T) {
 	t.Run("add transport wide cc to each packet", func(t *testing.T) {
-		inter, err := NewHeaderExtensionInterceptor()
+		factory, err := NewHeaderExtensionInterceptor()
+		assert.NoError(t, err)
+
+		inter, err := factory.NewInterceptor("")
 		assert.NoError(t, err)
 
 		pChan := make(chan *rtp.Packet, 10*5)
