@@ -114,20 +114,19 @@ func (s *SenderInterceptor) BindRemoteStream(info *interceptor.StreamInfo, reade
 		if err != nil {
 			return 0, nil, err
 		}
-		p := rtp.Packet{}
-		err = p.Unmarshal(buf[:i])
+		header, err := attr.GetRTPHeader(buf[:i])
 		if err != nil {
 			return 0, nil, err
 		}
 		var tccExt rtp.TransportCCExtension
-		if ext := p.GetExtension(hdrExtID); ext != nil {
+		if ext := header.GetExtension(hdrExtID); ext != nil {
 			err = tccExt.Unmarshal(ext)
 			if err != nil {
 				return 0, nil, err
 			}
 
 			s.packetChan <- packet{
-				hdr:            &p.Header,
+				hdr:            header,
 				sequenceNumber: tccExt.TransportSequence,
 				arrivalTime:    time.Since(s.startTime).Microseconds(),
 				ssrc:           info.SSRC,

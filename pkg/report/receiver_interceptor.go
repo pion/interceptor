@@ -7,7 +7,6 @@ import (
 	"github.com/pion/interceptor"
 	"github.com/pion/logging"
 	"github.com/pion/rtcp"
-	"github.com/pion/rtp"
 )
 
 // ReceiverInterceptorFactory is a interceptor.Factory for a ReceiverInterceptor
@@ -130,12 +129,12 @@ func (r *ReceiverInterceptor) BindRemoteStream(info *interceptor.StreamInfo, rea
 			return 0, nil, err
 		}
 
-		pkt := rtp.Packet{}
-		if err = pkt.Unmarshal(b[:i]); err != nil {
+		header, err := attr.GetRTPHeader(b[:i])
+		if err != nil {
 			return 0, nil, err
 		}
 
-		stream.processRTP(r.now(), &pkt)
+		stream.processRTP(r.now(), header)
 
 		return i, attr, nil
 	})
@@ -155,7 +154,7 @@ func (r *ReceiverInterceptor) BindRTCPReader(reader interceptor.RTCPReader) inte
 			return 0, nil, err
 		}
 
-		pkts, err := rtcp.Unmarshal(b[:i])
+		pkts, err := attr.GetRTCPPackets(b[:i])
 		if err != nil {
 			return 0, nil, err
 		}
