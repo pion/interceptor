@@ -81,64 +81,47 @@ func TestAttributesGetRTPHeader(t *testing.T) {
 	})
 }
 
-func TestAttributesGetRTCPHeader(t *testing.T) {
-	t.Run("NilHeader", func(t *testing.T) {
+func TestAttributesGetRTCPPackets(t *testing.T) {
+	t.Run("NilPacket", func(t *testing.T) {
 		attributes := Attributes{}
-		_, err := attributes.GetRTCPHeader(nil)
+		_, err := attributes.GetRTCPPackets(nil)
 		assert.Error(t, err)
 	})
 
 	t.Run("Present", func(t *testing.T) {
 		attributes := Attributes{
-			rtcpHeaderKey: &rtcp.Header{
-				Padding: false,
-				Count:   0,
-				Type:    0,
-				Length:  0,
+			rtcpPacketsKey: []rtcp.Packet{
+				&rtcp.TransportLayerCC{
+					Header:             rtcp.Header{Padding: false, Count: 0, Type: 0, Length: 0},
+					SenderSSRC:         0,
+					MediaSSRC:          0,
+					BaseSequenceNumber: 0,
+					PacketStatusCount:  0,
+					ReferenceTime:      0,
+					FbPktCount:         0,
+					PacketChunks:       []rtcp.PacketStatusChunk{},
+					RecvDeltas:         []*rtcp.RecvDelta{},
+				},
 			},
 		}
-		header, err := attributes.GetRTCPHeader(nil)
+		packets, err := attributes.GetRTCPPackets(nil)
 		assert.NoError(t, err)
-		assert.Equal(t, attributes[rtcpHeaderKey], header)
+		assert.Equal(t, attributes[rtcpPacketsKey], packets)
 	})
 
 	t.Run("NotPresent", func(t *testing.T) {
 		attributes := Attributes{}
-		hdr := &rtcp.Header{
-			Padding: false,
-			Count:   0,
-			Type:    0,
-			Length:  0,
+		sr := &rtcp.SenderReport{
+			SSRC:        0,
+			NTPTime:     0,
+			RTPTime:     0,
+			PacketCount: 0,
+			OctetCount:  0,
 		}
-		buf, err := hdr.Marshal()
+		buf, err := sr.Marshal()
 		assert.NoError(t, err)
-		header, err := attributes.GetRTCPHeader(buf)
+		packets, err := attributes.GetRTCPPackets(buf)
 		assert.NoError(t, err)
-		assert.Equal(t, hdr, header)
-	})
-
-	t.Run("NotPresentFromFullRTCPPacket", func(t *testing.T) {
-		attributes := Attributes{}
-		pkt := rtcp.TransportLayerCC{
-			Header: rtcp.Header{
-				Padding: false,
-				Count:   0,
-				Type:    0,
-				Length:  0,
-			},
-			SenderSSRC:         0,
-			MediaSSRC:          0,
-			BaseSequenceNumber: 0,
-			PacketStatusCount:  0,
-			ReferenceTime:      0,
-			FbPktCount:         0,
-			PacketChunks:       []rtcp.PacketStatusChunk{},
-			RecvDeltas:         []*rtcp.RecvDelta{},
-		}
-		buf, err := pkt.Marshal()
-		assert.NoError(t, err)
-		header, err := attributes.GetRTCPHeader(buf)
-		assert.NoError(t, err)
-		assert.Equal(t, &pkt.Header, header)
+		assert.Equal(t, []rtcp.Packet{sr}, packets)
 	})
 }
