@@ -5,96 +5,128 @@ package interceptor
 import (
 	"io"
 
+	"github.com/pion/interceptor/v2/pkg/rtpio"
 	"github.com/pion/rtcp"
-	"github.com/pion/rtp"
 )
 
-// Factory provides an interface for constructing interceptors
-type Factory interface {
-	NewInterceptor(id string) (Interceptor, error)
-}
-
-// Interceptor can be used to add functionality to you PeerConnections by modifying any incoming/outgoing rtp/rtcp
-// packets, or sending your own packets as needed.
-type Interceptor interface {
-
-	// BindRTCPReader lets you modify any incoming RTCP packets. It is called once per sender/receiver, however this might
-	// change in the future. The returned method will be called once per packet batch.
-	BindRTCPReader(reader RTCPReader) RTCPReader
-
-	// BindRTCPWriter lets you modify any outgoing RTCP packets. It is called once per PeerConnection. The returned method
-	// will be called once per packet batch.
-	BindRTCPWriter(writer RTCPWriter) RTCPWriter
-
-	// BindLocalStream lets you modify any outgoing RTP packets. It is called once for per LocalStream. The returned method
-	// will be called once per rtp packet.
-	BindLocalStream(info *StreamInfo, writer RTPWriter) RTPWriter
-
-	// UnbindLocalStream is called when the Stream is removed. It can be used to clean up any data related to that track.
-	UnbindLocalStream(info *StreamInfo)
-
-	// BindRemoteStream lets you modify any incoming RTP packets. It is called once for per RemoteStream. The returned method
-	// will be called once per rtp packet.
-	BindRemoteStream(info *StreamInfo, reader RTPReader) RTPReader
-
-	// UnbindRemoteStream is called when the Stream is removed. It can be used to clean up any data related to that track.
-	UnbindRemoteStream(info *StreamInfo)
-
+// SenderInterceptor is an interceptor intended to postprocess packets before they are sent.
+type SenderInterceptor interface {
 	io.Closer
+
+	Transform(rtpSink rtpio.RTPWriter, rtcpSink rtpio.RTCPWriter, rtcpSrc rtpio.RTCPReader) rtpio.RTPWriter // rtp push src.
 }
 
-// RTPWriter is used by Interceptor.BindLocalStream.
-type RTPWriter interface {
-	// Write a rtp packet
-	Write(header *rtp.Header, payload []byte, attributes Attributes) (int, error)
+// SenderChain creates a new SenderChainInter
+func SenderChain(i ...SenderInterceptor) SenderInterceptor {
+	return &SenderChainInterceptor{SenderInterceptors: i}
 }
 
-// RTPReader is used by Interceptor.BindRemoteStream.
-type RTPReader interface {
-	// Read a rtp packet
-	Read([]byte, Attributes) (int, Attributes, error)
+// SenderChainInterceptor is a chain of interceptors that composes a list of child interceptors.
+type SenderChainInterceptor struct {
+	SenderInterceptors []SenderInterceptor
 }
 
-// RTCPWriter is used by Interceptor.BindRTCPWriter.
-type RTCPWriter interface {
-	// Write a batch of rtcp packets
-	Write(pkts []rtcp.Packet, attributes Attributes) (int, error)
+// Transform transforms a given set of sender interceptor pipes.
+func (i *SenderChainInterceptor) Transform(rtpSink rtpio.RTPWriter, rtcpSink rtpio.RTCPWriter, rtcpSrc rtpio.RTCPReader) rtpio.RTPWriter {
+	rtcpReaders := make([]rtpio.RTCPReader, len(i.SenderInterceptors))
+	rtcpWriters := make([]rtpio.RTCPWriter, len(i.SenderInterceptors))
+	for i := range i.SenderInterceptors {
+		rtcpReaders[i], rtcpWriters[i] = rtpio.RTCPPipe()
+	}
+	go func() {
+		for {
+			pkts := make([]rtcp.Packet, 16)
+			_, err := rtcpSrc.ReadRTCP(pkts)
+			if err != nil {
+				return
+			}
+			for i := range i.SenderInterceptors {
+				_, writeErr := rtcpWriters[i].WriteRTCP(pkts)
+				if writeErr != nil {
+					continue
+				}
+			}
+		}
+	}()
+	for i, interceptor := range i.SenderInterceptors {
+		rtpSink = interceptor.Transform(rtpSink, rtcpSink, rtcpReaders[i])
+	}
+	return rtpSink
 }
 
-// RTCPReader is used by Interceptor.BindRTCPReader.
-type RTCPReader interface {
-	// Read a batch of rtcp packets
-	Read([]byte, Attributes) (int, Attributes, error)
+// Close closes all of the child interceptors
+func (i *SenderChainInterceptor) Close() error {
+	for _, interceptor := range i.SenderInterceptors {
+		if err := interceptor.Close(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-// RTPWriterFunc is an adapter for RTPWrite interface
-type RTPWriterFunc func(header *rtp.Header, payload []byte, attributes Attributes) (int, error)
-
-// RTPReaderFunc is an adapter for RTPReader interface
-type RTPReaderFunc func([]byte, Attributes) (int, Attributes, error)
-
-// RTCPWriterFunc is an adapter for RTCPWriter interface
-type RTCPWriterFunc func(pkts []rtcp.Packet, attributes Attributes) (int, error)
-
-// RTCPReaderFunc is an adapter for RTCPReader interface
-type RTCPReaderFunc func([]byte, Attributes) (int, Attributes, error)
-
-// Write a rtp packet
-func (f RTPWriterFunc) Write(header *rtp.Header, payload []byte, attributes Attributes) (int, error) {
-	return f(header, payload, attributes)
+// TransformSender is a convenience method to pipe over a generic io.ReadWriter with a multiplexer.
+func TransformSender(rw io.ReadWriter, interceptor SenderInterceptor, mtu int) rtpio.RTPWriter {
+	rtpWriter, rtcpWriter := rtpio.NewRTPRTCPMultiplexer(rw)
+	return interceptor.Transform(rtpWriter, rtcpWriter, rtpio.NewRTCPReader(rw, mtu))
 }
 
-// Read a rtp packet
-func (f RTPReaderFunc) Read(b []byte, a Attributes) (int, Attributes, error) {
-	return f(b, a)
+// ReceiverInterceptor is an interceptor intended to preprocess packets before they are received.
+type ReceiverInterceptor interface {
+	io.Closer
+
+	Transform(rtcpSink rtpio.RTCPWriter, rtpSrc rtpio.RTPReader, rtcpSrc rtpio.RTCPReader) rtpio.RTPReader // rtp pull sink.
 }
 
-// Write a batch of rtcp packets
-func (f RTCPWriterFunc) Write(pkts []rtcp.Packet, attributes Attributes) (int, error) {
-	return f(pkts, attributes)
+// ReceiverChain creates a new ReceiverChainInterceptor
+func ReceiverChain(i ...ReceiverInterceptor) ReceiverInterceptor {
+	return &ReceiverChainInterceptor{ReceiverInterceptors: i}
 }
 
-// Read a batch of rtcp packets
-func (f RTCPReaderFunc) Read(b []byte, a Attributes) (int, Attributes, error) {
-	return f(b, a)
+// ReceiverChainInterceptor is a chain of interceptors that composes a list of child interceptors.
+type ReceiverChainInterceptor struct {
+	ReceiverInterceptors []ReceiverInterceptor
+}
+
+// Transform transforms a given set of receiver interceptor pipes.
+func (i *ReceiverChainInterceptor) Transform(rtcpSink rtpio.RTCPWriter, rtpSrc rtpio.RTPReader, rtcpSrc rtpio.RTCPReader) rtpio.RTPReader {
+	rtcpReaders := make([]rtpio.RTCPReader, len(i.ReceiverInterceptors))
+	rtcpWriters := make([]rtpio.RTCPWriter, len(i.ReceiverInterceptors))
+	for i := range i.ReceiverInterceptors {
+		rtcpReaders[i], rtcpWriters[i] = rtpio.RTCPPipe()
+	}
+	go func() {
+		for {
+			pkts := make([]rtcp.Packet, 16)
+			_, err := rtcpSrc.ReadRTCP(pkts)
+			if err != nil {
+				return
+			}
+			for i := range i.ReceiverInterceptors {
+				_, writeErr := rtcpWriters[i].WriteRTCP(pkts)
+				if writeErr != nil {
+					continue
+				}
+			}
+		}
+	}()
+	for i, interceptor := range i.ReceiverInterceptors {
+		rtpSrc = interceptor.Transform(rtcpSink, rtpSrc, rtcpReaders[i])
+	}
+	return rtpSrc
+}
+
+// Close closes all of the child interceptors
+func (i *ReceiverChainInterceptor) Close() error {
+	for _, interceptor := range i.ReceiverInterceptors {
+		if err := interceptor.Close(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// TransformReceiver is a convenience method to pipe over a generic io.ReadWriter with a demultiplexer.
+func TransformReceiver(rw io.ReadWriter, interceptor ReceiverInterceptor, mtu int) rtpio.RTPReader {
+	rtpReader, rtcpReader := rtpio.NewRTPRTCPDemultiplexer(rw, mtu)
+	return interceptor.Transform(rtpio.NewRTCPWriter(rw), rtpReader, rtcpReader)
 }

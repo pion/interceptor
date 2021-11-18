@@ -5,50 +5,58 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pion/interceptor"
-	"github.com/pion/interceptor/internal/test"
+	"github.com/pion/interceptor/v2/pkg/rtpio"
 	"github.com/pion/logging"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestReceiverFilterEverythingOut(t *testing.T) {
+func testReceiverFilter(t *testing.T, filter bool) {
 	buf := bytes.Buffer{}
 
-	factory, err := NewReceiverInterceptor(
+	i, err := NewReceiverInterceptor(
 		RTPWriter(&buf),
 		RTCPWriter(&buf),
 		Log(logging.NewDefaultLoggerFactory().NewLogger("test")),
 		RTPFilter(func(pkt *rtp.Packet) bool {
-			return false
+			return filter
 		}),
 		RTCPFilter(func(pkt []rtcp.Packet) bool {
-			return false
+			return filter
 		}),
 	)
 	assert.NoError(t, err)
 
-	i, err := factory.NewInterceptor("")
-	assert.NoError(t, err)
-
 	assert.Zero(t, buf.Len())
 
-	stream := test.NewMockStream(&interceptor.StreamInfo{
-		SSRC:      123456,
-		ClockRate: 90000,
-	}, i)
 	defer func() {
-		assert.NoError(t, stream.Close())
+		assert.NoError(t, i.Close())
 	}()
 
-	stream.ReceiveRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{
-		SenderSSRC: 123,
-		MediaSSRC:  456,
-	}})
-	stream.ReceiveRTP(&rtp.Packet{Header: rtp.Header{
-		SequenceNumber: uint16(0),
-	}})
+	rtpReader, rtpIn := rtpio.RTPPipe()
+	rtcpReader, rtcpIn := rtpio.RTCPPipe()
+
+	rtpOut := i.Transform(nil, rtpReader, rtcpReader)
+
+	go func() {
+		_, err2 := rtcpIn.WriteRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{
+			SenderSSRC: 123,
+			MediaSSRC:  456,
+		}})
+		assert.NoError(t, err2)
+	}()
+	go func() {
+		_, err2 := rtpIn.WriteRTP(&rtp.Packet{Header: rtp.Header{
+			SequenceNumber: uint16(0),
+		}})
+		assert.NoError(t, err2)
+	}()
+
+	p := &rtp.Packet{}
+	_, err = rtpOut.ReadRTP(p)
+	assert.NoError(t, err)
+	assert.Equal(t, uint16(0), p.SequenceNumber)
 
 	// Give time for packets to be handled and stream written to.
 	time.Sleep(50 * time.Millisecond)
@@ -56,52 +64,19 @@ func TestReceiverFilterEverythingOut(t *testing.T) {
 	err = i.Close()
 	assert.NoError(t, err)
 
-	// Every packet should have been filtered out – nothing should be written.
-	assert.Zero(t, buf.Len())
+	if !filter {
+		// Every packet should have been filtered out – nothing should be written.
+		assert.Zero(t, buf.Len())
+	} else {
+		// Only filtered packets should be written.
+		assert.NotZero(t, buf.Len())
+	}
+}
+
+func TestReceiverFilterEverythingOut(t *testing.T) {
+	testReceiverFilter(t, false)
 }
 
 func TestReceiverFilterNothing(t *testing.T) {
-	buf := bytes.Buffer{}
-
-	factory, err := NewReceiverInterceptor(
-		RTPWriter(&buf),
-		RTCPWriter(&buf),
-		Log(logging.NewDefaultLoggerFactory().NewLogger("test")),
-		RTPFilter(func(pkt *rtp.Packet) bool {
-			return true
-		}),
-		RTCPFilter(func(pkt []rtcp.Packet) bool {
-			return true
-		}),
-	)
-	assert.NoError(t, err)
-
-	i, err := factory.NewInterceptor("")
-	assert.NoError(t, err)
-
-	assert.EqualValues(t, 0, buf.Len())
-
-	stream := test.NewMockStream(&interceptor.StreamInfo{
-		SSRC:      123456,
-		ClockRate: 90000,
-	}, i)
-	defer func() {
-		assert.NoError(t, stream.Close())
-	}()
-
-	stream.ReceiveRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{
-		SenderSSRC: 123,
-		MediaSSRC:  456,
-	}})
-	stream.ReceiveRTP(&rtp.Packet{Header: rtp.Header{
-		SequenceNumber: uint16(0),
-	}})
-
-	// Give time for packets to be handled and stream written to.
-	time.Sleep(50 * time.Millisecond)
-
-	err = i.Close()
-	assert.NoError(t, err)
-
-	assert.NotZero(t, buf.Len())
+	testReceiverFilter(t, true)
 }

@@ -6,9 +6,8 @@ import (
 	"net"
 	"time"
 
-	"github.com/pion/interceptor"
-	"github.com/pion/interceptor/pkg/nack"
-	"github.com/pion/rtcp"
+	"github.com/pion/interceptor/v2"
+	"github.com/pion/interceptor/v2/pkg/nack"
 	"github.com/pion/rtp"
 )
 
@@ -35,52 +34,22 @@ func receiveRoutine() {
 	}
 
 	// Create NACK Generator
-	generatorFactory, err := nack.NewGeneratorInterceptor()
+	generator, err := nack.NewGeneratorInterceptor()
 	if err != nil {
 		panic(err)
 	}
 
-	generator, err := generatorFactory.NewInterceptor("")
-	if err != nil {
-		panic(err)
-	}
+	rtpOut := interceptor.TransformReceiver(conn, generator, mtu)
 
-	// Create our interceptor chain with just a NACK Generator
-	chain := interceptor.NewChain([]interceptor.Interceptor{generator})
-
-	// Create the writer just for a single SSRC stream
-	// this is a callback that is fired everytime a RTP packet is ready to be sent
-	streamReader := chain.BindRemoteStream(&interceptor.StreamInfo{
-		SSRC:         ssrc,
-		RTCPFeedback: []interceptor.RTCPFeedback{{Type: "nack", Parameter: ""}},
-	}, interceptor.RTPReaderFunc(func(b []byte, _ interceptor.Attributes) (int, interceptor.Attributes, error) { return len(b), nil, nil }))
-
-	for rtcpBound, buffer := false, make([]byte, mtu); ; {
-		i, addr, err := conn.ReadFrom(buffer)
+	for {
+		p := &rtp.Packet{}
+		_, err := rtpOut.ReadRTP(p)
 		if err != nil {
 			panic(err)
 		}
 
 		log.Println("Received RTP")
-
-		if _, _, err := streamReader.Read(buffer[:i], nil); err != nil {
-			panic(err)
-		}
-
-		// Set the interceptor wide RTCP Writer
-		// this is a callback that is fired everytime a RTCP packet is ready to be sent
-		if !rtcpBound {
-			chain.BindRTCPWriter(interceptor.RTCPWriterFunc(func(pkts []rtcp.Packet, _ interceptor.Attributes) (int, error) {
-				buf, err := rtcp.Marshal(pkts)
-				if err != nil {
-					return 0, err
-				}
-
-				return conn.WriteTo(buf, addr)
-			}))
-
-			rtcpBound = true
-		}
+		log.Println(p)
 	}
 }
 
@@ -97,62 +66,23 @@ func sendRoutine() {
 	}
 
 	// Create NACK Responder
-	responderFactory, err := nack.NewResponderInterceptor()
+	responder, err := nack.NewResponderInterceptor()
 	if err != nil {
 		panic(err)
 	}
 
-	responder, err := responderFactory.NewInterceptor("")
-	if err != nil {
-		panic(err)
-	}
-
-	// Create our interceptor chain with just a NACK Responder.
-	chain := interceptor.NewChain([]interceptor.Interceptor{responder})
-
-	// Set the interceptor wide RTCP Reader
-	// this is a handle to send NACKs back into the interceptor.
-	rtcpWriter := chain.BindRTCPReader(interceptor.RTCPReaderFunc(func(in []byte, _ interceptor.Attributes) (int, interceptor.Attributes, error) {
-		return len(in), nil, nil
-	}))
-
-	// Create the writer just for a single SSRC stream
-	// this is a callback that is fired everytime a RTP packet is ready to be sent
-	streamWriter := chain.BindLocalStream(&interceptor.StreamInfo{
-		SSRC:         ssrc,
-		RTCPFeedback: []interceptor.RTCPFeedback{{Type: "nack", Parameter: ""}},
-	}, interceptor.RTPWriterFunc(func(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
-		headerBuf, err := header.Marshal()
-		if err != nil {
-			panic(err)
-		}
-
-		return conn.Write(append(headerBuf, payload...))
-	}))
-
-	// Read RTCP packets sent by receiver and pass into Interceptor
-	go func() {
-		for rtcpBuf := make([]byte, mtu); ; {
-			i, err := conn.Read(rtcpBuf)
-			if err != nil {
-				panic(err)
-			}
-
-			log.Println("Received NACK")
-
-			if _, _, err = rtcpWriter.Read(rtcpBuf[:i], nil); err != nil {
-				panic(err)
-			}
-		}
-	}()
+	rtpIn := interceptor.TransformSender(conn, responder, mtu)
 
 	for sequenceNumber := uint16(0); ; sequenceNumber++ {
 		// Send a RTP packet with a Payload of 0x0, 0x1, 0x2
-		if _, err := streamWriter.Write(&rtp.Header{
-			Version:        2,
-			SSRC:           ssrc,
-			SequenceNumber: sequenceNumber,
-		}, []byte{0x0, 0x1, 0x2}, nil); err != nil {
+		if _, err := rtpIn.WriteRTP(&rtp.Packet{
+			Header: rtp.Header{
+				Version:        2,
+				SSRC:           ssrc,
+				SequenceNumber: sequenceNumber,
+			},
+			Payload: []byte{0x0, 0x1, 0x2},
+		}); err != nil {
 			fmt.Println(err)
 		}
 

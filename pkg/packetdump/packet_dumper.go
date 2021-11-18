@@ -6,7 +6,6 @@ import (
 	"os"
 	"sync"
 
-	"github.com/pion/interceptor"
 	"github.com/pion/logging"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
@@ -64,9 +63,8 @@ func NewPacketDumper(opts ...PacketDumperOption) (*PacketDumper, error) {
 	return d, nil
 }
 
-func (d *PacketDumper) logRTPPacket(header *rtp.Header, payload []byte, attributes interceptor.Attributes) {
+func (d *PacketDumper) logRTPPacket(header *rtp.Header, payload []byte) {
 	d.rtpChan <- &rtpDump{
-		attributes: attributes,
 		packet: &rtp.Packet{
 			Header:  *header,
 			Payload: payload,
@@ -74,10 +72,9 @@ func (d *PacketDumper) logRTPPacket(header *rtp.Header, payload []byte, attribut
 	}
 }
 
-func (d *PacketDumper) logRTCPPackets(pkts []rtcp.Packet, attributes interceptor.Attributes) {
+func (d *PacketDumper) logRTCPPackets(pkts []rtcp.Packet) {
 	d.rtcpChan <- &rtcpDump{
-		attributes: attributes,
-		packets:    pkts,
+		packets: pkts,
 	}
 }
 
@@ -109,13 +106,13 @@ func (d *PacketDumper) loop() {
 			return
 		case dump := <-d.rtpChan:
 			if d.rtpFilter(dump.packet) {
-				if _, err := fmt.Fprint(d.rtpStream, d.rtpFormat(dump.packet, dump.attributes)); err != nil {
+				if _, err := fmt.Fprint(d.rtpStream, d.rtpFormat(dump.packet)); err != nil {
 					d.log.Errorf("could not dump RTP packet %v", err)
 				}
 			}
 		case dump := <-d.rtcpChan:
 			if d.rtcpFilter(dump.packets) {
-				if _, err := fmt.Fprint(d.rtcpStream, d.rtcpFormat(dump.packets, dump.attributes)); err != nil {
+				if _, err := fmt.Fprint(d.rtcpStream, d.rtcpFormat(dump.packets)); err != nil {
 					d.log.Errorf("could not dump RTCP packet %v", err)
 				}
 			}

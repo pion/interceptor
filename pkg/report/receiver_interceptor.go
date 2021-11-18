@@ -4,26 +4,25 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pion/interceptor"
+	"github.com/pion/interceptor/v2/pkg/feature"
+	"github.com/pion/interceptor/v2/pkg/rtpio"
 	"github.com/pion/logging"
 	"github.com/pion/rtcp"
+	"github.com/pion/rtp"
 )
 
-// ReceiverInterceptorFactory is a interceptor.Factory for a ReceiverInterceptor
-type ReceiverInterceptorFactory struct {
-	opts []ReceiverOption
-}
-
-// NewInterceptor constructs a new ReceiverInterceptor
-func (r *ReceiverInterceptorFactory) NewInterceptor(id string) (interceptor.Interceptor, error) {
+// NewReceiverInterceptor constructs a new ReceiverInterceptor
+func NewReceiverInterceptor(md *feature.MediaDescriptionReceiver, opts ...ReceiverOption) (*ReceiverInterceptor, error) {
 	i := &ReceiverInterceptor{
+		md:       md,
 		interval: 1 * time.Second,
 		now:      time.Now,
+		streams:  make(map[uint32]*receiverStream),
 		log:      logging.NewDefaultLoggerFactory().NewLogger("receiver_interceptor"),
 		close:    make(chan struct{}),
 	}
 
-	for _, opt := range r.opts {
+	for _, opt := range opts {
 		if err := opt(i); err != nil {
 			return nil, err
 		}
@@ -32,145 +31,110 @@ func (r *ReceiverInterceptorFactory) NewInterceptor(id string) (interceptor.Inte
 	return i, nil
 }
 
-// NewReceiverInterceptor returns a new ReceiverInterceptorFactory
-func NewReceiverInterceptor(opts ...ReceiverOption) (*ReceiverInterceptorFactory, error) {
-	return &ReceiverInterceptorFactory{opts}, nil
-}
-
 // ReceiverInterceptor interceptor generates receiver reports.
 type ReceiverInterceptor struct {
-	interceptor.NoOp
+	md       *feature.MediaDescriptionReceiver
 	interval time.Duration
 	now      func() time.Time
-	streams  sync.Map
+	streams  map[uint32]*receiverStream
 	log      logging.LeveledLogger
 	m        sync.Mutex
-	wg       sync.WaitGroup
 	close    chan struct{}
 }
 
-func (r *ReceiverInterceptor) isClosed() bool {
-	select {
-	case <-r.close:
-		return true
-	default:
-		return false
-	}
-}
-
 // Close closes the interceptor.
-func (r *ReceiverInterceptor) Close() error {
-	defer r.wg.Wait()
-	r.m.Lock()
-	defer r.m.Unlock()
-
-	if !r.isClosed() {
-		close(r.close)
-	}
+func (i *ReceiverInterceptor) Close() error {
+	close(i.close)
 
 	return nil
 }
 
-// BindRTCPWriter lets you modify any outgoing RTCP packets. It is called once per PeerConnection. The returned method
-// will be called once per packet batch.
-func (r *ReceiverInterceptor) BindRTCPWriter(writer interceptor.RTCPWriter) interceptor.RTCPWriter {
-	r.m.Lock()
-	defer r.m.Unlock()
-
-	if r.isClosed() {
-		return writer
+// Transform transforms a given set of receiver interceptor pipes.
+func (i *ReceiverInterceptor) Transform(rtcpSink rtpio.RTCPWriter, rtpSrc rtpio.RTPReader, rtcpSrc rtpio.RTCPReader) rtpio.RTPReader {
+	if rtcpSrc != nil {
+		go i.processRTCP(rtcpSrc)
 	}
+	go i.loop(rtcpSink)
 
-	r.wg.Add(1)
-
-	go r.loop(writer)
-
-	return writer
+	r := &receiverRTPReader{
+		interceptor: i,
+		rtpSrc:      rtpSrc,
+	}
+	return r
 }
 
-func (r *ReceiverInterceptor) loop(rtcpWriter interceptor.RTCPWriter) {
-	defer r.wg.Done()
+type receiverRTPReader struct {
+	interceptor *ReceiverInterceptor
+	rtpSrc      rtpio.RTPReader
+}
 
-	ticker := time.NewTicker(r.interval)
+func (r *receiverRTPReader) ReadRTP(pkt *rtp.Packet) (int, error) {
+	i, err := r.rtpSrc.ReadRTP(pkt)
+	if err != nil {
+		return 0, err
+	}
+
+	r.interceptor.m.Lock()
+	stream, ok := r.interceptor.streams[pkt.SSRC]
+	if !ok {
+		clockRate, ok := r.interceptor.md.GetClockRate(pkt.SSRC, pkt.PayloadType)
+		if !ok {
+			// we don't have information about this clock rate
+			r.interceptor.m.Unlock()
+			return i, nil
+		}
+		stream = newReceiverStream(pkt.SSRC, clockRate)
+		r.interceptor.streams[pkt.SSRC] = stream
+	}
+	r.interceptor.m.Unlock()
+
+	stream.processRTP(r.interceptor.now(), &pkt.Header)
+
+	return i, nil
+}
+
+func (i *ReceiverInterceptor) loop(rtcpWriter rtpio.RTCPWriter) {
+	ticker := time.NewTicker(i.interval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
-			now := r.now()
-			r.streams.Range(func(key, value interface{}) bool {
-				stream := value.(*receiverStream)
-
+			now := i.now()
+			i.m.Lock()
+			for _, stream := range i.streams {
 				var pkts []rtcp.Packet
 
 				pkts = append(pkts, stream.generateReport(now))
 
-				if _, err := rtcpWriter.Write(pkts, interceptor.Attributes{}); err != nil {
-					r.log.Warnf("failed sending: %+v", err)
+				if _, err := rtcpWriter.WriteRTCP(pkts); err != nil {
+					i.log.Warnf("failed sending: %+v", err)
 				}
+			}
+			i.m.Unlock()
 
-				return true
-			})
-
-		case <-r.close:
+		case <-i.close:
 			return
 		}
 	}
 }
 
-// BindRemoteStream lets you modify any incoming RTP packets. It is called once for per RemoteStream. The returned method
-// will be called once per rtp packet.
-func (r *ReceiverInterceptor) BindRemoteStream(info *interceptor.StreamInfo, reader interceptor.RTPReader) interceptor.RTPReader {
-	stream := newReceiverStream(info.SSRC, info.ClockRate)
-	r.streams.Store(info.SSRC, stream)
-
-	return interceptor.RTPReaderFunc(func(b []byte, a interceptor.Attributes) (int, interceptor.Attributes, error) {
-		i, attr, err := reader.Read(b, a)
+func (i *ReceiverInterceptor) processRTCP(reader rtpio.RTCPReader) {
+	for {
+		pkts := make([]rtcp.Packet, 16)
+		_, err := reader.ReadRTCP(pkts)
 		if err != nil {
-			return 0, nil, err
-		}
-
-		header, err := attr.GetRTPHeader(b[:i])
-		if err != nil {
-			return 0, nil, err
-		}
-
-		stream.processRTP(r.now(), header)
-
-		return i, attr, nil
-	})
-}
-
-// UnbindLocalStream is called when the Stream is removed. It can be used to clean up any data related to that track.
-func (r *ReceiverInterceptor) UnbindLocalStream(info *interceptor.StreamInfo) {
-	r.streams.Delete(info.SSRC)
-}
-
-// BindRTCPReader lets you modify any incoming RTCP packets. It is called once per sender/receiver, however this might
-// change in the future. The returned method will be called once per packet batch.
-func (r *ReceiverInterceptor) BindRTCPReader(reader interceptor.RTCPReader) interceptor.RTCPReader {
-	return interceptor.RTCPReaderFunc(func(b []byte, a interceptor.Attributes) (int, interceptor.Attributes, error) {
-		i, attr, err := reader.Read(b, a)
-		if err != nil {
-			return 0, nil, err
-		}
-
-		pkts, err := attr.GetRTCPPackets(b[:i])
-		if err != nil {
-			return 0, nil, err
+			return
 		}
 
 		for _, pkt := range pkts {
 			if sr, ok := (pkt).(*rtcp.SenderReport); ok {
-				value, ok := r.streams.Load(sr.SSRC)
+				stream, ok := i.streams[sr.SSRC]
 				if !ok {
 					continue
 				}
 
-				stream := value.(*receiverStream)
-				stream.processSenderReport(r.now(), sr)
+				stream.processSenderReport(i.now(), sr)
 			}
 		}
-
-		return i, attr, nil
-	})
+	}
 }

@@ -1,83 +1,60 @@
 package packetdump
 
 import (
-	"github.com/pion/interceptor"
+	"github.com/pion/interceptor/v2/pkg/rtpio"
+	"github.com/pion/rtcp"
+	"github.com/pion/rtp"
 )
 
-// ReceiverInterceptorFactory is a interceptor.Factory for a ReceiverInterceptor
-type ReceiverInterceptorFactory struct {
-	opts []PacketDumperOption
-}
-
 // NewReceiverInterceptor returns a new ReceiverInterceptor
-func NewReceiverInterceptor(opts ...PacketDumperOption) (*ReceiverInterceptorFactory, error) {
-	return &ReceiverInterceptorFactory{
-		opts: opts,
-	}, nil
-}
-
-// NewInterceptor returns a new ReceiverInterceptor interceptor.
-func (r *ReceiverInterceptorFactory) NewInterceptor(id string) (interceptor.Interceptor, error) {
-	dumper, err := NewPacketDumper(r.opts...)
+func NewReceiverInterceptor(opts ...PacketDumperOption) (*ReceiverInterceptor, error) {
+	dumper, err := NewPacketDumper(opts...)
 	if err != nil {
 		return nil, err
 	}
-	i := &ReceiverInterceptor{
-		NoOp:         interceptor.NoOp{},
+	return &ReceiverInterceptor{
 		PacketDumper: dumper,
-	}
-
-	return i, nil
+	}, nil
 }
 
 // ReceiverInterceptor interceptor dumps outgoing RTP packets.
 type ReceiverInterceptor struct {
-	interceptor.NoOp
 	*PacketDumper
 }
 
-// BindRemoteStream lets you modify any incoming RTP packets. It is called once for per RemoteStream. The returned method
-// will be called once per rtp packet.
-func (r *ReceiverInterceptor) BindRemoteStream(info *interceptor.StreamInfo, reader interceptor.RTPReader) interceptor.RTPReader {
-	return interceptor.RTPReaderFunc(func(bytes []byte, attributes interceptor.Attributes) (int, interceptor.Attributes, error) {
-		i, attr, err := reader.Read(bytes, attributes)
-		if err != nil {
-			return 0, nil, err
-		}
-		if attr == nil {
-			attr = make(interceptor.Attributes)
-		}
+// Transform transforms a given set of receiver interceptor pipes.
+func (r *ReceiverInterceptor) Transform(rtcpSink rtpio.RTCPWriter, rtpSrc rtpio.RTPReader, rtcpSrc rtpio.RTCPReader) rtpio.RTPReader {
+	go func() {
+		for {
+			pkts := make([]rtcp.Packet, 16)
+			_, err := rtcpSrc.ReadRTCP(pkts)
+			if err != nil {
+				return
+			}
 
-		header, err := attr.GetRTPHeader(bytes)
-		if err != nil {
-			return 0, nil, err
+			r.logRTCPPackets(pkts)
 		}
+	}()
 
-		r.logRTPPacket(header, bytes[header.MarshalSize():i], attr)
-		return i, attr, nil
-	})
+	return &receiverRTPReader{
+		interceptor: r,
+		rtpSrc:      rtpSrc,
+	}
 }
 
-// BindRTCPReader lets you modify any incoming RTCP packets. It is called once per sender/receiver, however this might
-// change in the future. The returned method will be called once per packet batch.
-func (r *ReceiverInterceptor) BindRTCPReader(reader interceptor.RTCPReader) interceptor.RTCPReader {
-	return interceptor.RTCPReaderFunc(func(bytes []byte, attributes interceptor.Attributes) (int, interceptor.Attributes, error) {
-		i, attr, err := reader.Read(bytes, attributes)
-		if err != nil {
-			return 0, nil, err
-		}
-		if attr == nil {
-			attr = make(interceptor.Attributes)
-		}
+type receiverRTPReader struct {
+	interceptor *ReceiverInterceptor
+	rtpSrc      rtpio.RTPReader
+}
 
-		pkts, err := attr.GetRTCPPackets(bytes[:i])
-		if err != nil {
-			return 0, nil, err
-		}
+func (r *receiverRTPReader) ReadRTP(pkt *rtp.Packet) (int, error) {
+	i, err := r.rtpSrc.ReadRTP(pkt)
+	if err != nil {
+		return 0, err
+	}
 
-		r.logRTCPPackets(pkts, attr)
-		return i, attr, err
-	})
+	r.interceptor.logRTPPacket(&pkt.Header, pkt.Payload)
+	return i, nil
 }
 
 // Close closes the interceptor

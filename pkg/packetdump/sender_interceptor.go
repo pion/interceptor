@@ -1,26 +1,14 @@
 package packetdump
 
 import (
-	"github.com/pion/interceptor"
+	"github.com/pion/interceptor/v2/pkg/rtpio"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 )
 
-// SenderInterceptorFactory is a interceptor.Factory for a SenderInterceptor
-type SenderInterceptorFactory struct {
-	opts []PacketDumperOption
-}
-
-// NewSenderInterceptor returns a new SenderInterceptorFactory
-func NewSenderInterceptor(opts ...PacketDumperOption) (*SenderInterceptorFactory, error) {
-	return &SenderInterceptorFactory{
-		opts: opts,
-	}, nil
-}
-
-// NewInterceptor returns a new SenderInterceptor interceptor
-func (s *SenderInterceptorFactory) NewInterceptor(id string) (interceptor.Interceptor, error) {
-	dumper, err := NewPacketDumper(s.opts...)
+// NewSenderInterceptor returns a new SenderInterceptor interceptor
+func NewSenderInterceptor(opts ...PacketDumperOption) (*SenderInterceptor, error) {
+	dumper, err := NewPacketDumper(opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -32,26 +20,35 @@ func (s *SenderInterceptorFactory) NewInterceptor(id string) (interceptor.Interc
 
 // SenderInterceptor responds to nack feedback messages
 type SenderInterceptor struct {
-	interceptor.NoOp
 	*PacketDumper
 }
 
-// BindRTCPWriter lets you modify any outgoing RTCP packets. It is called once per PeerConnection. The returned method
-// will be called once per packet batch.
-func (s *SenderInterceptor) BindRTCPWriter(writer interceptor.RTCPWriter) interceptor.RTCPWriter {
-	return interceptor.RTCPWriterFunc(func(pkts []rtcp.Packet, attributes interceptor.Attributes) (int, error) {
-		s.logRTCPPackets(pkts, attributes)
-		return writer.Write(pkts, attributes)
-	})
+// Transform transforms a given set of sender interceptor pipes.
+func (s *SenderInterceptor) Transform(rtpSink rtpio.RTPWriter, rtcpSink rtpio.RTCPWriter, rtcpSrc rtpio.RTCPReader) rtpio.RTPWriter {
+	go func() {
+		for {
+			pkts := make([]rtcp.Packet, 16)
+			_, err := rtcpSrc.ReadRTCP(pkts)
+			if err != nil {
+				return
+			}
+			s.logRTCPPackets(pkts)
+		}
+	}()
+	return &senderRTPWriter{
+		interceptor: s,
+		rtpSink:     rtpSink,
+	}
 }
 
-// BindLocalStream lets you modify any outgoing RTP packets. It is called once for per LocalStream. The returned method
-// will be called once per rtp packet.
-func (s *SenderInterceptor) BindLocalStream(info *interceptor.StreamInfo, writer interceptor.RTPWriter) interceptor.RTPWriter {
-	return interceptor.RTPWriterFunc(func(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
-		s.logRTPPacket(header, payload, attributes)
-		return writer.Write(header, payload, attributes)
-	})
+type senderRTPWriter struct {
+	interceptor *SenderInterceptor
+	rtpSink     rtpio.RTPWriter
+}
+
+func (s *senderRTPWriter) WriteRTP(pkt *rtp.Packet) (int, error) {
+	s.interceptor.logRTPPacket(&pkt.Header, pkt.Payload)
+	return s.rtpSink.WriteRTP(pkt)
 }
 
 // Close closes the interceptor

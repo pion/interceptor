@@ -9,5 +9,6 @@ aler9 <46489434+aler9@users.noreply.github.com>
 Antoine Baché <antoine@tenten.app>
 Atsushi Watanabe <atsushi.w@ieee.org>
 Jonathan Müller <jonathan@fotokite.com>
+Kevin Wang <kevmo314@gmail.com>
 Mathis Engelbart <mathis.engelbart@gmail.com>
 Sean DuBois <sean@siobud.com>

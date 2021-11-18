@@ -4,27 +4,25 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pion/interceptor"
+	"github.com/pion/interceptor/v2/pkg/feature"
+	"github.com/pion/interceptor/v2/pkg/rtpio"
 	"github.com/pion/logging"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 )
 
-// SenderInterceptorFactory is a interceptor.Factory for a SenderInterceptor
-type SenderInterceptorFactory struct {
-	opts []SenderOption
-}
-
-// NewInterceptor constructs a new SenderInterceptor
-func (s *SenderInterceptorFactory) NewInterceptor(id string) (interceptor.Interceptor, error) {
+// NewSenderInterceptor constructs a new SenderInterceptor
+func NewSenderInterceptor(md *feature.MediaDescriptionReceiver, opts ...SenderOption) (*SenderInterceptor, error) {
 	i := &SenderInterceptor{
+		md:       md,
 		interval: 1 * time.Second,
 		now:      time.Now,
+		streams:  make(map[uint32]*senderStream),
 		log:      logging.NewDefaultLoggerFactory().NewLogger("sender_interceptor"),
 		close:    make(chan struct{}),
 	}
 
-	for _, opt := range s.opts {
+	for _, opt := range opts {
 		if err := opt(i); err != nil {
 			return nil, err
 		}
@@ -33,75 +31,67 @@ func (s *SenderInterceptorFactory) NewInterceptor(id string) (interceptor.Interc
 	return i, nil
 }
 
-// NewSenderInterceptor returns a new SenderInterceptorFactory
-func NewSenderInterceptor(opts ...SenderOption) (*SenderInterceptorFactory, error) {
-	return &SenderInterceptorFactory{opts}, nil
-}
-
 // SenderInterceptor interceptor generates sender reports.
 type SenderInterceptor struct {
-	interceptor.NoOp
+	md       *feature.MediaDescriptionReceiver
 	interval time.Duration
 	now      func() time.Time
-	streams  sync.Map
+	streams  map[uint32]*senderStream
 	log      logging.LeveledLogger
 	m        sync.Mutex
-	wg       sync.WaitGroup
 	close    chan struct{}
 }
 
-func (s *SenderInterceptor) isClosed() bool {
-	select {
-	case <-s.close:
-		return true
-	default:
-		return false
-	}
-}
-
 // Close closes the interceptor.
-func (s *SenderInterceptor) Close() error {
-	defer s.wg.Wait()
-	s.m.Lock()
-	defer s.m.Unlock()
-
-	if !s.isClosed() {
-		close(s.close)
-	}
+func (i *SenderInterceptor) Close() error {
+	close(i.close)
 
 	return nil
 }
 
-// BindRTCPWriter lets you modify any outgoing RTCP packets. It is called once per PeerConnection. The returned method
-// will be called once per packet batch.
-func (s *SenderInterceptor) BindRTCPWriter(writer interceptor.RTCPWriter) interceptor.RTCPWriter {
-	s.m.Lock()
-	defer s.m.Unlock()
-
-	if s.isClosed() {
-		return writer
+// Transform transforms a given set of sender interceptor pipes.
+func (i *SenderInterceptor) Transform(rtpSink rtpio.RTPWriter, rtcpSink rtpio.RTCPWriter, rtcpSrc rtpio.RTCPReader) rtpio.RTPWriter {
+	go i.loop(rtcpSink)
+	s := &senderRTPWriter{
+		interceptor: i,
+		rtpSink:     rtpSink,
 	}
-
-	s.wg.Add(1)
-
-	go s.loop(writer)
-
-	return writer
+	return s
 }
 
-func (s *SenderInterceptor) loop(rtcpWriter interceptor.RTCPWriter) {
-	defer s.wg.Done()
+type senderRTPWriter struct {
+	interceptor *SenderInterceptor
+	rtpSink     rtpio.RTPWriter
+}
 
-	ticker := time.NewTicker(s.interval)
+func (s *senderRTPWriter) WriteRTP(pkt *rtp.Packet) (int, error) {
+	s.interceptor.m.Lock()
+	stream, ok := s.interceptor.streams[pkt.SSRC]
+	if !ok {
+		clockRate, ok := s.interceptor.md.GetClockRate(pkt.SSRC, pkt.PayloadType)
+		if !ok {
+			// we don't have information about this clock rate
+			s.interceptor.m.Unlock()
+			return s.rtpSink.WriteRTP(pkt)
+		}
+		stream = newSenderStream(clockRate)
+		s.interceptor.streams[pkt.SSRC] = stream
+	}
+	s.interceptor.m.Unlock()
+
+	stream.processRTP(s.interceptor.now(), &pkt.Header, pkt.Payload)
+
+	return s.rtpSink.WriteRTP(pkt)
+}
+
+func (i *SenderInterceptor) loop(rtcpWriter rtpio.RTCPWriter) {
+	ticker := time.NewTicker(i.interval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
-			now := s.now()
-			s.streams.Range(func(key, value interface{}) bool {
-				ssrc := key.(uint32)
-				stream := value.(*senderStream)
-
+			now := i.now()
+			for ssrc, stream := range i.streams {
 				stream.m.Lock()
 				defer stream.m.Unlock()
 
@@ -113,30 +103,15 @@ func (s *SenderInterceptor) loop(rtcpWriter interceptor.RTCPWriter) {
 					OctetCount:  stream.octetCount,
 				}
 
-				if _, err := rtcpWriter.Write([]rtcp.Packet{sr}, interceptor.Attributes{}); err != nil {
-					s.log.Warnf("failed sending: %+v", err)
+				if _, err := rtcpWriter.WriteRTCP([]rtcp.Packet{sr}); err != nil {
+					i.log.Warnf("failed sending: %+v", err)
 				}
+			}
 
-				return true
-			})
-
-		case <-s.close:
+		case <-i.close:
 			return
 		}
 	}
-}
-
-// BindLocalStream lets you modify any outgoing RTP packets. It is called once for per LocalStream. The returned method
-// will be called once per rtp packet.
-func (s *SenderInterceptor) BindLocalStream(info *interceptor.StreamInfo, writer interceptor.RTPWriter) interceptor.RTPWriter {
-	stream := newSenderStream(info.ClockRate)
-	s.streams.Store(info.SSRC, stream)
-
-	return interceptor.RTPWriterFunc(func(header *rtp.Header, payload []byte, a interceptor.Attributes) (int, error) {
-		stream.processRTP(s.now(), header, payload)
-
-		return writer.Write(header, payload, a)
-	})
 }
 
 func ntpTime(t time.Time) uint64 {

@@ -139,6 +139,7 @@ func Test_chunk_add(t *testing.T) {
 		assert.Equal(t, 0, len(c.deltas))
 
 		assert.Equal(t, &rtcp.StatusVectorChunk{
+			Type:       rtcp.TypeTCCStatusVectorChunk,
 			SymbolSize: rtcp.TypeTCCSymbolSizeTwoBit,
 			SymbolList: []uint16{rtcp.TypeTCCPacketNotReceived, rtcp.TypeTCCPacketReceivedLargeDelta},
 		}, statusChunk2)
@@ -204,6 +205,7 @@ func Test_feedback(t *testing.T) {
 		assert.Equal(t, 1, len(pkt.PacketChunks))
 
 		assert.Equal(t, []rtcp.PacketStatusChunk{&rtcp.StatusVectorChunk{
+			Type:       rtcp.TypeTCCStatusVectorChunk,
 			SymbolSize: rtcp.TypeTCCSymbolSizeTwoBit,
 			SymbolList: []uint16{
 				rtcp.TypeTCCPacketReceivedSmallDelta,
@@ -265,6 +267,7 @@ func Test_feedback(t *testing.T) {
 
 		assert.Equal(t, []rtcp.PacketStatusChunk{
 			&rtcp.StatusVectorChunk{
+				Type:       rtcp.TypeTCCStatusVectorChunk,
 				SymbolSize: rtcp.TypeTCCSymbolSizeTwoBit,
 				SymbolList: []uint16{
 					rtcp.TypeTCCPacketReceivedSmallDelta,
@@ -277,6 +280,7 @@ func Test_feedback(t *testing.T) {
 				},
 			},
 			&rtcp.StatusVectorChunk{
+				Type:       rtcp.TypeTCCStatusVectorChunk,
 				SymbolSize: rtcp.TypeTCCSymbolSizeTwoBit,
 				SymbolList: []uint16{
 					rtcp.TypeTCCPacketNotReceived,
@@ -455,7 +459,7 @@ func TestBuildFeedbackPacket_Rolling(t *testing.T) {
 		PacketStatusCount:  8,
 		PacketChunks: []rtcp.PacketStatusChunk{
 			&rtcp.StatusVectorChunk{
-				Type:       rtcp.TypeTCCRunLengthChunk,
+				Type:       rtcp.TypeTCCStatusVectorChunk,
 				SymbolSize: rtcp.TypeTCCSymbolSizeTwoBit,
 				SymbolList: []uint16{
 					rtcp.TypeTCCPacketReceivedSmallDelta,

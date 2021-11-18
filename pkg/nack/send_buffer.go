@@ -1,7 +1,6 @@
 package nack
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/pion/rtp"
@@ -20,25 +19,11 @@ type sendBuffer struct {
 	m sync.RWMutex
 }
 
-func newSendBuffer(size uint16) (*sendBuffer, error) {
-	allowedSizes := make([]uint16, 0)
-	correctSize := false
-	for i := 0; i < 16; i++ {
-		if size == 1<<i {
-			correctSize = true
-			break
-		}
-		allowedSizes = append(allowedSizes, 1<<i)
-	}
-
-	if !correctSize {
-		return nil, fmt.Errorf("%w: %d is not a valid size, allowed sizes: %v", ErrInvalidSize, size, allowedSizes)
-	}
-
+func newSendBuffer(size uint16) *sendBuffer {
 	return &sendBuffer{
 		packets: make([]*rtp.Packet, size),
 		size:    size,
-	}, nil
+	}
 }
 
 func (s *sendBuffer) add(packet *rtp.Packet) {

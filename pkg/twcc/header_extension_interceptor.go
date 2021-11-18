@@ -3,56 +3,52 @@ package twcc
 import (
 	"sync/atomic"
 
-	"github.com/pion/interceptor"
+	"github.com/pion/interceptor/v2/pkg/rtpio"
 	"github.com/pion/rtp"
 )
 
-// HeaderExtensionInterceptorFactory is a interceptor.Factory for a HeaderExtensionInterceptor
-type HeaderExtensionInterceptorFactory struct {
-}
-
-// NewInterceptor constructs a new HeaderExtensionInterceptor
-func (h *HeaderExtensionInterceptorFactory) NewInterceptor(id string) (interceptor.Interceptor, error) {
-	return &HeaderExtensionInterceptor{}, nil
-}
-
-// NewHeaderExtensionInterceptor returns a HeaderExtensionInterceptorFactory
-func NewHeaderExtensionInterceptor() (*HeaderExtensionInterceptorFactory, error) {
-	return &HeaderExtensionInterceptorFactory{}, nil
+// NewHeaderExtensionInterceptor returns a SenderInterceptor that adds a rtp.TransportCCExtension header
+func NewHeaderExtensionInterceptor(defaultHdrExtID uint8) (*HeaderExtensionInterceptor, error) {
+	return &HeaderExtensionInterceptor{defaultHdrExtID: defaultHdrExtID}, nil
 }
 
 // HeaderExtensionInterceptor adds transport wide sequence numbers as header extension to each RTP packet
 type HeaderExtensionInterceptor struct {
-	interceptor.NoOp
-	nextSequenceNr uint32
+	nextSequenceNr  uint32
+	defaultHdrExtID uint8
 }
 
-const transportCCURI = "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"
+// Transform transforms a given set of receiver interceptor pipes.
+func (h *HeaderExtensionInterceptor) Transform(rtpSink rtpio.RTPWriter, rtcpSink rtpio.RTCPWriter, rtcpSrc rtpio.RTCPReader) rtpio.RTPWriter {
+	go rtpio.ConsumeRTCP(rtcpSrc)
 
-// BindLocalStream returns a writer that adds a rtp.TransportCCExtension
+	return &headerExtensionRTPWriter{
+		interceptor: h,
+		rtpSink:     rtpSink,
+	}
+}
+
+// Close does nothing.
+func (h *HeaderExtensionInterceptor) Close() error {
+	return nil
+}
+
+type headerExtensionRTPWriter struct {
+	interceptor *HeaderExtensionInterceptor
+	rtpSink     rtpio.RTPWriter
+}
+
+// WriteRTP returns a writer that adds a rtp.TransportCCExtension
 // header with increasing sequence numbers to each outgoing packet.
-func (h *HeaderExtensionInterceptor) BindLocalStream(info *interceptor.StreamInfo, writer interceptor.RTPWriter) interceptor.RTPWriter {
-	var hdrExtID uint8
-	for _, e := range info.RTPHeaderExtensions {
-		if e.URI == transportCCURI {
-			hdrExtID = uint8(e.ID)
-			break
-		}
-	}
-	if hdrExtID == 0 { // Don't add header extension if ID is 0, because 0 is an invalid extension ID
-		return writer
-	}
-	return interceptor.RTPWriterFunc(func(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
-		sequenceNumber := atomic.AddUint32(&h.nextSequenceNr, 1) - 1
+func (h *headerExtensionRTPWriter) WriteRTP(pkt *rtp.Packet) (int, error) {
+	sequenceNumber := atomic.AddUint32(&h.interceptor.nextSequenceNr, 1) - 1
 
-		tcc, err := (&rtp.TransportCCExtension{TransportSequence: uint16(sequenceNumber)}).Marshal()
-		if err != nil {
-			return 0, err
-		}
-		err = header.SetExtension(hdrExtID, tcc)
-		if err != nil {
-			return 0, err
-		}
-		return writer.Write(header, payload, attributes)
-	})
+	tcc, err := (&rtp.TransportCCExtension{TransportSequence: uint16(sequenceNumber)}).Marshal()
+	if err != nil {
+		return 0, err
+	}
+	if pkt.Header.SetExtension(h.interceptor.defaultHdrExtID, tcc) != nil {
+		return 0, err
+	}
+	return h.rtpSink.WriteRTP(pkt)
 }

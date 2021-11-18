@@ -3,20 +3,15 @@ package twcc
 import (
 	"sync"
 	"testing"
-	"time"
 
-	"github.com/pion/interceptor"
-	"github.com/pion/interceptor/internal/test"
+	"github.com/pion/interceptor/v2/pkg/rtpio"
 	"github.com/pion/rtp"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestHeaderExtensionInterceptor(t *testing.T) {
 	t.Run("add transport wide cc to each packet", func(t *testing.T) {
-		factory, err := NewHeaderExtensionInterceptor()
-		assert.NoError(t, err)
-
-		inter, err := factory.NewInterceptor("")
+		hei, err := NewHeaderExtensionInterceptor(1)
 		assert.NoError(t, err)
 
 		pChan := make(chan *rtp.Packet, 10*5)
@@ -27,30 +22,28 @@ func TestHeaderExtensionInterceptor(t *testing.T) {
 			wg.Add(num)
 			for i := 0; i < num; i++ {
 				go func(ch chan *rtp.Packet, id uint16) {
-					stream := test.NewMockStream(&interceptor.StreamInfo{RTPHeaderExtensions: []interceptor.RTPHeaderExtension{
-						{
-							URI: transportCCURI,
-							ID:  1,
-						},
-					}}, inter)
+					rtpOut, rtpWriter := rtpio.RTPPipe()
+
+					rtpIn := hei.Transform(rtpWriter, nil, nil)
 					defer func() {
 						wg.Done()
-						assert.NoError(t, stream.Close())
 					}()
 
 					for _, seqNum := range []uint16{id * 1, id * 2, id * 3, id * 4, id * 5} {
-						assert.NoError(t, stream.WriteRTP(&rtp.Packet{Header: rtp.Header{SequenceNumber: seqNum}}))
-						select {
-						case p := <-stream.WrittenRTP():
-							assert.Equal(t, seqNum, p.SequenceNumber)
-							ch <- p
-						case <-time.After(10 * time.Millisecond):
-							panic("written rtp packet not found")
-						}
+						go func() {
+							_, err2 := rtpIn.WriteRTP(&rtp.Packet{Header: rtp.Header{SequenceNumber: seqNum}})
+							assert.NoError(t, err2)
+						}()
+						p := &rtp.Packet{}
+						_, err2 := rtpOut.ReadRTP(p)
+						assert.NoError(t, err2)
+						assert.Equal(t, seqNum, p.SequenceNumber)
+						ch <- p
 					}
 				}(pChan, uint16(i+1))
 			}
 			wg.Wait()
+			assert.NoError(t, hei.Close())
 			close(pChan)
 		}()
 

@@ -4,15 +4,13 @@ import (
 	"testing"
 
 	"github.com/pion/rtp"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestSendBuffer(t *testing.T) {
 	for _, start := range []uint16{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 511, 512, 513, 32767, 32768, 32769, 65527, 65528, 65529, 65530, 65531, 65532, 65533, 65534, 65535} {
 		start := start
 
-		sb, err := newSendBuffer(8)
-		assert.NoError(t, err)
+		sb := newSendBuffer(8)
 
 		add := func(nums ...uint16) {
 			for _, n := range nums {
@@ -70,8 +68,7 @@ func TestSendBuffer_Race(t *testing.T) {
 	for _, start := range []uint16{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 511, 512, 513, 32767, 32768, 32769, 65527, 65528, 65529, 65530, 65531, 65532, 65533, 65534, 65535} {
 		start := start
 
-		sb, err := newSendBuffer(8)
-		assert.NoError(t, err)
+		sb := newSendBuffer(8)
 
 		add := func(nums ...uint16) {
 			for _, n := range nums {

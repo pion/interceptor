@@ -1,52 +1,22 @@
 package nack
 
 import (
+	"fmt"
 	"math/rand"
 	"sync"
 	"time"
 
-	"github.com/pion/interceptor"
+	"github.com/pion/interceptor/v2/pkg/rtpio"
 	"github.com/pion/logging"
 	"github.com/pion/rtcp"
+	"github.com/pion/rtp"
 )
-
-// GeneratorInterceptorFactory is a interceptor.Factory for a GeneratorInterceptor
-type GeneratorInterceptorFactory struct {
-	opts []GeneratorOption
-}
-
-// NewInterceptor constructs a new ReceiverInterceptor
-func (g *GeneratorInterceptorFactory) NewInterceptor(id string) (interceptor.Interceptor, error) {
-	i := &GeneratorInterceptor{
-		size:        8192,
-		skipLastN:   0,
-		interval:    time.Millisecond * 100,
-		receiveLogs: map[uint32]*receiveLog{},
-		close:       make(chan struct{}),
-		log:         logging.NewDefaultLoggerFactory().NewLogger("nack_generator"),
-	}
-
-	for _, opt := range g.opts {
-		if err := opt(i); err != nil {
-			return nil, err
-		}
-	}
-
-	if _, err := newReceiveLog(i.size); err != nil {
-		return nil, err
-	}
-
-	return i, nil
-}
 
 // GeneratorInterceptor interceptor generates nack feedback messages.
 type GeneratorInterceptor struct {
-	interceptor.NoOp
 	size      uint16
 	skipLastN uint16
 	interval  time.Duration
-	m         sync.Mutex
-	wg        sync.WaitGroup
 	close     chan struct{}
 	log       logging.LeveledLogger
 
@@ -55,79 +25,76 @@ type GeneratorInterceptor struct {
 }
 
 // NewGeneratorInterceptor returns a new GeneratorInterceptorFactory
-func NewGeneratorInterceptor(opts ...GeneratorOption) (*GeneratorInterceptorFactory, error) {
-	return &GeneratorInterceptorFactory{opts}, nil
-}
-
-// BindRTCPWriter lets you modify any outgoing RTCP packets. It is called once per PeerConnection. The returned method
-// will be called once per packet batch.
-func (n *GeneratorInterceptor) BindRTCPWriter(writer interceptor.RTCPWriter) interceptor.RTCPWriter {
-	n.m.Lock()
-	defer n.m.Unlock()
-
-	if n.isClosed() {
-		return writer
+func NewGeneratorInterceptor(opts ...GeneratorOption) (*GeneratorInterceptor, error) {
+	g := &GeneratorInterceptor{
+		size:        8192,
+		skipLastN:   0,
+		interval:    time.Millisecond * 100,
+		receiveLogs: map[uint32]*receiveLog{},
+		close:       make(chan struct{}),
+		log:         logging.NewDefaultLoggerFactory().NewLogger("nack_generator"),
 	}
-
-	n.wg.Add(1)
-
-	go n.loop(writer)
-
-	return writer
-}
-
-// BindRemoteStream lets you modify any incoming RTP packets. It is called once for per RemoteStream. The returned method
-// will be called once per rtp packet.
-func (n *GeneratorInterceptor) BindRemoteStream(info *interceptor.StreamInfo, reader interceptor.RTPReader) interceptor.RTPReader {
-	if !streamSupportNack(info) {
-		return reader
-	}
-
-	// error is already checked in NewGeneratorInterceptor
-	receiveLog, _ := newReceiveLog(n.size)
-	n.receiveLogsMu.Lock()
-	n.receiveLogs[info.SSRC] = receiveLog
-	n.receiveLogsMu.Unlock()
-
-	return interceptor.RTPReaderFunc(func(b []byte, a interceptor.Attributes) (int, interceptor.Attributes, error) {
-		i, attr, err := reader.Read(b, a)
-		if err != nil {
-			return 0, nil, err
+	for _, opt := range opts {
+		if err := opt(g); err != nil {
+			return nil, err
 		}
-
-		header, err := attr.GetRTPHeader(b[:i])
-		if err != nil {
-			return 0, nil, err
+	}
+	allowedSizes := make([]uint16, 0)
+	correctSize := false
+	for i := 6; i < 16; i++ {
+		if g.size == 1<<i {
+			correctSize = true
+			break
 		}
-		receiveLog.add(header.SequenceNumber)
-
-		return i, attr, nil
-	})
-}
-
-// UnbindLocalStream is called when the Stream is removed. It can be used to clean up any data related to that track.
-func (n *GeneratorInterceptor) UnbindLocalStream(info *interceptor.StreamInfo) {
-	n.receiveLogsMu.Lock()
-	delete(n.receiveLogs, info.SSRC)
-	n.receiveLogsMu.Unlock()
-}
-
-// Close closes the interceptor
-func (n *GeneratorInterceptor) Close() error {
-	defer n.wg.Wait()
-	n.m.Lock()
-	defer n.m.Unlock()
-
-	if !n.isClosed() {
-		close(n.close)
+		allowedSizes = append(allowedSizes, 1<<i)
 	}
 
-	return nil
+	if !correctSize {
+		return nil, fmt.Errorf("%w: %d is not a valid size, allowed sizes: %v", ErrInvalidSize, g.size, allowedSizes)
+	}
+	return g, nil
 }
 
-func (n *GeneratorInterceptor) loop(rtcpWriter interceptor.RTCPWriter) {
-	defer n.wg.Done()
+// Transform transforms a given set of receiver interceptor pipes.
+func (n *GeneratorInterceptor) Transform(rtcpSink rtpio.RTCPWriter, rtpSrc rtpio.RTPReader, rtcpSrc rtpio.RTCPReader) rtpio.RTPReader {
+	go n.loop(rtcpSink)
 
+	// by contract we must consume all the srcs.
+	go rtpio.ConsumeRTCP(rtcpSrc)
+
+	r := &generatorRTPReader{
+		interceptor: n,
+		rtpSrc:      rtpSrc,
+	}
+	return r
+}
+
+type generatorRTPReader struct {
+	interceptor *GeneratorInterceptor
+	rtpSrc      rtpio.RTPReader
+}
+
+// ReadRTP pulls the next RTP packet from the source.
+func (g *generatorRTPReader) ReadRTP(pkt *rtp.Packet) (int, error) {
+	g.interceptor.receiveLogsMu.Lock()
+	log, ok := g.interceptor.receiveLogs[pkt.SSRC]
+	if !ok {
+		log = newReceiveLog(g.interceptor.size)
+		g.interceptor.receiveLogs[pkt.SSRC] = log
+	}
+	g.interceptor.receiveLogsMu.Unlock()
+
+	i, err := g.rtpSrc.ReadRTP(pkt)
+	if err != nil {
+		return 0, err
+	}
+
+	log.add(pkt.Header.SequenceNumber)
+
+	return i, nil
+}
+
+func (n *GeneratorInterceptor) loop(rtcpWriter rtpio.RTCPWriter) {
 	senderSSRC := rand.Uint32() // #nosec
 
 	ticker := time.NewTicker(n.interval)
@@ -135,38 +102,34 @@ func (n *GeneratorInterceptor) loop(rtcpWriter interceptor.RTCPWriter) {
 	for {
 		select {
 		case <-ticker.C:
-			func() {
-				n.receiveLogsMu.Lock()
-				defer n.receiveLogsMu.Unlock()
+			n.receiveLogsMu.Lock()
 
-				for ssrc, receiveLog := range n.receiveLogs {
-					missing := receiveLog.missingSeqNumbers(n.skipLastN)
-					if len(missing) == 0 {
-						continue
-					}
-
-					nack := &rtcp.TransportLayerNack{
-						SenderSSRC: senderSSRC,
-						MediaSSRC:  ssrc,
-						Nacks:      rtcp.NackPairsFromSequenceNumbers(missing),
-					}
-
-					if _, err := rtcpWriter.Write([]rtcp.Packet{nack}, interceptor.Attributes{}); err != nil {
-						n.log.Warnf("failed sending nack: %+v", err)
-					}
+			for ssrc, receiveLog := range n.receiveLogs {
+				missing := receiveLog.missingSeqNumbers(n.skipLastN)
+				if len(missing) == 0 {
+					continue
 				}
-			}()
+
+				nack := &rtcp.TransportLayerNack{
+					SenderSSRC: senderSSRC,
+					MediaSSRC:  ssrc,
+					Nacks:      rtcp.NackPairsFromSequenceNumbers(missing),
+				}
+
+				if _, err := rtcpWriter.WriteRTCP([]rtcp.Packet{nack}); err != nil {
+					n.log.Warnf("failed sending nack: %+v", err)
+				}
+			}
+
+			n.receiveLogsMu.Unlock()
 		case <-n.close:
 			return
 		}
 	}
 }
 
-func (n *GeneratorInterceptor) isClosed() bool {
-	select {
-	case <-n.close:
-		return true
-	default:
-		return false
-	}
+// Close closes the interceptor for reading/writing.
+func (n *GeneratorInterceptor) Close() error {
+	close(n.close)
+	return nil
 }

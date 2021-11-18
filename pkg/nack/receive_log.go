@@ -1,7 +1,6 @@
 package nack
 
 import (
-	"fmt"
 	"sync"
 )
 
@@ -14,25 +13,11 @@ type receiveLog struct {
 	m               sync.RWMutex
 }
 
-func newReceiveLog(size uint16) (*receiveLog, error) {
-	allowedSizes := make([]uint16, 0)
-	correctSize := false
-	for i := 6; i < 16; i++ {
-		if size == 1<<i {
-			correctSize = true
-			break
-		}
-		allowedSizes = append(allowedSizes, 1<<i)
-	}
-
-	if !correctSize {
-		return nil, fmt.Errorf("%w: %d is not a valid size, allowed sizes: %v", ErrInvalidSize, size, allowedSizes)
-	}
-
+func newReceiveLog(size uint16) *receiveLog {
 	return &receiveLog{
 		packets: make([]uint64, size/64),
 		size:    size,
-	}, nil
+	}
 }
 
 func (s *receiveLog) add(seq uint16) {

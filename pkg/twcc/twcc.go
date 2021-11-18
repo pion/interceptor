@@ -4,6 +4,7 @@ package twcc
 import (
 	"math"
 	"sort"
+	"sync"
 
 	"github.com/pion/rtcp"
 )
@@ -17,6 +18,8 @@ type pktInfo struct {
 // transport wide congestion control feedback reports as specified in
 // https://datatracker.ietf.org/doc/html/draft-holmer-rmcat-transport-wide-cc-extensions-01
 type Recorder struct {
+	sync.Mutex
+
 	receivedPackets []pktInfo
 
 	cycles             uint32
@@ -38,6 +41,9 @@ func NewRecorder(senderSSRC uint32) *Recorder {
 
 // Record marks a packet with mediaSSRC and a transport wide sequence number sequenceNumber as received at arrivalTime.
 func (r *Recorder) Record(mediaSSRC uint32, sequenceNumber uint16, arrivalTime int64) {
+	r.Lock()
+	defer r.Unlock()
+
 	r.mediaSSRC = mediaSSRC
 	if sequenceNumber < 0x0fff && (r.lastSequenceNumber&0xffff) > 0xf000 {
 		r.cycles += 1 << 16
@@ -51,6 +57,9 @@ func (r *Recorder) Record(mediaSSRC uint32, sequenceNumber uint16, arrivalTime i
 
 // BuildFeedbackPacket creates a new RTCP packet containing a TWCC feedback report.
 func (r *Recorder) BuildFeedbackPacket() []rtcp.Packet {
+	r.Lock()
+	defer r.Unlock()
+
 	feedback := newFeedback(r.senderSSRC, r.mediaSSRC, r.fbPktCnt)
 	if len(r.receivedPackets) < 2 {
 		return []rtcp.Packet{feedback.getRTCP()}
@@ -222,6 +231,7 @@ func (c *chunk) encode() rtcp.PacketStatusChunk {
 
 	minCap := min(maxTwoBitCap, len(c.deltas))
 	svc := &rtcp.StatusVectorChunk{
+		Type:       rtcp.TypeTCCStatusVectorChunk,
 		SymbolSize: rtcp.TypeTCCSymbolSizeTwoBit,
 		SymbolList: c.deltas[:minCap],
 	}

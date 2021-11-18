@@ -42,21 +42,10 @@ by anyone. With the following tenets in mind.
 
 ### Interceptor Public API
 The public interface is defined in [interceptor.go](https://github.com/pion/interceptor/blob/master/interceptor.go).
-The methods you need to satisy are broken up into 4 groups.
+* **Sender interceptors** postprocess a sending RTP stream
+* **Receiver interceptors** preprocess a receiving RTP stream
 
-* `BindRTCPWriter` and `BindRTCPReader` allow you to inspect/modify RTCP traffic.
-* `BindLocalStream` and `BindRemoteStream` notify you of a new SSRC stream and allow you to inspect/modify.
-* `UnbindLocalStream` and `UnbindRemoteStream` notify you when a SSRC stream has been removed
-* `Close` called when the interceptor is closed.
-
-Interceptors also pass Attributes between each other. These are a collection of key/value pairs and are useful for storing metadata
-or caching.
-
-[noop.go](https://github.com/pion/interceptor/blob/master/noop.go) is an interceptor that satisfies this interface, but does nothing.
-You can embed this interceptor as a starting point so you only need to define exactly what you need.
-
-[chain.go]( https://github.com/pion/interceptor/blob/master/chain.go) is used to combine multiple interceptors into one. They are called
-sequentially as the packet moves through them.
+Interceptors can be composed with `interceptors.Chain(i ...Interceptor) Interceptor`.
 
 ### Examples
 The [examples](https://github.com/pion/interceptor/blob/master/examples) directory provides some basic examples. If you need more please file an issue!

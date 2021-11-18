@@ -11,10 +11,7 @@ func TestReceivedBuffer(t *testing.T) {
 		start := start
 
 		t.Run(fmt.Sprintf("StartFrom%d", start), func(t *testing.T) {
-			rl, err := newReceiveLog(128)
-			if err != nil {
-				t.Fatalf("%+v", err)
-			}
+			rl := newReceiveLog(128)
 
 			all := func(min uint16, max uint16) []uint16 {
 				result := make([]uint16, 0)
