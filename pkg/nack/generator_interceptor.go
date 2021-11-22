@@ -18,7 +18,7 @@ type GeneratorInterceptorFactory struct {
 // NewInterceptor constructs a new ReceiverInterceptor
 func (g *GeneratorInterceptorFactory) NewInterceptor(id string) (interceptor.Interceptor, error) {
 	i := &GeneratorInterceptor{
-		size:        8192,
+		size:        512,
 		skipLastN:   0,
 		interval:    time.Millisecond * 100,
 		receiveLogs: map[uint32]*receiveLog{},
