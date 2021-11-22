@@ -8,6 +8,7 @@ adamroach <adam@nostrum.com>
 aler9 <46489434+aler9@users.noreply.github.com>
 Antoine Baché <antoine@tenten.app>
 Atsushi Watanabe <atsushi.w@ieee.org>
+boks1971 <raja.gobi@tutanota.com>
 Jonathan Müller <jonathan@fotokite.com>
 Mathis Engelbart <mathis.engelbart@gmail.com>
 Sean DuBois <sean@siobud.com>

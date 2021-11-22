@@ -8,8 +8,7 @@ import (
 )
 
 // HeaderExtensionInterceptorFactory is a interceptor.Factory for a HeaderExtensionInterceptor
-type HeaderExtensionInterceptorFactory struct {
-}
+type HeaderExtensionInterceptorFactory struct{}
 
 // NewInterceptor constructs a new HeaderExtensionInterceptor
 func (h *HeaderExtensionInterceptorFactory) NewInterceptor(id string) (interceptor.Interceptor, error) {
