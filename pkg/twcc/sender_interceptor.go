@@ -114,6 +114,10 @@ func (s *SenderInterceptor) BindRemoteStream(info *interceptor.StreamInfo, reade
 		if err != nil {
 			return 0, nil, err
 		}
+
+		if attr == nil {
+			attr = make(interceptor.Attributes)
+		}
 		header, err := attr.GetRTPHeader(buf[:i])
 		if err != nil {
 			return 0, nil, err

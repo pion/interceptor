@@ -64,6 +64,9 @@ func (n *ResponderInterceptor) BindRTCPReader(reader interceptor.RTCPReader) int
 			return 0, nil, err
 		}
 
+		if attr == nil {
+			attr = make(interceptor.Attributes)
+		}
 		pkts, err := attr.GetRTCPPackets(b[:i])
 		if err != nil {
 			return 0, nil, err
