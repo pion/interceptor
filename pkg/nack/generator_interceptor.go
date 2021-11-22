@@ -95,6 +95,9 @@ func (n *GeneratorInterceptor) BindRemoteStream(info *interceptor.StreamInfo, re
 			return 0, nil, err
 		}
 
+		if attr == nil {
+			attr = make(interceptor.Attributes)
+		}
 		header, err := attr.GetRTPHeader(b[:i])
 		if err != nil {
 			return 0, nil, err

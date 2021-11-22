@@ -44,10 +44,10 @@ func (r *ReceiverInterceptor) BindRemoteStream(info *interceptor.StreamInfo, rea
 		if err != nil {
 			return 0, nil, err
 		}
+
 		if attr == nil {
 			attr = make(interceptor.Attributes)
 		}
-
 		header, err := attr.GetRTPHeader(bytes)
 		if err != nil {
 			return 0, nil, err
@@ -66,10 +66,10 @@ func (r *ReceiverInterceptor) BindRTCPReader(reader interceptor.RTCPReader) inte
 		if err != nil {
 			return 0, nil, err
 		}
+
 		if attr == nil {
 			attr = make(interceptor.Attributes)
 		}
-
 		pkts, err := attr.GetRTCPPackets(bytes[:i])
 		if err != nil {
 			return 0, nil, err
