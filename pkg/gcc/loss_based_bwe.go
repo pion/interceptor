@@ -21,8 +21,6 @@ type lossBasedBandwidthEstimator struct {
 
 func newLossBasedBWE() *lossBasedBandwidthEstimator {
 	return &lossBasedBandwidthEstimator{
-		inertia:     0.5,
-		decay:       0.5,
 		bitrate:     0,
 		averageLoss: 0,
 		log:         logging.NewDefaultLoggerFactory().NewLogger("gcc_loss_controller"),
@@ -51,24 +49,20 @@ func (e *lossBasedBandwidthEstimator) updateLossStats(results []types.PacketResu
 	}
 
 	lossRatio := float64(packetsLost) / float64(len(results))
-	//e.averageLoss = e.inertia*lossRatio + e.decay*(1-e.inertia)*e.averageLoss
 	e.averageLoss = e.average(time.Since(e.lastLossUpdate), e.averageLoss, lossRatio)
 	e.lastLossUpdate = time.Now()
 
 	increaseLoss := math.Max(e.averageLoss, lossRatio)
 	decreaseLoss := math.Min(e.averageLoss, lossRatio)
 
-	e.log.Infof("averageLoss: %v", e.averageLoss)
+	e.log.Infof("averageLoss: %v, decreaseLoss: %v, increaseLoss: %v", e.averageLoss, decreaseLoss, increaseLoss)
 
-	// Naive implementation using constants from IETF Draft
-	// TODO(mathis): Make this more smart and configurable. (Smart here means
-	// don't decrease too often and such things, see libwebrtc)
 	if increaseLoss < 0.02 && time.Since(e.lastIncrease) > 200*time.Millisecond {
 		e.lastIncrease = time.Now()
 		e.bitrate = types.DataRate(1.05 * float64(e.bitrate))
-	} else if decreaseLoss > 0.1 && time.Since(e.lastDecrease) > 200*time.Millisecond {
+	} else if decreaseLoss > 0.10 && time.Since(e.lastDecrease) > 200*time.Millisecond {
 		e.lastDecrease = time.Now()
-		e.bitrate = types.DataRate(float64(e.bitrate) * (1 - 0.5*e.averageLoss))
+		e.bitrate = types.DataRate(float64(e.bitrate) * (1 - 0.5*decreaseLoss))
 	}
 }
 
