@@ -1,4 +1,4 @@
-package cc
+package gcc
 
 import (
 	"errors"
@@ -7,34 +7,31 @@ import (
 	"time"
 
 	"github.com/pion/interceptor"
-	"github.com/pion/interceptor/internal/types"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 )
 
 var errMissingTWCCExtension = errors.New("missing transport layer cc header extension")
-var errInvalidFeedbackPacket = errors.New("got invalid feedback packet")
-
-// TODO(mathis): make types internal only?
+var errUnknownFeedbackFormat = errors.New("unknown feedback format")
 
 // FeedbackAdapter converts incoming feedback from the wireformat to a
 // PacketResult
 type FeedbackAdapter struct {
 	lock    sync.Mutex
-	history map[uint16]types.SentPacket
+	history map[uint16]Acknowledgment
 }
 
 // NewFeedbackAdapter returns a new FeedbackAdapter
 func NewFeedbackAdapter() *FeedbackAdapter {
 	return &FeedbackAdapter{
-		history: make(map[uint16]types.SentPacket),
+		history: make(map[uint16]Acknowledgment),
 	}
 }
 
 // OnSent records when a packet was been sent.
 // TODO(mathis): Is there a better way to get attributes in here?
-func (f *FeedbackAdapter) OnSent(ts time.Time, header *rtp.Header, attributes interceptor.Attributes) error {
-	hdrExtensionID := attributes.Get(twccExtension)
+func (f *FeedbackAdapter) OnSent(ts time.Time, header *rtp.Header, size int, attributes interceptor.Attributes) error {
+	hdrExtensionID := attributes.Get(twccExtensionAttributesKey)
 	id, ok := hdrExtensionID.(uint8)
 	if !ok || hdrExtensionID == 0 {
 		return errMissingTWCCExtension
@@ -48,20 +45,32 @@ func (f *FeedbackAdapter) OnSent(ts time.Time, header *rtp.Header, attributes in
 
 	f.lock.Lock()
 	defer f.lock.Unlock()
-	f.history[tccExt.TransportSequence] = types.SentPacket{
-		SendTime: ts,
-		Header:   header,
+	f.history[tccExt.TransportSequence] = Acknowledgment{
+		Header:    header,
+		Size:      size,
+		Departure: ts,
+		Arrival:   time.Time{},
 	}
 	return nil
 }
 
+func (f *FeedbackAdapter) OnFeedback(feedback rtcp.Packet) ([]Acknowledgment, error) {
+	switch fb := feedback.(type) {
+	case *rtcp.TransportLayerCC:
+		return f.OnIncomingTransportCC(fb)
+	default:
+		return nil, errUnknownFeedbackFormat
+	}
+}
+
 // OnIncomingTransportCC converts the incoming rtcp.TransportLayerCC to a
 // []PacketResult
-func (f *FeedbackAdapter) OnIncomingTransportCC(feedback *rtcp.TransportLayerCC) ([]types.PacketResult, error) {
+func (f *FeedbackAdapter) OnIncomingTransportCC(feedback *rtcp.TransportLayerCC) ([]Acknowledgment, error) {
+	t0 := time.Now()
 	f.lock.Lock()
 	defer f.lock.Unlock()
 
-	result := []types.PacketResult{}
+	result := []Acknowledgment{}
 
 	packetStatusCount := uint16(0)
 	chunkIndex := 0
@@ -70,7 +79,7 @@ func (f *FeedbackAdapter) OnIncomingTransportCC(feedback *rtcp.TransportLayerCC)
 
 	for packetStatusCount < feedback.PacketStatusCount {
 		if chunkIndex >= len(feedback.PacketChunks) || len(feedback.PacketChunks) == 0 {
-			return nil, errInvalidFeedbackPacket
+			return nil, errUnknownFeedbackFormat
 		}
 		switch packetChunk := feedback.PacketChunks[chunkIndex].(type) {
 		case *rtcp.RunLengthChunk:
@@ -84,20 +93,14 @@ func (f *FeedbackAdapter) OnIncomingTransportCC(feedback *rtcp.TransportLayerCC)
 							// of received packets: warn or error?
 							continue
 						}
-						receiveTime := getReceiveTime(referenceTime, feedback.RecvDeltas[deltaIndex])
+						receiveTime := referenceTime.Add(time.Duration(feedback.RecvDeltas[deltaIndex].Delta) * time.Microsecond)
 						referenceTime = receiveTime
-						result = append(result, types.PacketResult{
-							SentPacket:  sentPacket,
-							ReceiveTime: receiveTime,
-							Received:    true,
-						})
+						sentPacket.Arrival = receiveTime
+						sentPacket.RTT = t0.Sub(sentPacket.Departure)
+						result = append(result, sentPacket)
 						deltaIndex++
 					} else {
-						result = append(result, types.PacketResult{
-							SentPacket:  sentPacket,
-							ReceiveTime: time.Time{},
-							Received:    false,
-						})
+						result = append(result, sentPacket)
 					}
 				} else {
 					// TODO(mathis): got feedback for unsent packet?
@@ -115,20 +118,14 @@ func (f *FeedbackAdapter) OnIncomingTransportCC(feedback *rtcp.TransportLayerCC)
 							// of received packets: warn or error?
 							continue
 						}
-						receiveTime := getReceiveTime(referenceTime, feedback.RecvDeltas[deltaIndex])
+						receiveTime := referenceTime.Add(time.Duration(feedback.RecvDeltas[deltaIndex].Delta) * time.Microsecond)
 						referenceTime = receiveTime
-						result = append(result, types.PacketResult{
-							SentPacket:  sentPacket,
-							ReceiveTime: receiveTime,
-							Received:    true,
-						})
+						sentPacket.Arrival = receiveTime
+						sentPacket.RTT = t0.Sub(sentPacket.Departure)
+						result = append(result, sentPacket)
 						deltaIndex++
 					} else {
-						result = append(result, types.PacketResult{
-							SentPacket:  sentPacket,
-							ReceiveTime: time.Time{},
-							Received:    false,
-						})
+						result = append(result, sentPacket)
 					}
 				}
 				packetStatusCount++
@@ -143,11 +140,11 @@ func (f *FeedbackAdapter) OnIncomingTransportCC(feedback *rtcp.TransportLayerCC)
 }
 
 // OnIncomingRFC8888 converts the incoming RFC8888 packet to a []PacketResult
-func (f *FeedbackAdapter) OnIncomingRFC8888(feedback *rtcp.RawPacket) ([]types.PacketResult, error) {
+func (f *FeedbackAdapter) OnIncomingRFC8888(feedback *rtcp.RawPacket) ([]Acknowledgment, error) {
 	return nil, nil
 }
 
-func sortedKeysUint16(m map[uint16]types.SentPacket) []uint16 {
+func sortedKeysUint16(m map[uint16]Acknowledgment) []uint16 {
 	var result []uint16
 	for k := range m {
 		result = append(result, k)
@@ -156,11 +153,4 @@ func sortedKeysUint16(m map[uint16]types.SentPacket) []uint16 {
 		return result[i] < result[j]
 	})
 	return result
-}
-
-func getReceiveTime(baseTime time.Time, delta *rtcp.RecvDelta) time.Time {
-	if delta.Type == rtcp.TypeTCCPacketReceivedSmallDelta {
-		return baseTime.Add(time.Duration(delta.Delta) * 250 * time.Microsecond)
-	}
-	return baseTime.Add(time.Duration(delta.Delta) * time.Millisecond)
 }

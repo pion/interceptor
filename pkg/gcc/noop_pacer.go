@@ -1,4 +1,4 @@
-package cc
+package gcc
 
 import (
 	"errors"
@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	"github.com/pion/interceptor"
-	"github.com/pion/interceptor/internal/types"
 	"github.com/pion/rtp"
 )
 
@@ -28,10 +27,6 @@ func (p *NoOpPacer) AddStream(ssrc uint32, writer interceptor.RTPWriter) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 	p.ssrcToWriter[ssrc] = writer
-}
-
-func (p *NoOpPacer) SetTargetBitrate(types.DataRate) {
-
 }
 
 func (p *NoOpPacer) Write(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {

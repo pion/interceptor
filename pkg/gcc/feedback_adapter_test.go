@@ -1,11 +1,10 @@
-package cc
+package gcc
 
 import (
 	"testing"
 	"time"
 
 	"github.com/pion/interceptor"
-	"github.com/pion/interceptor/internal/types"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 	"github.com/stretchr/testify/assert"
@@ -42,7 +41,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		for i := uint16(0); i < 22; i++ {
 			pkt := getPacketWithTransportCCExt(t, i)
 			headers = append(headers, pkt.Header)
-			assert.NoError(t, adapter.OnSent(t0, &pkt.Header, interceptor.Attributes{twccExtension: hdrExtID}))
+			assert.NoError(t, adapter.OnSent(t0, &pkt.Header, interceptor.Attributes{twccExtensionAttributesKey: hdrExtID}))
 		}
 		results, err := adapter.OnIncomingTransportCC(&rtcp.TransportLayerCC{
 			Header:             rtcp.Header{},
@@ -119,62 +118,50 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		assert.NotEmpty(t, results)
 		assert.Len(t, results, 22)
 
-		assert.Contains(t, results, types.PacketResult{
-			SentPacket: types.SentPacket{
-				SendTime: t0,
-				Header:   &headers[0],
-			},
-			ReceiveTime: t0.Add(time.Millisecond),
-			Received:    true,
+		assert.Contains(t, results, Acknowledgment{
+			Header:    &headers[0],
+			Size:      0,
+			Departure: t0,
+			Arrival:   t0.Add(time.Millisecond),
 		})
 
-		assert.Contains(t, results, types.PacketResult{
-			SentPacket: types.SentPacket{
-				SendTime: t0,
-				Header:   &headers[1],
-			},
-			ReceiveTime: t0.Add(101 * time.Millisecond),
-			Received:    true,
+		assert.Contains(t, results, Acknowledgment{
+			Header:    &headers[1],
+			Size:      0,
+			Departure: t0,
+			Arrival:   t0.Add(101 * time.Millisecond),
 		})
 
 		for i := uint16(2); i < 7; i++ {
-			assert.Contains(t, results, types.PacketResult{
-				SentPacket: types.SentPacket{
-					SendTime: t0,
-					Header:   &headers[i],
-				},
-				ReceiveTime: time.Time{},
-				Received:    false,
+			assert.Contains(t, results, Acknowledgment{
+				Header:    &headers[i],
+				Size:      0,
+				Departure: t0,
+				Arrival:   time.Time{},
 			})
 		}
 
-		assert.Contains(t, results, types.PacketResult{
-			SentPacket: types.SentPacket{
-				SendTime: t0,
-				Header:   &headers[7],
-			},
-			ReceiveTime: t0.Add(104 * time.Millisecond),
-			Received:    true,
+		assert.Contains(t, results, Acknowledgment{
+			Header:    &headers[7],
+			Size:      0,
+			Departure: t0,
+			Arrival:   t0.Add(104 * time.Millisecond),
 		})
 
 		for i := uint16(8); i < 21; i++ {
-			assert.Contains(t, results, types.PacketResult{
-				SentPacket: types.SentPacket{
-					SendTime: t0,
-					Header:   &headers[i],
-				},
-				ReceiveTime: time.Time{},
-				Received:    false,
+			assert.Contains(t, results, Acknowledgment{
+				Header:    &headers[i],
+				Size:      0,
+				Departure: t0,
+				Arrival:   time.Time{},
 			})
 		}
 
-		assert.Contains(t, results, types.PacketResult{
-			SentPacket: types.SentPacket{
-				SendTime: t0,
-				Header:   &headers[21],
-			},
-			ReceiveTime: t0.Add(105 * time.Millisecond),
-			Received:    true,
+		assert.Contains(t, results, Acknowledgment{
+			Header:    &headers[21],
+			Size:      0,
+			Departure: t0,
+			Arrival:   t0.Add(105 * time.Millisecond),
 		})
 	})
 
@@ -221,8 +208,8 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		adapter := NewFeedbackAdapter()
 		pkt65535 := getPacketWithTransportCCExt(t, 65535)
 		pkt0 := getPacketWithTransportCCExt(t, 0)
-		assert.NoError(t, adapter.OnSent(t0, &pkt65535.Header, interceptor.Attributes{twccExtension: hdrExtID}))
-		assert.NoError(t, adapter.OnSent(t0, &pkt0.Header, interceptor.Attributes{twccExtension: hdrExtID}))
+		assert.NoError(t, adapter.OnSent(t0, &pkt65535.Header, interceptor.Attributes{twccExtensionAttributesKey: hdrExtID}))
+		assert.NoError(t, adapter.OnSent(t0, &pkt0.Header, interceptor.Attributes{twccExtensionAttributesKey: hdrExtID}))
 
 		results, err := adapter.OnIncomingTransportCC(&rtcp.TransportLayerCC{
 			Header:             rtcp.Header{},
@@ -263,21 +250,17 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 
 		assert.NotEmpty(t, results)
 		assert.Len(t, results, 2)
-		assert.Contains(t, results, types.PacketResult{
-			SentPacket: types.SentPacket{
-				SendTime: t0,
-				Header:   &pkt65535.Header,
-			},
-			ReceiveTime: t0.Add(1 * time.Millisecond),
-			Received:    true,
+		assert.Contains(t, results, Acknowledgment{
+			Header:    &pkt65535.Header,
+			Size:      0,
+			Departure: t0,
+			Arrival:   t0.Add(1 * time.Millisecond),
 		})
-		assert.Contains(t, results, types.PacketResult{
-			SentPacket: types.SentPacket{
-				SendTime: t0,
-				Header:   &pkt0.Header,
-			},
-			ReceiveTime: t0.Add(2 * time.Millisecond),
-			Received:    true,
+		assert.Contains(t, results, Acknowledgment{
+			Header:    &pkt0.Header,
+			Size:      0,
+			Departure: t0,
+			Arrival:   t0.Add(2 * time.Millisecond),
 		})
 	})
 
@@ -288,7 +271,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		for i := uint16(0); i < 8; i++ {
 			pkt := getPacketWithTransportCCExt(t, i)
 			headers = append(headers, pkt.Header)
-			assert.NoError(t, adapter.OnSent(t0, &pkt.Header, interceptor.Attributes{twccExtension: hdrExtID}))
+			assert.NoError(t, adapter.OnSent(t0, &pkt.Header, interceptor.Attributes{twccExtensionAttributesKey: hdrExtID}))
 		}
 
 		results, err := adapter.OnIncomingTransportCC(&rtcp.TransportLayerCC{
@@ -333,13 +316,11 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Len(t, results, 3)
 		for i := uint16(0); i < 3; i++ {
-			assert.Contains(t, results, types.PacketResult{
-				SentPacket: types.SentPacket{
-					SendTime: t0,
-					Header:   &headers[i],
-				},
-				ReceiveTime: t0.Add(time.Duration(i+1) * time.Millisecond),
-				Received:    true,
+			assert.Contains(t, results, Acknowledgment{
+				Header:    &headers[i],
+				Size:      0,
+				Departure: t0,
+				Arrival:   t0.Add(time.Duration(i+1) * time.Millisecond),
 			})
 		}
 	})
@@ -349,7 +330,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		t0 := time.Time{}
 		for i := uint16(0); i < 20; i++ {
 			pkt := getPacketWithTransportCCExt(t, i)
-			assert.NoError(t, adapter.OnSent(t0, &pkt.Header, interceptor.Attributes{twccExtension: hdrExtID}))
+			assert.NoError(t, adapter.OnSent(t0, &pkt.Header, interceptor.Attributes{twccExtensionAttributesKey: hdrExtID}))
 		}
 		packets, err := adapter.OnIncomingTransportCC(&rtcp.TransportLayerCC{
 			Header:             rtcp.Header{},
@@ -390,7 +371,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		t0 := time.Time{}
 		for i := uint16(0); i < 20; i++ {
 			pkt := getPacketWithTransportCCExt(t, i)
-			assert.NoError(t, adapter.OnSent(t0, &pkt.Header, interceptor.Attributes{twccExtension: hdrExtID}))
+			assert.NoError(t, adapter.OnSent(t0, &pkt.Header, interceptor.Attributes{twccExtensionAttributesKey: hdrExtID}))
 		}
 		packets, err := adapter.OnIncomingTransportCC(&rtcp.TransportLayerCC{
 			Header:             rtcp.Header{},
@@ -447,7 +428,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		t0 := time.Time{}
 		for i := uint16(0); i < 20; i++ {
 			pkt := getPacketWithTransportCCExt(t, i)
-			assert.NoError(t, adapter.OnSent(t0, &pkt.Header, interceptor.Attributes{twccExtension: hdrExtID}))
+			assert.NoError(t, adapter.OnSent(t0, &pkt.Header, interceptor.Attributes{twccExtensionAttributesKey: hdrExtID}))
 		}
 
 		packets, err := adapter.OnIncomingTransportCC(&rtcp.TransportLayerCC{
@@ -514,7 +495,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		t0 := time.Time{}
 		for i := uint16(1008); i < 1030; i++ {
 			pkt := getPacketWithTransportCCExt(t, i)
-			assert.NoError(t, adapter.OnSent(t0, &pkt.Header, interceptor.Attributes{twccExtension: hdrExtID}))
+			assert.NoError(t, adapter.OnSent(t0, &pkt.Header, interceptor.Attributes{twccExtensionAttributesKey: hdrExtID}))
 		}
 
 		assert.NotPanics(t, func() {

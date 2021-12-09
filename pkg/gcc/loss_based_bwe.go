@@ -2,40 +2,53 @@ package gcc
 
 import (
 	"math"
+	"sync"
 	"time"
 
-	"github.com/pion/interceptor/internal/types"
 	"github.com/pion/logging"
 )
 
 type lossBasedBandwidthEstimator struct {
-	bitrate        types.DataRate
+	lock           sync.Mutex
+	maxBitrate     int
+	minBitrate     int
+	bitrate        int
 	averageLoss    float64
 	lastLossUpdate time.Time
 	lastIncrease   time.Time
 	lastDecrease   time.Time
-	inertia        float64
-	decay          float64
 	log            logging.LeveledLogger
 }
 
-func newLossBasedBWE() *lossBasedBandwidthEstimator {
+func newLossBasedBWE(initialBitrate int) *lossBasedBandwidthEstimator {
 	return &lossBasedBandwidthEstimator{
-		bitrate:     0,
-		averageLoss: 0,
-		log:         logging.NewDefaultLoggerFactory().NewLogger("gcc_loss_controller"),
+		lock:           sync.Mutex{},
+		maxBitrate:     100_000_000, // 100 mbit
+		minBitrate:     100_000,     // 100 kbit
+		bitrate:        initialBitrate,
+		averageLoss:    0,
+		lastLossUpdate: time.Time{},
+		lastIncrease:   time.Time{},
+		lastDecrease:   time.Time{},
+		log:            logging.NewDefaultLoggerFactory().NewLogger("gcc_loss_controller"),
 	}
 }
 
-func (e *lossBasedBandwidthEstimator) getEstimate(wantedRate types.DataRate) types.DataRate {
+func (e *lossBasedBandwidthEstimator) getEstimate(wantedRate int) int {
+	e.lock.Lock()
+	defer e.lock.Unlock()
+
 	if e.bitrate <= 0 {
-		e.bitrate = wantedRate
+		e.bitrate = min(max(wantedRate, e.minBitrate), e.maxBitrate)
+	}
+	if e.bitrate > wantedRate {
+		e.bitrate = min(wantedRate, e.bitrate)
 	}
 
 	return e.bitrate
 }
 
-func (e *lossBasedBandwidthEstimator) updateLossStats(results []types.PacketResult) {
+func (e *lossBasedBandwidthEstimator) updateLossStats(results []Acknowledgment) {
 
 	if len(results) == 0 {
 		return
@@ -43,7 +56,7 @@ func (e *lossBasedBandwidthEstimator) updateLossStats(results []types.PacketResu
 
 	packetsLost := 0
 	for _, p := range results {
-		if !p.Received {
+		if p.Arrival.IsZero() {
 			packetsLost++
 		}
 	}
@@ -59,13 +72,20 @@ func (e *lossBasedBandwidthEstimator) updateLossStats(results []types.PacketResu
 
 	if increaseLoss < 0.02 && time.Since(e.lastIncrease) > 200*time.Millisecond {
 		e.lastIncrease = time.Now()
-		e.bitrate = types.DataRate(1.05 * float64(e.bitrate))
+		e.bitrate = min(int(1.05*float64(e.bitrate)), e.maxBitrate)
 	} else if decreaseLoss > 0.1 && time.Since(e.lastDecrease) > 200*time.Millisecond {
 		e.lastDecrease = time.Now()
-		e.bitrate = types.DataRate(float64(e.bitrate) * (1 - 0.5*decreaseLoss))
+		e.bitrate = max(int(float64(e.bitrate)*(1-0.5*decreaseLoss)), e.minBitrate)
 	}
 }
 
 func (e *lossBasedBandwidthEstimator) average(delta time.Duration, prev, sample float64) float64 {
 	return sample + math.Exp(-float64(delta.Milliseconds())/200.0)*(prev-sample)
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

@@ -1,38 +1,18 @@
 package gcc
 
 import (
-	"time"
-
-	"github.com/pion/interceptor/internal/types"
+	"github.com/pion/interceptor"
+	"github.com/pion/rtp"
 )
 
-// SendSideBandwidthEstimator implements send side bandwidth estimation
-type SendSideBandwidthEstimator struct {
-	lastBWE    types.DataRate
-	lossBased  *lossBasedBandwidthEstimator
-	delayBased *delayBasedBandwidthEstimator
+type SendSideBandwidthEstimation struct {
+	loss *lossBasedBandwidthEstimator
 }
 
-// NewSendSideBandwidthEstimator returns a new send side bandwidth estimator
-// using delay based and loss based bandwidth estimation.
-func NewSendSideBandwidthEstimator(initialBitrate types.DataRate) *SendSideBandwidthEstimator {
-	return &SendSideBandwidthEstimator{
-		lastBWE:    initialBitrate,
-		lossBased:  newLossBasedBWE(),
-		delayBased: &delayBasedBandwidthEstimator{},
-	}
+func (e *SendSideBandwidthEstimation) Write(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
+	return 0, nil
 }
 
-// OnPacketSent records a packet as sent.
-func (g *SendSideBandwidthEstimator) OnPacketSent(ts time.Time, sizeInBytes int) {
-}
-
-// OnFeedback updates the GCC statistics from the incoming feedback.
-func (g *SendSideBandwidthEstimator) OnFeedback(feedback []types.PacketResult) {
-	g.lossBased.updateLossStats(feedback)
-}
-
-// GetBandwidthEstimation returns the estimated bandwidth available
-func (g *SendSideBandwidthEstimator) GetBandwidthEstimation() types.DataRate {
-	return types.MinDataRate(g.delayBased.getEstimate(), g.lossBased.getEstimate(g.lastBWE))
+func (e *SendSideBandwidthEstimation) Read([]byte, interceptor.Attributes) (int, interceptor.Attributes, error) {
+	return 0, nil, nil
 }
