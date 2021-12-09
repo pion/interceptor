@@ -423,14 +423,14 @@ func TestBuildFeedbackPacket_Rolling(t *testing.T) {
 	r := NewRecorder(5000)
 
 	arrivalTime := int64(scaleFactorReferenceTime)
-	addRun(t, r, []uint16{0}, []int64{
+	addRun(t, r, []uint16{65535}, []int64{
 		arrivalTime,
 	})
 
 	rtcpPackets := r.BuildFeedbackPacket()
-	assert.Equal(t, 1, len(rtcpPackets)) // Empty TWCC
+	assert.Equal(t, 1, len(rtcpPackets))
 
-	addRun(t, r, []uint16{4, 5, 6, 7}, []int64{
+	addRun(t, r, []uint16{4, 8, 9, 10}, []int64{
 		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
 		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
 		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
@@ -449,10 +449,10 @@ func TestBuildFeedbackPacket_Rolling(t *testing.T) {
 		},
 		SenderSSRC:         5000,
 		MediaSSRC:          5000,
-		BaseSequenceNumber: 0,
+		BaseSequenceNumber: 4,
 		ReferenceTime:      1,
-		FbPktCount:         0,
-		PacketStatusCount:  8,
+		FbPktCount:         1,
+		PacketStatusCount:  7,
 		PacketChunks: []rtcp.PacketStatusChunk{
 			&rtcp.StatusVectorChunk{
 				Type:       rtcp.TypeTCCRunLengthChunk,
@@ -469,7 +469,6 @@ func TestBuildFeedbackPacket_Rolling(t *testing.T) {
 			},
 		},
 		RecvDeltas: []*rtcp.RecvDelta{
-			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
 			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: rtcp.TypeTCCDeltaScaleFactor},
 			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: rtcp.TypeTCCDeltaScaleFactor},
 			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: rtcp.TypeTCCDeltaScaleFactor},
@@ -477,4 +476,29 @@ func TestBuildFeedbackPacket_Rolling(t *testing.T) {
 		},
 	}, rtcpPackets[0].(*rtcp.TransportLayerCC))
 	marshalAll(t, rtcpPackets)
+}
+
+func TestBuildFeedbackPacketCount(t *testing.T) {
+	r := NewRecorder(5000)
+
+	arrivalTime := int64(scaleFactorReferenceTime)
+	addRun(t, r, []uint16{0}, []int64{
+		arrivalTime,
+	})
+
+	pkts := r.BuildFeedbackPacket()
+	assert.Len(t, pkts, 1)
+
+	twcc := pkts[0].(*rtcp.TransportLayerCC)
+	assert.Equal(t, uint8(0), twcc.FbPktCount)
+
+	addRun(t, r, []uint16{0}, []int64{
+		arrivalTime,
+	})
+
+	pkts = r.BuildFeedbackPacket()
+	assert.Len(t, pkts, 1)
+
+	twcc = pkts[0].(*rtcp.TransportLayerCC)
+	assert.Equal(t, uint8(1), twcc.FbPktCount)
 }
