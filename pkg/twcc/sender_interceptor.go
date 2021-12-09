@@ -178,6 +178,9 @@ func (s *SenderInterceptor) loop(w interceptor.RTCPWriter) {
 		case <-ticker.C:
 			// build and send twcc
 			pkts := s.recorder.BuildFeedbackPacket()
+			if pkts == nil {
+				continue
+			}
 			if _, err := w.Write(pkts, nil); err != nil {
 				s.log.Error(err.Error())
 			}

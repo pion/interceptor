@@ -52,7 +52,9 @@ func (r *Recorder) Record(mediaSSRC uint32, sequenceNumber uint16, arrivalTime i
 // BuildFeedbackPacket creates a new RTCP packet containing a TWCC feedback report.
 func (r *Recorder) BuildFeedbackPacket() []rtcp.Packet {
 	feedback := newFeedback(r.senderSSRC, r.mediaSSRC, r.fbPktCnt)
+	r.fbPktCnt++
 	if len(r.receivedPackets) < 2 {
+		r.receivedPackets = []pktInfo{}
 		return []rtcp.Packet{feedback.getRTCP()}
 	}
 
@@ -63,18 +65,16 @@ func (r *Recorder) BuildFeedbackPacket() []rtcp.Packet {
 
 	var pkts []rtcp.Packet
 	for _, pkt := range r.receivedPackets {
-		built := feedback.addReceived(uint16(pkt.sequenceNumber&0xffff), pkt.arrivalTime)
-		if !built {
+		ok := feedback.addReceived(uint16(pkt.sequenceNumber&0xffff), pkt.arrivalTime)
+		if !ok {
 			pkts = append(pkts, feedback.getRTCP())
-			r.fbPktCnt++
 			feedback = newFeedback(r.senderSSRC, r.mediaSSRC, r.fbPktCnt)
+			r.fbPktCnt++
 			feedback.addReceived(uint16(pkt.sequenceNumber&0xffff), pkt.arrivalTime)
 		}
 	}
 	r.receivedPackets = []pktInfo{}
 	pkts = append(pkts, feedback.getRTCP())
-
-	r.fbPktCnt++
 
 	return pkts
 }
