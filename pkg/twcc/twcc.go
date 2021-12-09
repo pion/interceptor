@@ -42,11 +42,31 @@ func (r *Recorder) Record(mediaSSRC uint32, sequenceNumber uint16, arrivalTime i
 	if sequenceNumber < 0x0fff && (r.lastSequenceNumber&0xffff) > 0xf000 {
 		r.cycles += 1 << 16
 	}
-	r.receivedPackets = append(r.receivedPackets, pktInfo{
+	r.receivedPackets = insertSorted(r.receivedPackets, pktInfo{
 		sequenceNumber: r.cycles | uint32(sequenceNumber),
 		arrivalTime:    arrivalTime,
 	})
 	r.lastSequenceNumber = sequenceNumber
+}
+
+func insertSorted(list []pktInfo, element pktInfo) []pktInfo {
+	if len(list) == 0 {
+		return append(list, element)
+	}
+	for i := len(list) - 1; i >= 0; i-- {
+		if list[i].sequenceNumber < element.sequenceNumber {
+			list = append(list, pktInfo{})
+			copy(list[i+2:], list[i+1:])
+			list[i+1] = element
+			return list
+		}
+		if list[i].sequenceNumber == element.sequenceNumber {
+			list[i] = element
+			return list
+		}
+	}
+	// element.sequenceNumber is between 0 and first ever received sequenceNumber
+	return append([]pktInfo{element}, list...)
 }
 
 // BuildFeedbackPacket creates a new RTCP packet containing a TWCC feedback report.

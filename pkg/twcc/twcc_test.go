@@ -1,6 +1,7 @@
 package twcc
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/pion/rtcp"
@@ -501,4 +502,187 @@ func TestBuildFeedbackPacketCount(t *testing.T) {
 
 	twcc = pkts[0].(*rtcp.TransportLayerCC)
 	assert.Equal(t, uint8(1), twcc.FbPktCount)
+}
+
+func TestDuplicatePackets(t *testing.T) {
+	r := NewRecorder(5000)
+
+	arrivalTime := int64(scaleFactorReferenceTime)
+	addRun(t, r, []uint16{12, 13, 13, 14}, []int64{
+		arrivalTime,
+		arrivalTime,
+		arrivalTime,
+		arrivalTime,
+	})
+
+	rtcpPackets := r.BuildFeedbackPacket()
+	assert.Equal(t, 1, len(rtcpPackets))
+
+	assert.Equal(t, &rtcp.TransportLayerCC{
+		Header: rtcp.Header{
+			Count:   rtcp.FormatTCC,
+			Type:    rtcp.TypeTransportSpecificFeedback,
+			Padding: true,
+			Length:  6,
+		},
+		SenderSSRC:         5000,
+		MediaSSRC:          5000,
+		BaseSequenceNumber: 12,
+		ReferenceTime:      1,
+		FbPktCount:         0,
+		PacketStatusCount:  3,
+		PacketChunks: []rtcp.PacketStatusChunk{
+			&rtcp.RunLengthChunk{
+				PacketStatusChunk:  nil,
+				Type:               rtcp.TypeTCCRunLengthChunk,
+				PacketStatusSymbol: rtcp.TypeTCCPacketReceivedSmallDelta,
+				RunLength:          3,
+			},
+		},
+		RecvDeltas: []*rtcp.RecvDelta{
+			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
+			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
+			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
+		},
+	}, rtcpPackets[0].(*rtcp.TransportLayerCC))
+	marshalAll(t, rtcpPackets)
+}
+
+func TestInsertSorted(t *testing.T) {
+	cases := []struct {
+		l        []pktInfo
+		e        pktInfo
+		expected []pktInfo
+	}{
+		{
+			l: []pktInfo{},
+			e: pktInfo{},
+			expected: []pktInfo{{
+				sequenceNumber: 0,
+				arrivalTime:    0,
+			}},
+		},
+		{
+			l: []pktInfo{
+				{
+					sequenceNumber: 0,
+					arrivalTime:    0,
+				},
+				{
+					sequenceNumber: 1,
+					arrivalTime:    0,
+				},
+			},
+			e: pktInfo{
+				sequenceNumber: 2,
+				arrivalTime:    0,
+			},
+			expected: []pktInfo{
+				{
+					sequenceNumber: 0,
+					arrivalTime:    0,
+				},
+				{
+					sequenceNumber: 1,
+					arrivalTime:    0,
+				},
+				{
+					sequenceNumber: 2,
+					arrivalTime:    0,
+				},
+			},
+		},
+		{
+			l: []pktInfo{
+				{
+					sequenceNumber: 0,
+					arrivalTime:    0,
+				},
+				{
+					sequenceNumber: 2,
+					arrivalTime:    0,
+				},
+			},
+			e: pktInfo{
+				sequenceNumber: 1,
+				arrivalTime:    0,
+			},
+			expected: []pktInfo{
+				{
+					sequenceNumber: 0,
+					arrivalTime:    0,
+				},
+				{
+					sequenceNumber: 1,
+					arrivalTime:    0,
+				},
+				{
+					sequenceNumber: 2,
+					arrivalTime:    0,
+				},
+			},
+		},
+		{
+			l: []pktInfo{
+				{
+					sequenceNumber: 0,
+					arrivalTime:    0,
+				},
+				{
+					sequenceNumber: 1,
+					arrivalTime:    0,
+				},
+				{
+					sequenceNumber: 2,
+					arrivalTime:    0,
+				},
+			},
+			e: pktInfo{
+				sequenceNumber: 1,
+				arrivalTime:    0,
+			},
+			expected: []pktInfo{
+				{
+					sequenceNumber: 0,
+					arrivalTime:    0,
+				},
+				{
+					sequenceNumber: 1,
+					arrivalTime:    0,
+				},
+				{
+					sequenceNumber: 2,
+					arrivalTime:    0,
+				},
+			},
+		},
+		{
+			l: []pktInfo{
+				{
+					sequenceNumber: 10,
+					arrivalTime:    0,
+				},
+			},
+			e: pktInfo{
+				sequenceNumber: 9,
+				arrivalTime:    0,
+			},
+			expected: []pktInfo{
+				{
+					sequenceNumber: 9,
+					arrivalTime:    0,
+				},
+				{
+					sequenceNumber: 10,
+					arrivalTime:    0,
+				},
+			},
+		},
+	}
+	for i, c := range cases {
+		c := c
+		t.Run(fmt.Sprintf("%v", i), func(t *testing.T) {
+			assert.Equal(t, c.expected, insertSorted(c.l, c.e))
+		})
+	}
 }
