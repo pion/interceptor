@@ -3,7 +3,6 @@ package twcc
 
 import (
 	"math"
-	"sort"
 
 	"github.com/pion/rtcp"
 )
@@ -78,9 +77,6 @@ func (r *Recorder) BuildFeedbackPacket() []rtcp.Packet {
 		return []rtcp.Packet{feedback.getRTCP()}
 	}
 
-	sort.Slice(r.receivedPackets, func(i, j int) bool {
-		return r.receivedPackets[i].sequenceNumber < r.receivedPackets[j].sequenceNumber
-	})
 	feedback.setBase(uint16(r.receivedPackets[0].sequenceNumber&0xffff), r.receivedPackets[0].arrivalTime)
 
 	var pkts []rtcp.Packet
@@ -133,10 +129,10 @@ func (f *feedback) getRTCP() *rtcp.TransportLayerCC {
 	f.rtcp.PacketStatusCount = f.sequenceNumberCount
 	f.rtcp.ReferenceTime = uint32(f.refTimestamp64MS)
 	f.rtcp.BaseSequenceNumber = f.baseSequenceNumber
-	if len(f.lastChunk.deltas) > 0 {
+	for len(f.lastChunk.deltas) > 0 {
 		f.chunks = append(f.chunks, f.lastChunk.encode())
-		f.rtcp.PacketChunks = append(f.rtcp.PacketChunks, f.chunks...)
 	}
+	f.rtcp.PacketChunks = append(f.rtcp.PacketChunks, f.chunks...)
 	f.rtcp.RecvDeltas = f.deltas
 
 	padLen := 20 + len(f.rtcp.PacketChunks)*2 + f.len // 4 bytes header + 16 bytes twcc header + 2 bytes for each chunk + length of deltas

@@ -548,6 +548,197 @@ func TestDuplicatePackets(t *testing.T) {
 	marshalAll(t, rtcpPackets)
 }
 
+func TestShortDeltas(t *testing.T) {
+	t.Run("SplitsOneBitDeltas", func(t *testing.T) {
+		r := NewRecorder(5000)
+
+		arrivalTime := int64(scaleFactorReferenceTime)
+		addRun(t, r, []uint16{3, 4, 5, 7, 6, 8, 10, 11, 13, 14}, []int64{
+			arrivalTime,
+			arrivalTime,
+			arrivalTime,
+			arrivalTime,
+			arrivalTime,
+			arrivalTime,
+			arrivalTime,
+			arrivalTime,
+			arrivalTime,
+			arrivalTime,
+		})
+
+		rtcpPackets := r.BuildFeedbackPacket()
+		assert.Equal(t, 1, len(rtcpPackets))
+
+		pkt := rtcpPackets[0].(*rtcp.TransportLayerCC)
+		bs, err := pkt.Marshal()
+		unmarshalled := &rtcp.TransportLayerCC{}
+		assert.NoError(t, err)
+		assert.NoError(t, unmarshalled.Unmarshal(bs))
+
+		assert.Equal(t, &rtcp.TransportLayerCC{
+			Header: rtcp.Header{
+				Count:   rtcp.FormatTCC,
+				Type:    rtcp.TypeTransportSpecificFeedback,
+				Padding: true,
+				Length:  8,
+			},
+			SenderSSRC:         5000,
+			MediaSSRC:          5000,
+			BaseSequenceNumber: 3,
+			ReferenceTime:      1,
+			FbPktCount:         0,
+			PacketStatusCount:  12,
+			PacketChunks: []rtcp.PacketStatusChunk{
+				&rtcp.StatusVectorChunk{
+					PacketStatusChunk: nil,
+					Type:              rtcp.BitVectorChunkType,
+					SymbolSize:        rtcp.TypeTCCSymbolSizeTwoBit,
+					SymbolList:        []uint16{1, 1, 1, 1, 1, 1, 0},
+				},
+				&rtcp.StatusVectorChunk{
+					PacketStatusChunk: nil,
+					Type:              rtcp.BitVectorChunkType,
+					SymbolSize:        rtcp.TypeTCCSymbolSizeTwoBit,
+					SymbolList:        []uint16{1, 1, 0, 1, 1, 0, 0},
+				},
+			},
+			RecvDeltas: []*rtcp.RecvDelta{
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
+			},
+		}, unmarshalled)
+		marshalAll(t, rtcpPackets)
+	})
+
+	t.Run("padsTwoBitDeltas", func(t *testing.T) {
+		r := NewRecorder(5000)
+
+		arrivalTime := int64(scaleFactorReferenceTime)
+		addRun(t, r, []uint16{3, 4, 5, 7}, []int64{
+			arrivalTime,
+			arrivalTime,
+			arrivalTime,
+			arrivalTime,
+		})
+
+		rtcpPackets := r.BuildFeedbackPacket()
+		assert.Equal(t, 1, len(rtcpPackets))
+
+		pkt := rtcpPackets[0].(*rtcp.TransportLayerCC)
+		bs, err := pkt.Marshal()
+		unmarshalled := &rtcp.TransportLayerCC{}
+		assert.NoError(t, err)
+		assert.NoError(t, unmarshalled.Unmarshal(bs))
+
+		assert.Equal(t, &rtcp.TransportLayerCC{
+			Header: rtcp.Header{
+				Count:   rtcp.FormatTCC,
+				Type:    rtcp.TypeTransportSpecificFeedback,
+				Padding: true,
+				Length:  6,
+			},
+			SenderSSRC:         5000,
+			MediaSSRC:          5000,
+			BaseSequenceNumber: 3,
+			ReferenceTime:      1,
+			FbPktCount:         0,
+			PacketStatusCount:  5,
+			PacketChunks: []rtcp.PacketStatusChunk{
+				&rtcp.StatusVectorChunk{
+					PacketStatusChunk: nil,
+					Type:              rtcp.BitVectorChunkType,
+					SymbolSize:        rtcp.TypeTCCSymbolSizeTwoBit,
+					SymbolList:        []uint16{1, 1, 1, 0, 1, 0, 0},
+				},
+			},
+			RecvDeltas: []*rtcp.RecvDelta{
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
+			},
+		}, unmarshalled)
+		marshalAll(t, rtcpPackets)
+	})
+}
+
+func TestReorderedPackets(t *testing.T) {
+	r := NewRecorder(5000)
+
+	arrivalTime := int64(scaleFactorReferenceTime)
+	addRun(t, r, []uint16{3, 4, 5, 7, 6, 8, 10, 11, 13, 14}, []int64{
+		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
+		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
+		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
+		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
+		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
+		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
+		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
+		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
+		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
+		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
+	})
+
+	rtcpPackets := r.BuildFeedbackPacket()
+	assert.Equal(t, 1, len(rtcpPackets))
+
+	pkt := rtcpPackets[0].(*rtcp.TransportLayerCC)
+	bs, err := pkt.Marshal()
+	unmarshalled := &rtcp.TransportLayerCC{}
+	assert.NoError(t, err)
+	assert.NoError(t, unmarshalled.Unmarshal(bs))
+
+	assert.Equal(t, &rtcp.TransportLayerCC{
+		Header: rtcp.Header{
+			Count:   rtcp.FormatTCC,
+			Type:    rtcp.TypeTransportSpecificFeedback,
+			Padding: true,
+			Length:  8,
+		},
+		SenderSSRC:         5000,
+		MediaSSRC:          5000,
+		BaseSequenceNumber: 3,
+		ReferenceTime:      1,
+		FbPktCount:         0,
+		PacketStatusCount:  12,
+		PacketChunks: []rtcp.PacketStatusChunk{
+			&rtcp.StatusVectorChunk{
+				PacketStatusChunk: nil,
+				Type:              rtcp.BitVectorChunkType,
+				SymbolSize:        rtcp.TypeTCCSymbolSizeTwoBit,
+				SymbolList:        []uint16{1, 1, 1, 1, 2, 1, 0},
+			},
+			&rtcp.StatusVectorChunk{
+				PacketStatusChunk: nil,
+				Type:              rtcp.BitVectorChunkType,
+				SymbolSize:        rtcp.TypeTCCSymbolSizeTwoBit,
+				SymbolList:        []uint16{1, 1, 0, 1, 1, 0, 0},
+			},
+		},
+		RecvDeltas: []*rtcp.RecvDelta{
+			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: rtcp.TypeTCCDeltaScaleFactor},
+			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: rtcp.TypeTCCDeltaScaleFactor},
+			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: rtcp.TypeTCCDeltaScaleFactor},
+			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 2 * rtcp.TypeTCCDeltaScaleFactor},
+			{Type: rtcp.TypeTCCPacketReceivedLargeDelta, Delta: -rtcp.TypeTCCDeltaScaleFactor},
+			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 2 * rtcp.TypeTCCDeltaScaleFactor},
+			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: rtcp.TypeTCCDeltaScaleFactor},
+			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: rtcp.TypeTCCDeltaScaleFactor},
+			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: rtcp.TypeTCCDeltaScaleFactor},
+			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: rtcp.TypeTCCDeltaScaleFactor},
+		},
+	}, unmarshalled)
+	marshalAll(t, rtcpPackets)
+}
+
 func TestInsertSorted(t *testing.T) {
 	cases := []struct {
 		l        []pktInfo
