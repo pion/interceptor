@@ -49,7 +49,6 @@ func (e *lossBasedBandwidthEstimator) getEstimate(wantedRate int) int {
 }
 
 func (e *lossBasedBandwidthEstimator) updateLossStats(results []Acknowledgment) {
-
 	if len(results) == 0 {
 		return
 	}

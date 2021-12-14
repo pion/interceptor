@@ -2,7 +2,6 @@ package gcc
 
 import (
 	"errors"
-	"sort"
 	"sync"
 	"time"
 
@@ -11,8 +10,10 @@ import (
 	"github.com/pion/rtp"
 )
 
-var errMissingTWCCExtension = errors.New("missing transport layer cc header extension")
-var errUnknownFeedbackFormat = errors.New("unknown feedback format")
+var (
+	errMissingTWCCExtension  = errors.New("missing transport layer cc header extension")
+	errUnknownFeedbackFormat = errors.New("unknown feedback format")
+)
 
 // FeedbackAdapter converts incoming feedback from the wireformat to a
 // PacketResult
@@ -54,6 +55,8 @@ func (f *FeedbackAdapter) OnSent(ts time.Time, header *rtp.Header, size int, att
 	return nil
 }
 
+// OnFeedback converts incoming RTCP packet feedback to Acknowledgments.
+// Currently only TWCC is supported.
 func (f *FeedbackAdapter) OnFeedback(feedback rtcp.Packet) ([]Acknowledgment, error) {
 	switch fb := feedback.(type) {
 	case *rtcp.TransportLayerCC:
@@ -102,8 +105,6 @@ func (f *FeedbackAdapter) OnIncomingTransportCC(feedback *rtcp.TransportLayerCC)
 					} else {
 						result = append(result, sentPacket)
 					}
-				} else {
-					// TODO(mathis): got feedback for unsent packet?
 				}
 				packetStatusCount++
 			}
@@ -142,15 +143,4 @@ func (f *FeedbackAdapter) OnIncomingTransportCC(feedback *rtcp.TransportLayerCC)
 // OnIncomingRFC8888 converts the incoming RFC8888 packet to a []PacketResult
 func (f *FeedbackAdapter) OnIncomingRFC8888(feedback *rtcp.RawPacket) ([]Acknowledgment, error) {
 	return nil, nil
-}
-
-func sortedKeysUint16(m map[uint16]Acknowledgment) []uint16 {
-	var result []uint16
-	for k := range m {
-		result = append(result, k)
-	}
-	sort.Slice(result, func(i, j int) bool {
-		return result[i] < result[j]
-	})
-	return result
 }

@@ -7,7 +7,6 @@ import (
 
 const (
 	beta                = 0.85
-	overuseTimeTh       = 10 * time.Millisecond
 	overuseCoefficientU = 0.0018
 	overuseCoefficientD = 0.01
 	initialDelayVarTh   = 6
@@ -25,6 +24,8 @@ const (
 	normal
 )
 
+// DelayStats contains some internal statistics of the delay based congestion
+// controller
 type DelayStats struct {
 	State     int
 	Bitrate   int
@@ -173,7 +174,7 @@ func (e *delayBasedBandwidthEstimator) estimateAll(groups []arrivalGroup) {
 	for i := 1; i < len(groups); i++ {
 		dx := interGroupDelayVariation(groups[i-1], groups[i])
 		estimate := e.updateEstimate(float64(dx.Milliseconds()))
-		//fmt.Printf("dx=%v, estimate=%v\n", dx, estimate)
+		// fmt.Printf("dx=%v, estimate=%v\n", dx, estimate)
 		e.updateState(e.detectOverUse(estimate, float64(groups[i].arrival.Sub(groups[i-1].arrival).Milliseconds())))
 		e.rtt = groups[i].rtt
 	}
@@ -264,7 +265,7 @@ func (e *delayBasedBandwidthEstimator) decreaseBitrate() {
 		e.decreaseEMA = float64(r)
 	} else {
 		d := float64(r) - e.decreaseEMA
-		e.decreaseEMA = e.decreaseEMA + e.decreaseEMAAlpha*d
+		e.decreaseEMA += e.decreaseEMAAlpha * d
 		e.decreaseEMAVar = (1 - e.decreaseEMAAlpha) * (e.decreaseEMAVar + e.decreaseEMAAlpha*d*d)
 		e.decreaseStdDev = math.Sqrt(e.decreaseEMAVar)
 	}
@@ -275,7 +276,6 @@ func (e *delayBasedBandwidthEstimator) increaseBitrate() {
 
 	if float64(r) > e.decreaseEMA-3*e.decreaseStdDev &&
 		float64(r) < e.decreaseEMA+3*e.decreaseStdDev {
-
 		bitsPerFrame := float64(e.bitrate) / 30.0
 		packetsPerFrame := math.Ceil(bitsPerFrame / (1200 * 8))
 		expectedPacketSizeBits := bitsPerFrame / packetsPerFrame
@@ -283,12 +283,12 @@ func (e *delayBasedBandwidthEstimator) increaseBitrate() {
 		responseTimeInMs := 100 + 300.0
 		alpha := 0.5 * math.Min(float64(time.Since(e.lastBitrateUpdate).Milliseconds())/responseTimeInMs, 1.0)
 		increase := int(math.Max(1000.0, alpha*expectedPacketSizeBits))
-		//fmt.Printf("additive increase br += %v\n", increase)
+		// fmt.Printf("additive increase br += %v\n", increase)
 		e.bitrate += increase
 		return
 	}
 	eta := math.Pow(1.08, math.Min(float64(time.Since(e.lastBitrateUpdate).Milliseconds())/1000, 1.0))
-	//fmt.Printf("multiplicative increase br *= %v\n", eta)
+	// fmt.Printf("multiplicative increase br *= %v\n", eta)
 	e.bitrate = int(eta * float64(e.bitrate))
 }
 
@@ -299,7 +299,7 @@ func (e *delayBasedBandwidthEstimator) detectOverUse(estimate, dt float64) int {
 		k = overuseCoefficientD
 	}
 	if absEstimate-e.delVarTh <= 15 {
-		e.delVarTh = e.delVarTh + dt*k*(absEstimate-e.delVarTh)
+		e.delVarTh += dt * k * (absEstimate - e.delVarTh)
 	}
 	e.delVarTh = math.Min(e.delVarTh, 60)
 	e.delVarTh = math.Max(e.delVarTh, 1)
@@ -335,7 +335,7 @@ func calculateReceivedRate(log []Acknowledgment) int {
 
 	d := end.Sub(start)
 	rate := int(float64(8*sum) / d.Seconds())
-	//fmt.Printf("calculating rate for: from %v to %v => %v / %v = %v\n", start, end, sum, d.Seconds(), rate)
+	// fmt.Printf("calculating rate for: from %v to %v => %v / %v = %v\n", start, end, sum, d.Seconds(), rate)
 	return rate
 }
 
@@ -359,7 +359,6 @@ func preFilter(log []Acknowledgment) []arrivalGroup {
 
 		if interArrivalTimePkt(res[len(res)-1], p) < 5*time.Millisecond &&
 			interGroupDelayVariationPkt(res[len(res)-1], p) < 0 {
-
 			res[len(res)-1].add(p)
 			continue
 		}
@@ -392,7 +391,7 @@ func interGroupDelayVariationPkt(a arrivalGroup, b Acknowledgment) time.Duration
 }
 
 func interGroupDelayVariation(a, b arrivalGroup) time.Duration {
-	//fmt.Printf("b.arrival - a.arrival: %v - %v = %v\n", b.arrival.UnixMilli(), a.arrival.UnixMilli(), b.arrival.Sub(a.arrival))
-	//fmt.Printf("b.departure - a.departure: %v - %v = %v\n", b.departure.UnixMilli(), a.departure.UnixMilli(), b.departure.Sub(a.departure))
+	// fmt.Printf("b.arrival - a.arrival: %v - %v = %v\n", b.arrival.UnixMilli(), a.arrival.UnixMilli(), b.arrival.Sub(a.arrival))
+	// fmt.Printf("b.departure - a.departure: %v - %v = %v\n", b.departure.UnixMilli(), a.departure.UnixMilli(), b.departure.Sub(a.departure))
 	return b.arrival.Sub(a.arrival) - b.departure.Sub(a.departure)
 }

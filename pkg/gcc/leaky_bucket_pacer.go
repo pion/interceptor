@@ -14,9 +14,11 @@ type item struct {
 	attributes interceptor.Attributes
 }
 
+// LeakyBucketPacer implements a leaky bucket pacing algorithm
 type LeakyBucketPacer struct {
 	log logging.LeveledLogger
 
+	f              float64
 	targetBitrate  int
 	pacingInterval time.Duration
 
@@ -28,9 +30,11 @@ type LeakyBucketPacer struct {
 	ssrcToWriter map[uint32]interceptor.RTPWriter
 }
 
+// NewLeakyBucketPacer initializes a new LeakyBucketPacer
 func NewLeakyBucketPacer() *LeakyBucketPacer {
 	p := &LeakyBucketPacer{
 		log:            logging.NewDefaultLoggerFactory().NewLogger("pacer"),
+		f:              1.5,
 		targetBitrate:  150_000,
 		pacingInterval: 5 * time.Millisecond,
 		itemCh:         make(chan item),
@@ -48,6 +52,7 @@ type stream struct {
 	writer interceptor.RTPWriter
 }
 
+// AddStream adds a new stream and its corresponding writer to the pacer
 func (p *LeakyBucketPacer) AddStream(ssrc uint32, writer interceptor.RTPWriter) {
 	p.streamCh <- stream{
 		ssrc:   ssrc,
@@ -55,10 +60,14 @@ func (p *LeakyBucketPacer) AddStream(ssrc uint32, writer interceptor.RTPWriter) 
 	}
 }
 
+// SetTargetBitrate updates the target bitrate at which the pacer is allowed to
+// send packets. The pacer may exceed this limit by p.f
 func (p *LeakyBucketPacer) SetTargetBitrate(rate int) {
-	p.bitrateCh <- rate
+	p.bitrateCh <- int(p.f * float64(rate))
 }
 
+// Write sends a packet with header and payload the a previously registered
+// stream.
 func (p *LeakyBucketPacer) Write(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
 	p.itemCh <- item{
 		header:     header,
@@ -68,6 +77,7 @@ func (p *LeakyBucketPacer) Write(header *rtp.Header, payload []byte, attributes 
 	return header.MarshalSize() + len(payload), nil
 }
 
+// Run starts the LeakyBucketPacer
 func (p *LeakyBucketPacer) Run() {
 	ticker := time.NewTicker(p.pacingInterval)
 
@@ -78,7 +88,7 @@ func (p *LeakyBucketPacer) Run() {
 		case <-p.done:
 			return
 		case rate := <-p.bitrateCh:
-			p.targetBitrate = int(1.5 * float64(rate))
+			p.targetBitrate = rate
 		case stream := <-p.streamCh:
 			p.ssrcToWriter[stream.ssrc] = stream.writer
 		case item := <-p.itemCh:
@@ -104,6 +114,7 @@ func (p *LeakyBucketPacer) Run() {
 	}
 }
 
+// Close closes the LeakyBucketPacer
 func (p *LeakyBucketPacer) Close() error {
 	close(p.done)
 	return nil

@@ -9,13 +9,17 @@ import (
 	"github.com/pion/rtp"
 )
 
+// ErrUnknownStream is returned when trying to send a packet with a SSRC that
+// was never registered with any stream
 var ErrUnknownStream = errors.New("unknown ssrc")
 
+// NoOpPacer implements a pacer that always immediately sends incoming packets
 type NoOpPacer struct {
 	lock         sync.Mutex
 	ssrcToWriter map[uint32]interceptor.RTPWriter
 }
 
+// NewNoOpPacer initializes a new NoOpPacer
 func NewNoOpPacer() *NoOpPacer {
 	return &NoOpPacer{
 		lock:         sync.Mutex{},
@@ -23,12 +27,14 @@ func NewNoOpPacer() *NoOpPacer {
 	}
 }
 
+// AddStream adds a stream and corresponding writer to the p
 func (p *NoOpPacer) AddStream(ssrc uint32, writer interceptor.RTPWriter) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 	p.ssrcToWriter[ssrc] = writer
 }
 
+// Write sends a packet with header and payload to a previously added stream
 func (p *NoOpPacer) Write(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -40,6 +46,7 @@ func (p *NoOpPacer) Write(header *rtp.Header, payload []byte, attributes interce
 	return 0, fmt.Errorf("%w: %v", ErrUnknownStream, header.SSRC)
 }
 
+// Close closes p
 func (p *NoOpPacer) Close() error {
 	return nil
 }

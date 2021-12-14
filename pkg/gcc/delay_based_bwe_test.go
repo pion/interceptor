@@ -29,6 +29,8 @@ func TestInterArrivalTime(t *testing.T) {
 		},
 	}
 	for i, tc := range cases {
+		i := i
+		tc := tc
 		t.Run(fmt.Sprintf("%v", i), func(t *testing.T) {
 			assert.Equal(t, tc.exp, interArrivalTimePkt(tc.a, tc.b))
 		})
@@ -62,6 +64,8 @@ func TestInterDepartureTime(t *testing.T) {
 		},
 	}
 	for i, tc := range cases {
+		i := i
+		tc := tc
 		t.Run(fmt.Sprintf("%v", i), func(t *testing.T) {
 			assert.Equal(t, tc.exp, interDepartureTimePkt(tc.a, tc.b))
 		})
@@ -93,6 +97,8 @@ func TestInterGroupDelayVariation(t *testing.T) {
 		},
 	}
 	for i, tc := range cases {
+		i := i
+		tc := tc
 		t.Run(fmt.Sprintf("%v", i), func(t *testing.T) {
 			assert.Equal(t, tc.exp, interGroupDelayVariation(tc.a, tc.b))
 		})
@@ -124,6 +130,8 @@ func TestInterGroupDelayVariationPkt(t *testing.T) {
 		},
 	}
 	for i, tc := range cases {
+		i := i
+		tc := tc
 		t.Run(fmt.Sprintf("%v", i), func(t *testing.T) {
 			assert.Equal(t, tc.exp, interGroupDelayVariationPkt(tc.a, tc.b))
 		})
@@ -219,6 +227,8 @@ func TestPreFilter(t *testing.T) {
 		},
 	}
 	for i, tc := range cases {
+		i := i
+		tc := tc
 		t.Run(fmt.Sprintf("%v", i), func(t *testing.T) {
 			assert.Equal(t, tc.exp, preFilter(tc.log))
 		})
@@ -227,7 +237,6 @@ func TestPreFilter(t *testing.T) {
 
 func TestCalculateReceivingRate(t *testing.T) {
 	t0 := time.Time{}.Add(2 * time.Second)
-	t1 := t0.Add(1 * time.Second)
 	cases := []struct {
 		expected int
 		log      []Acknowledgment
@@ -277,8 +286,10 @@ func TestCalculateReceivingRate(t *testing.T) {
 		},
 	}
 	for i, tc := range cases {
+		i := i
+		tc := tc
 		t.Run(fmt.Sprintf("%v", i), func(t *testing.T) {
-			assert.Equal(t, tc.expected, calculateReceivedRate(t0, t1, tc.log))
+			assert.Equal(t, tc.expected, calculateReceivedRate(tc.log))
 		})
 	}
 }
