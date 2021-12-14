@@ -1,6 +1,7 @@
 package gcc
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -11,6 +12,475 @@ import (
 )
 
 const hdrExtID = uint8(1)
+
+func TestUnpackRunLengthChunk(t *testing.T) {
+	attributes := make(interceptor.Attributes)
+	attributes.Set(twccExtensionAttributesKey, hdrExtID)
+
+	cases := []struct {
+		sentTLCC []uint16
+		chunk    rtcp.RunLengthChunk
+		deltas   []*rtcp.RecvDelta
+		start    uint16
+		// expect:
+		acks    []Acknowledgment
+		refTime time.Time
+		n       int
+	}{
+		{
+			sentTLCC: []uint16{},
+			chunk:    rtcp.RunLengthChunk{},
+			deltas:   []*rtcp.RecvDelta{},
+			start:    0,
+			acks:     []Acknowledgment{},
+			refTime:  time.Time{},
+			n:        0,
+		},
+		{
+			sentTLCC: []uint16{0, 1, 2, 3, 4, 5},
+			chunk: rtcp.RunLengthChunk{
+				PacketStatusChunk:  nil,
+				Type:               0,
+				PacketStatusSymbol: rtcp.TypeTCCPacketReceivedSmallDelta,
+				RunLength:          6,
+			},
+			deltas: []*rtcp.RecvDelta{
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
+			},
+			start: 0,
+			//nolint:dupl
+			acks: []Acknowledgment{
+				{
+					TLCC:      0,
+					Header:    nil,
+					Size:      0,
+					Departure: time.Time{},
+					Arrival:   time.Time{},
+					RTT:       0,
+				},
+				{
+					TLCC:      1,
+					Header:    nil,
+					Size:      0,
+					Departure: time.Time{},
+					Arrival:   time.Time{},
+					RTT:       0,
+				},
+				{
+					TLCC:      2,
+					Header:    nil,
+					Size:      0,
+					Departure: time.Time{},
+					Arrival:   time.Time{},
+					RTT:       0,
+				},
+				{
+					TLCC:      3,
+					Header:    nil,
+					Size:      0,
+					Departure: time.Time{},
+					Arrival:   time.Time{},
+					RTT:       0,
+				},
+				{
+					TLCC:      4,
+					Header:    nil,
+					Size:      0,
+					Departure: time.Time{},
+					Arrival:   time.Time{},
+					RTT:       0,
+				},
+				{
+					TLCC:      5,
+					Header:    nil,
+					Size:      0,
+					Departure: time.Time{},
+					Arrival:   time.Time{},
+					RTT:       0,
+				},
+			},
+			n:       6,
+			refTime: time.Time{},
+		},
+		{
+			sentTLCC: []uint16{65534, 65535, 0, 1, 2, 3},
+			chunk: rtcp.RunLengthChunk{
+				PacketStatusChunk:  nil,
+				Type:               0,
+				PacketStatusSymbol: rtcp.TypeTCCPacketReceivedSmallDelta,
+				RunLength:          6,
+			},
+			deltas: []*rtcp.RecvDelta{
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 250},
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 250},
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 250},
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 250},
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 250},
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 250},
+			},
+			start: 65534,
+			acks: []Acknowledgment{
+				{
+					TLCC:      65534,
+					Header:    nil,
+					Size:      0,
+					Departure: time.Time{},
+					Arrival:   time.Time{}.Add(250 * time.Microsecond),
+					RTT:       0,
+				},
+				{
+					TLCC:      65535,
+					Header:    nil,
+					Size:      0,
+					Departure: time.Time{},
+					Arrival:   time.Time{}.Add(500 * time.Microsecond),
+					RTT:       0,
+				},
+				{
+					TLCC:      0,
+					Header:    nil,
+					Size:      0,
+					Departure: time.Time{},
+					Arrival:   time.Time{}.Add(750 * time.Microsecond),
+					RTT:       0,
+				},
+				{
+					TLCC:      1,
+					Header:    nil,
+					Size:      0,
+					Departure: time.Time{},
+					Arrival:   time.Time{}.Add(1000 * time.Microsecond),
+					RTT:       0,
+				},
+				{
+					TLCC:      2,
+					Header:    nil,
+					Size:      0,
+					Departure: time.Time{},
+					Arrival:   time.Time{}.Add(1250 * time.Microsecond),
+					RTT:       0,
+				},
+				{
+					TLCC:      3,
+					Header:    nil,
+					Size:      0,
+					Departure: time.Time{},
+					Arrival:   time.Time{}.Add(1500 * time.Microsecond),
+					RTT:       0,
+				},
+			},
+			n:       6,
+			refTime: time.Time{}.Add(1500 * time.Microsecond),
+		},
+		{
+			sentTLCC: []uint16{65534, 65535, 0, 1, 2, 3},
+			chunk: rtcp.RunLengthChunk{
+				PacketStatusChunk:  nil,
+				Type:               0,
+				PacketStatusSymbol: rtcp.TypeTCCPacketNotReceived,
+				RunLength:          6,
+			},
+			deltas: []*rtcp.RecvDelta{},
+			start:  65534,
+			//nolint:dupl
+			acks: []Acknowledgment{
+				{
+					TLCC:      65534,
+					Header:    nil,
+					Size:      0,
+					Departure: time.Time{},
+					Arrival:   time.Time{},
+					RTT:       0,
+				},
+				{
+					TLCC:      65535,
+					Header:    nil,
+					Size:      0,
+					Departure: time.Time{},
+					Arrival:   time.Time{},
+					RTT:       0,
+				},
+				{
+					TLCC:      0,
+					Header:    nil,
+					Size:      0,
+					Departure: time.Time{},
+					Arrival:   time.Time{},
+					RTT:       0,
+				},
+				{
+					TLCC:      1,
+					Header:    nil,
+					Size:      0,
+					Departure: time.Time{},
+					Arrival:   time.Time{},
+					RTT:       0,
+				},
+				{
+					TLCC:      2,
+					Header:    nil,
+					Size:      0,
+					Departure: time.Time{},
+					Arrival:   time.Time{},
+					RTT:       0,
+				},
+				{
+					TLCC:      3,
+					Header:    nil,
+					Size:      0,
+					Departure: time.Time{},
+					Arrival:   time.Time{},
+					RTT:       0,
+				},
+			},
+			n:       0,
+			refTime: time.Time{},
+		},
+	}
+
+	//nolint:dupl
+	for i, tc := range cases {
+		i := i
+		tc := tc
+		t.Run(fmt.Sprintf("%v", i), func(t *testing.T) {
+			fa := NewFeedbackAdapter()
+
+			headers := []*rtp.Header{}
+			for i, nr := range tc.sentTLCC {
+				headers = append(headers, &getPacketWithTransportCCExt(t, nr).Header)
+				tc.acks[i].Header = headers[i]
+			}
+			for _, h := range headers {
+				assert.NoError(t, fa.OnSent(time.Time{}, h, 0, attributes))
+			}
+
+			n, refTime, acks, err := fa.unpackRunLengthChunk(time.Time{}, tc.start, time.Time{}, &tc.chunk, tc.deltas)
+			assert.NoError(t, err)
+			assert.Len(t, acks, len(tc.acks))
+			assert.Equal(t, tc.n, n)
+			assert.Equal(t, tc.refTime, refTime)
+
+			for i, a := range acks {
+				assert.Equal(t, tc.sentTLCC[i], a.TLCC)
+			}
+			assert.Equal(t, tc.acks, acks)
+		})
+	}
+}
+
+func TestUnpackStatusVectorChunk(t *testing.T) {
+	attributes := make(interceptor.Attributes)
+	attributes.Set(twccExtensionAttributesKey, hdrExtID)
+
+	cases := []struct {
+		sentTLCC []uint16
+		chunk    rtcp.StatusVectorChunk
+		deltas   []*rtcp.RecvDelta
+		start    uint16
+		// expect:
+		acks    []Acknowledgment
+		n       int
+		refTime time.Time
+	}{
+		{
+			sentTLCC: []uint16{},
+			chunk:    rtcp.StatusVectorChunk{},
+			deltas:   []*rtcp.RecvDelta{},
+			start:    0,
+			acks:     []Acknowledgment{},
+			n:        0,
+			refTime:  time.Time{},
+		},
+		{
+			sentTLCC: []uint16{0, 1, 2, 3, 4, 5},
+			chunk: rtcp.StatusVectorChunk{
+				PacketStatusChunk: nil,
+				Type:              0,
+				SymbolSize:        rtcp.TypeTCCSymbolSizeTwoBit,
+				SymbolList: []uint16{
+					rtcp.TypeTCCPacketReceivedSmallDelta,
+					rtcp.TypeTCCPacketReceivedSmallDelta,
+					rtcp.TypeTCCPacketReceivedSmallDelta,
+					rtcp.TypeTCCPacketReceivedSmallDelta,
+					rtcp.TypeTCCPacketReceivedSmallDelta,
+					rtcp.TypeTCCPacketReceivedSmallDelta,
+				},
+			},
+			deltas: []*rtcp.RecvDelta{
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
+			},
+			start: 0,
+			//nolint:dupl
+			acks: []Acknowledgment{
+				{
+					TLCC:      0,
+					Header:    nil,
+					Size:      0,
+					Departure: time.Time{},
+					Arrival:   time.Time{},
+					RTT:       0,
+				},
+				{
+					TLCC:      1,
+					Header:    nil,
+					Size:      0,
+					Departure: time.Time{},
+					Arrival:   time.Time{},
+					RTT:       0,
+				},
+				{
+					TLCC:      2,
+					Header:    nil,
+					Size:      0,
+					Departure: time.Time{},
+					Arrival:   time.Time{},
+					RTT:       0,
+				},
+				{
+					TLCC:      3,
+					Header:    nil,
+					Size:      0,
+					Departure: time.Time{},
+					Arrival:   time.Time{},
+					RTT:       0,
+				},
+				{
+					TLCC:      4,
+					Header:    nil,
+					Size:      0,
+					Departure: time.Time{},
+					Arrival:   time.Time{},
+					RTT:       0,
+				},
+				{
+					TLCC:      5,
+					Header:    nil,
+					Size:      0,
+					Departure: time.Time{},
+					Arrival:   time.Time{},
+					RTT:       0,
+				},
+			},
+			n:       6,
+			refTime: time.Time{},
+		},
+		{
+			sentTLCC: []uint16{65534, 65535, 0, 1, 2, 3},
+			chunk: rtcp.StatusVectorChunk{
+				PacketStatusChunk: nil,
+				Type:              0,
+				SymbolSize:        rtcp.TypeTCCSymbolSizeTwoBit,
+				SymbolList: []uint16{
+					rtcp.TypeTCCPacketReceivedSmallDelta,
+					rtcp.TypeTCCPacketReceivedSmallDelta,
+					rtcp.TypeTCCPacketReceivedSmallDelta,
+					rtcp.TypeTCCPacketReceivedSmallDelta,
+					rtcp.TypeTCCPacketNotReceived,
+					rtcp.TypeTCCPacketReceivedSmallDelta,
+				},
+			},
+			deltas: []*rtcp.RecvDelta{
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 250},
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 250},
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 250},
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 250},
+				{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 250},
+			},
+			start: 65534,
+			acks: []Acknowledgment{
+				{
+					TLCC:      65534,
+					Header:    nil,
+					Size:      0,
+					Departure: time.Time{},
+					Arrival:   time.Time{}.Add(250 * time.Microsecond),
+					RTT:       0,
+				},
+				{
+					TLCC:      65535,
+					Header:    nil,
+					Size:      0,
+					Departure: time.Time{},
+					Arrival:   time.Time{}.Add(500 * time.Microsecond),
+					RTT:       0,
+				},
+				{
+					TLCC:      0,
+					Header:    nil,
+					Size:      0,
+					Departure: time.Time{},
+					Arrival:   time.Time{}.Add(750 * time.Microsecond),
+					RTT:       0,
+				},
+				{
+					TLCC:      1,
+					Header:    nil,
+					Size:      0,
+					Departure: time.Time{},
+					Arrival:   time.Time{}.Add(1000 * time.Microsecond),
+					RTT:       0,
+				},
+				{
+					TLCC:      2,
+					Header:    nil,
+					Size:      0,
+					Departure: time.Time{},
+					Arrival:   time.Time{},
+					RTT:       0,
+				},
+				{
+					TLCC:      3,
+					Header:    nil,
+					Size:      0,
+					Departure: time.Time{},
+					Arrival:   time.Time{}.Add(1250 * time.Microsecond),
+					RTT:       0,
+				},
+			},
+			n:       5,
+			refTime: time.Time{}.Add(1250 * time.Microsecond),
+		},
+	}
+
+	//nolint:dupl
+	for i, tc := range cases {
+		i := i
+		tc := tc
+		t.Run(fmt.Sprintf("%v", i), func(t *testing.T) {
+			fa := NewFeedbackAdapter()
+
+			headers := []*rtp.Header{}
+			for i, nr := range tc.sentTLCC {
+				headers = append(headers, &getPacketWithTransportCCExt(t, nr).Header)
+				tc.acks[i].Header = headers[i]
+			}
+			for _, h := range headers {
+				assert.NoError(t, fa.OnSent(time.Time{}, h, 0, attributes))
+			}
+
+			n, refTime, acks, err := fa.unpackStatusVectorChunk(time.Time{}, tc.start, time.Time{}, &tc.chunk, tc.deltas)
+			assert.NoError(t, err)
+			assert.Len(t, acks, len(tc.acks))
+			assert.Equal(t, tc.n, n)
+			assert.Equal(t, tc.refTime, refTime)
+
+			for i, a := range acks {
+				assert.Equal(t, tc.sentTLCC[i], a.TLCC)
+			}
+			assert.Equal(t, tc.acks, acks)
+		})
+	}
+}
 
 func getPacketWithTransportCCExt(t *testing.T, sequenceNumber uint16) *rtp.Packet {
 	pkt := rtp.Packet{
@@ -29,7 +499,7 @@ func getPacketWithTransportCCExt(t *testing.T, sequenceNumber uint16) *rtp.Packe
 func TestFeedbackAdapterTWCC(t *testing.T) {
 	t.Run("empty", func(t *testing.T) {
 		adapter := NewFeedbackAdapter()
-		result, err := adapter.OnIncomingTransportCC(&rtcp.TransportLayerCC{})
+		result, err := adapter.onIncomingTransportCC(time.Time{}, &rtcp.TransportLayerCC{})
 		assert.NoError(t, err)
 		assert.Empty(t, result)
 	})
@@ -43,7 +513,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 			headers = append(headers, pkt.Header)
 			assert.NoError(t, adapter.OnSent(t0, &pkt.Header, 1200, interceptor.Attributes{twccExtensionAttributesKey: hdrExtID}))
 		}
-		results, err := adapter.OnIncomingTransportCC(&rtcp.TransportLayerCC{
+		results, err := adapter.OnFeedback(t0, &rtcp.TransportLayerCC{
 			Header:             rtcp.Header{},
 			SenderSSRC:         0,
 			MediaSSRC:          0,
@@ -96,7 +566,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 			RecvDeltas: []*rtcp.RecvDelta{
 				{
 					Type:  rtcp.TypeTCCPacketReceivedSmallDelta,
-					Delta: 4, // 4*250us=1ms
+					Delta: 4,
 				},
 				{
 					Type:  rtcp.TypeTCCPacketReceivedLargeDelta,
@@ -104,7 +574,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 				},
 				{
 					Type:  rtcp.TypeTCCPacketReceivedSmallDelta,
-					Delta: 12, // 3*4*250us=3ms
+					Delta: 12,
 				},
 				{
 					Type:  rtcp.TypeTCCPacketReceivedSmallDelta,
@@ -119,56 +589,68 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		assert.Len(t, results, 22)
 
 		assert.Contains(t, results, Acknowledgment{
+			TLCC:      0,
 			Header:    &headers[0],
-			Size:      0,
+			Size:      1200,
 			Departure: t0,
-			Arrival:   t0.Add(time.Millisecond),
+			Arrival:   t0.Add(4 * time.Microsecond),
+			RTT:       0,
 		})
 
 		assert.Contains(t, results, Acknowledgment{
+			TLCC:      1,
 			Header:    &headers[1],
-			Size:      0,
+			Size:      1200,
 			Departure: t0,
-			Arrival:   t0.Add(101 * time.Millisecond),
+			Arrival:   t0.Add(104 * time.Microsecond),
+			RTT:       0,
 		})
 
 		for i := uint16(2); i < 7; i++ {
 			assert.Contains(t, results, Acknowledgment{
+				TLCC:      i,
 				Header:    &headers[i],
-				Size:      0,
+				Size:      1200,
 				Departure: t0,
 				Arrival:   time.Time{},
+				RTT:       0,
 			})
 		}
 
 		assert.Contains(t, results, Acknowledgment{
+			TLCC:      7,
 			Header:    &headers[7],
-			Size:      0,
+			Size:      1200,
 			Departure: t0,
-			Arrival:   t0.Add(104 * time.Millisecond),
+			Arrival:   t0.Add(116 * time.Microsecond),
+			RTT:       0,
 		})
 
 		for i := uint16(8); i < 21; i++ {
 			assert.Contains(t, results, Acknowledgment{
+				TLCC:      i,
 				Header:    &headers[i],
-				Size:      0,
+				Size:      1200,
 				Departure: t0,
 				Arrival:   time.Time{},
+				RTT:       0,
 			})
 		}
 
 		assert.Contains(t, results, Acknowledgment{
+			TLCC:      21,
 			Header:    &headers[21],
-			Size:      0,
+			Size:      1200,
 			Departure: t0,
-			Arrival:   t0.Add(105 * time.Millisecond),
+			Arrival:   t0.Add(120 * time.Microsecond),
+			RTT:       0,
 		})
 	})
 
 	t.Run("doesNotCrashOnTooManyFeedbackReports", func(*testing.T) {
 		adapter := NewFeedbackAdapter()
 		assert.NotPanics(t, func() {
-			_, err := adapter.OnIncomingTransportCC(&rtcp.TransportLayerCC{
+			_, err := adapter.OnFeedback(time.Time{}, &rtcp.TransportLayerCC{
 				Header:             rtcp.Header{},
 				SenderSSRC:         0,
 				MediaSSRC:          0,
@@ -211,7 +693,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		assert.NoError(t, adapter.OnSent(t0, &pkt65535.Header, 1200, interceptor.Attributes{twccExtensionAttributesKey: hdrExtID}))
 		assert.NoError(t, adapter.OnSent(t0, &pkt0.Header, 1200, interceptor.Attributes{twccExtensionAttributesKey: hdrExtID}))
 
-		results, err := adapter.OnIncomingTransportCC(&rtcp.TransportLayerCC{
+		results, err := adapter.OnFeedback(t0, &rtcp.TransportLayerCC{
 			Header:             rtcp.Header{},
 			SenderSSRC:         0,
 			MediaSSRC:          0,
@@ -249,18 +731,22 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		assert.NoError(t, err)
 
 		assert.NotEmpty(t, results)
-		assert.Len(t, results, 2)
+		assert.Len(t, results, 7)
 		assert.Contains(t, results, Acknowledgment{
+			TLCC:      65535,
 			Header:    &pkt65535.Header,
-			Size:      0,
+			Size:      1200,
 			Departure: t0,
-			Arrival:   t0.Add(1 * time.Millisecond),
+			Arrival:   t0.Add(4 * time.Microsecond),
+			RTT:       0,
 		})
 		assert.Contains(t, results, Acknowledgment{
+			TLCC:      0,
 			Header:    &pkt0.Header,
-			Size:      0,
+			Size:      1200,
 			Departure: t0,
-			Arrival:   t0.Add(2 * time.Millisecond),
+			Arrival:   t0.Add(8 * time.Microsecond),
+			RTT:       0,
 		})
 	})
 
@@ -274,7 +760,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 			assert.NoError(t, adapter.OnSent(t0, &pkt.Header, 1200, interceptor.Attributes{twccExtensionAttributesKey: hdrExtID}))
 		}
 
-		results, err := adapter.OnIncomingTransportCC(&rtcp.TransportLayerCC{
+		results, err := adapter.OnFeedback(t0, &rtcp.TransportLayerCC{
 			Header:             rtcp.Header{},
 			SenderSSRC:         0,
 			MediaSSRC:          0,
@@ -314,13 +800,25 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 			},
 		})
 		assert.NoError(t, err)
-		assert.Len(t, results, 3)
+		assert.Len(t, results, 7)
 		for i := uint16(0); i < 3; i++ {
 			assert.Contains(t, results, Acknowledgment{
+				TLCC:      i,
 				Header:    &headers[i],
-				Size:      0,
+				Size:      1200,
 				Departure: t0,
-				Arrival:   t0.Add(time.Duration(i+1) * time.Millisecond),
+				Arrival:   t0.Add(time.Duration((i + 1)) * 4 * time.Microsecond),
+				RTT:       0,
+			})
+		}
+		for i := uint16(3); i < 7; i++ {
+			assert.Contains(t, results, Acknowledgment{
+				TLCC:      i,
+				Header:    &headers[i],
+				Size:      1200,
+				Departure: t0,
+				Arrival:   time.Time{},
+				RTT:       0,
 			})
 		}
 	})
@@ -332,7 +830,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 			pkt := getPacketWithTransportCCExt(t, i)
 			assert.NoError(t, adapter.OnSent(t0, &pkt.Header, 1200, interceptor.Attributes{twccExtensionAttributesKey: hdrExtID}))
 		}
-		packets, err := adapter.OnIncomingTransportCC(&rtcp.TransportLayerCC{
+		packets, err := adapter.OnFeedback(t0, &rtcp.TransportLayerCC{
 			Header:             rtcp.Header{},
 			SenderSSRC:         0,
 			MediaSSRC:          0,
@@ -373,7 +871,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 			pkt := getPacketWithTransportCCExt(t, i)
 			assert.NoError(t, adapter.OnSent(t0, &pkt.Header, 1200, interceptor.Attributes{twccExtensionAttributesKey: hdrExtID}))
 		}
-		packets, err := adapter.OnIncomingTransportCC(&rtcp.TransportLayerCC{
+		packets, err := adapter.OnFeedback(t0, &rtcp.TransportLayerCC{
 			Header:             rtcp.Header{},
 			SenderSSRC:         0,
 			MediaSSRC:          0,
@@ -419,7 +917,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		})
 
 		assert.NoError(t, err)
-		assert.Len(t, packets, 3)
+		assert.Len(t, packets, 14)
 	})
 
 	t.Run("mixedRunLengthAndStatusVector", func(t *testing.T) {
@@ -431,7 +929,8 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 			assert.NoError(t, adapter.OnSent(t0, &pkt.Header, 1200, interceptor.Attributes{twccExtensionAttributesKey: hdrExtID}))
 		}
 
-		packets, err := adapter.OnIncomingTransportCC(&rtcp.TransportLayerCC{
+		//nolint:dupl
+		packets, err := adapter.OnFeedback(t0, &rtcp.TransportLayerCC{
 			Header:             rtcp.Header{},
 			SenderSSRC:         0,
 			MediaSSRC:          0,
@@ -497,9 +996,10 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 			assert.NoError(t, adapter.OnSent(t0, &pkt.Header, 1200, interceptor.Attributes{twccExtensionAttributesKey: hdrExtID}))
 		}
 
+		//nolint:dupl
 		assert.NotPanics(t, func() {
 			// TODO(mathis): Run length seems off, maybe check why TWCC generated this?
-			packets, err := adapter.OnIncomingTransportCC(&rtcp.TransportLayerCC{
+			packets, err := adapter.OnFeedback(t0, &rtcp.TransportLayerCC{
 				Header:             rtcp.Header{},
 				SenderSSRC:         0,
 				MediaSSRC:          0,

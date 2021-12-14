@@ -323,17 +323,24 @@ func calculateReceivedRate(log []Acknowledgment) int {
 	if len(log) == 0 {
 		return 0
 	}
-	sum := 0
+	if len(log) == 1 && !log[0].Arrival.IsZero() {
+		return log[0].Header.MarshalSize() + log[0].Size
+	}
+
 	start := log[0].Arrival
 	end := log[len(log)-1].Arrival
+	d := end.Sub(start)
+	if d == 0 {
+		return 0
+	}
 
+	sum := 0
 	for _, ack := range log {
 		if !ack.Arrival.IsZero() {
 			sum += ack.Header.MarshalSize() + ack.Size
 		}
 	}
 
-	d := end.Sub(start)
 	rate := int(float64(8*sum) / d.Seconds())
 	// fmt.Printf("calculating rate for: from %v to %v => %v / %v = %v\n", start, end, sum, d.Seconds(), rate)
 	return rate
@@ -367,11 +374,6 @@ func preFilter(log []Acknowledgment) []arrivalGroup {
 		ag.add(p)
 		res = append(res, ag)
 	}
-	//	for _, r := range res {
-	//		for _, n := range r.packets {
-	//			fmt.Printf("%v:%v\n", n.TLCC, n.Arrival.Sub(time.Time{}).Milliseconds())
-	//		}
-	//	}
 	return res
 }
 

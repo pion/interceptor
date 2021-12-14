@@ -224,7 +224,7 @@ func (c *Interceptor) loop() {
 			}
 		case pkts := <-c.feedback:
 			for _, pkt := range pkts {
-				acks, err := c.OnFeedback(pkt)
+				acks, err := c.OnFeedback(time.Now(), pkt)
 				if err != nil {
 					// TODO
 					panic(err)
