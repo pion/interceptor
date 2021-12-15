@@ -27,6 +27,9 @@ func NewNoOpPacer() *NoOpPacer {
 	}
 }
 
+func (p *NoOpPacer) SetTargetBitrate(int) {
+}
+
 // AddStream adds a stream and corresponding writer to the p
 func (p *NoOpPacer) AddStream(ssrc uint32, writer interceptor.RTPWriter) {
 	p.lock.Lock()
