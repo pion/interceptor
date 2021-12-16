@@ -29,6 +29,13 @@ func InitialBitrate(rate int) Option {
 	}
 }
 
+func SetPacer(pacer Pacer) Option {
+	return func(g *Interceptor) error {
+		g.pacer = pacer
+		return nil
+	}
+}
+
 // InterceptorFactory is a factory for GCC interceptors
 type InterceptorFactory struct {
 	opts         []Option
@@ -68,8 +75,10 @@ func (f *InterceptorFactory) NewInterceptor(id string) (interceptor.Interceptor,
 		}
 	}
 
+	if i.pacer == nil {
+		i.pacer = NewLeakyBucketPacer(i.bitrate)
+	}
 	i.FeedbackAdapter = NewFeedbackAdapter()
-	i.pacer = NewLeakyBucketPacer(i.bitrate)
 	i.loss = newLossBasedBWE(i.bitrate)
 	i.delay = newDelayBasedBWE(i.bitrate)
 
