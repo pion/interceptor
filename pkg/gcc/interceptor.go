@@ -235,8 +235,7 @@ func (c *Interceptor) loop() {
 			for _, pkt := range pkts {
 				acks, err := c.OnFeedback(time.Now(), pkt)
 				if err != nil {
-					// TODO
-					panic(err)
+					// TODO Add log warning?
 				}
 				c.loss.updateLossStats(acks)
 				c.delay.incomingFeedback(acks)
