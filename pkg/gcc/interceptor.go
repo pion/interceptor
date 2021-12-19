@@ -46,6 +46,7 @@ func SetPacer(pacer Pacer) Option {
 type BandwidthEstimator interface {
 	GetTargetBitrate() int
 	GetStats() map[string]interface{}
+	OnTargetBitrateChange(f func(bitrate int))
 }
 
 type NewPeerConnectionCallback func(id string, estimator BandwidthEstimator)
@@ -78,7 +79,6 @@ func (f *InterceptorFactory) NewInterceptor(id string) (interceptor.Interceptor,
 		FeedbackAdapter: nil,
 		loss:            nil,
 		delay:           nil,
-		packet:          make(chan *packetAndAttributes),
 		feedback:        make(chan []rtcp.Packet),
 		close:           make(chan struct{}),
 	}
@@ -109,12 +109,6 @@ type Stats struct {
 	DelayStats
 }
 
-type packetAndAttributes struct {
-	header     rtp.Header
-	payload    []byte
-	attributes interceptor.Attributes
-}
-
 // Interceptor implements Google Congestion Control
 type Interceptor struct {
 	interceptor.NoOp
@@ -131,15 +125,20 @@ type Interceptor struct {
 	loss  *lossBasedBandwidthEstimator
 	delay *delayBasedBandwidthEstimator
 
-	packet   chan *packetAndAttributes
 	feedback chan []rtcp.Packet
 	close    chan struct{}
+
+	onTargetBitrateChange func(bitrate int)
 }
 
 func (c *Interceptor) GetTargetBitrate() int {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	return c.bitrate
+}
+
+func (c *Interceptor) OnTargetBitrateChange(f func(bitrate int)) {
+	c.onTargetBitrateChange = f
 }
 
 func (c *Interceptor) GetStats() map[string]interface{} {
@@ -188,7 +187,7 @@ func (c *Interceptor) BindLocalStream(info *interceptor.StreamInfo, writer inter
 
 	c.pacer.AddStream(info.SSRC, interceptor.RTPWriterFunc(func(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
 		// Call adapter.onSent
-		if err := c.OnSent(time.Now(), header, len(payload), attributes); err != nil {
+		if err := c.OnSent(time.Now(), header, len(payload), attributes); err != nil && err != errMissingTWCCExtension {
 			return 0, err
 		}
 
@@ -202,13 +201,7 @@ func (c *Interceptor) BindLocalStream(info *interceptor.StreamInfo, writer inter
 			}
 			attributes.Set(twccExtensionAttributesKey, hdrExtID)
 		}
-		co := make([]byte, len(payload))
-		copy(co, payload)
-		c.packet <- &packetAndAttributes{
-			header:     header.Clone(),
-			payload:    co,
-			attributes: attributes,
-		}
+		c.pacer.Write(header, payload, attributes)
 
 		return header.MarshalSize() + len(payload), nil
 	})
@@ -225,12 +218,6 @@ func (c *Interceptor) loop() {
 	for {
 		select {
 		case <-c.close:
-		case pkt := <-c.packet:
-			_, err := c.pacer.Write(&pkt.header, pkt.payload, pkt.attributes)
-			if err != nil {
-				// TODO
-				panic(err)
-			}
 		case pkts := <-c.feedback:
 			for _, pkt := range pkts {
 				acks, err := c.OnFeedback(time.Now(), pkt)
@@ -245,13 +232,22 @@ func (c *Interceptor) loop() {
 			dbr := c.delay.getEstimate()
 			lbr := c.loss.getEstimate(dbr.Bitrate)
 			c.lock.Lock()
-			c.bitrate = min(dbr.Bitrate, lbr)
-			c.pacer.SetTargetBitrate(c.bitrate)
+			bitrateChanged := false
+			bitrate := min(dbr.Bitrate, lbr)
+			if bitrate != c.bitrate {
+				bitrateChanged = true
+				c.bitrate = bitrate
+				c.pacer.SetTargetBitrate(c.bitrate)
+			}
 			c.lock.Unlock()
 
 			c.latestStats = &Stats{
 				LossBasedEstimate: lbr,
 				DelayStats:        dbr,
+			}
+
+			if bitrateChanged && c.onTargetBitrateChange != nil {
+				c.onTargetBitrateChange(bitrate)
 			}
 		}
 	}

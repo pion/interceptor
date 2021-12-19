@@ -1,6 +1,7 @@
 package gcc
 
 import (
+	"sync"
 	"time"
 
 	"github.com/pion/interceptor"
@@ -10,7 +11,8 @@ import (
 
 type item struct {
 	header     *rtp.Header
-	payload    []byte
+	payload    *[]byte
+	size       int
 	attributes interceptor.Attributes
 }
 
@@ -28,6 +30,8 @@ type LeakyBucketPacer struct {
 	done      chan struct{}
 
 	ssrcToWriter map[uint32]interceptor.RTPWriter
+
+	pool *sync.Pool
 }
 
 // NewLeakyBucketPacer initializes a new LeakyBucketPacer
@@ -43,6 +47,13 @@ func NewLeakyBucketPacer(initialBitrate int) *LeakyBucketPacer {
 		done:           make(chan struct{}),
 		ssrcToWriter:   map[uint32]interceptor.RTPWriter{},
 	}
+	p.pool = &sync.Pool{
+		New: func() interface{} {
+			b := make([]byte, 1460)
+			return &b
+		},
+	}
+
 	go p.Run()
 	return p
 }
@@ -69,9 +80,12 @@ func (p *LeakyBucketPacer) SetTargetBitrate(rate int) {
 // Write sends a packet with header and payload the a previously registered
 // stream.
 func (p *LeakyBucketPacer) Write(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
+	buf := p.pool.Get().(*[]byte)
+	copy(*buf, payload)
 	p.itemCh <- item{
 		header:     header,
-		payload:    payload,
+		payload:    buf,
+		size:       len(payload),
 		attributes: attributes,
 	}
 	return header.MarshalSize() + len(payload), nil
@@ -104,10 +118,11 @@ func (p *LeakyBucketPacer) Run() {
 					p.log.Warnf("no writer found for ssrc: %v", next.header.SSRC)
 					continue
 				}
-				n, err := writer.Write(next.header, next.payload, next.attributes)
+				n, err := writer.Write(next.header, (*next.payload)[:next.size], next.attributes)
 				if err != nil {
 					p.log.Errorf("failed to write packet: %v", err)
 				}
+				p.pool.Put(next.payload)
 				budget -= int64(n)
 			}
 		}
