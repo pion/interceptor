@@ -44,9 +44,12 @@ func SetPacer(pacer Pacer) Option {
 }
 
 type BandwidthEstimator interface {
+	AddFeedback(cc *rtcp.TransportLayerCC)
+
 	GetTargetBitrate() int
-	GetStats() map[string]interface{}
 	OnTargetBitrateChange(f func(bitrate int))
+
+	GetStats() map[string]interface{}
 }
 
 type NewPeerConnectionCallback func(id string, estimator BandwidthEstimator)
@@ -130,6 +133,10 @@ type Interceptor struct {
 	close    chan struct{}
 
 	onTargetBitrateChange func(bitrate int)
+}
+
+func (c *Interceptor) AddFeedback(cc *rtcp.TransportLayerCC) {
+	c.feedback <- []rtcp.Packet{cc}
 }
 
 func (c *Interceptor) GetTargetBitrate() int {
@@ -243,7 +250,6 @@ func (c *Interceptor) loop() {
 			bitrate := min(dbr.Bitrate, lbr)
 			if bitrate != c.bitrate {
 				bitrateChanged = true
-				c.bitrate = bitrate
 				c.pacer.SetTargetBitrate(c.bitrate)
 			}
 			c.lock.Unlock()
