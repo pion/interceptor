@@ -122,6 +122,7 @@ type Interceptor struct {
 	lock    sync.Mutex
 	bitrate int
 
+	statsLock   sync.Mutex
 	latestStats *Stats
 
 	pacer Pacer
@@ -143,8 +144,14 @@ func (c *Interceptor) GetTargetBitrate() int {
 }
 
 func (c *Interceptor) GetStats() map[string]interface{} {
+	c.statsLock.Lock()
+	defer c.statsLock.Unlock()
 	return map[string]interface{}{
-		"gcc": c.latestStats,
+		"lossEstimate":  c.latestStats.LossBasedEstimate,
+		"delayEstimate": c.latestStats.Bitrate,
+		"estimate":      c.latestStats.Estimate,
+		"thresh":        c.latestStats.Threshold,
+		"rtt":           c.latestStats.RTT,
 	}
 }
 
@@ -249,10 +256,12 @@ func (c *Interceptor) loop() {
 			c.pacer.SetTargetBitrate(c.bitrate)
 			c.lock.Unlock()
 
+			c.statsLock.Lock()
 			c.latestStats = &Stats{
 				LossBasedEstimate: lbr,
 				DelayStats:        dbr,
 			}
+			c.statsLock.Unlock()
 		}
 	}
 }
