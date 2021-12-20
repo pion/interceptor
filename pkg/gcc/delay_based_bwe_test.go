@@ -16,10 +16,10 @@ func TestRateCalculator(t *testing.T) {
 
 	t0 := time.Now()
 
-	rc.update(t0, []Acknowledgment{})
+	rc.update([]Acknowledgment{})
 	assert.Equal(t, 0, rc.rate)
 
-	rc.update(t0, []Acknowledgment{{
+	rc.update([]Acknowledgment{{
 		TLCC:      0,
 		Size:      125,
 		Departure: time.Time{},
@@ -28,7 +28,7 @@ func TestRateCalculator(t *testing.T) {
 	}})
 	assert.Equal(t, 2000, rc.rate)
 
-	rc.update(t0, []Acknowledgment{{
+	rc.update([]Acknowledgment{{
 		TLCC:      1,
 		Size:      125,
 		Departure: time.Time{},
@@ -37,16 +37,22 @@ func TestRateCalculator(t *testing.T) {
 	}})
 	assert.Equal(t, 4000, rc.rate)
 
-	rc.update(t0.Add(350*time.Millisecond), []Acknowledgment{{
+	rc.update([]Acknowledgment{{
 		TLCC:      0,
 		Size:      125,
 		Departure: time.Time{},
-		Arrival:   t0.Add(150 * time.Millisecond),
+		Arrival:   t0.Add(350 * time.Millisecond),
 		RTT:       0,
 	}})
 	assert.Equal(t, 4000, rc.rate)
 
-	rc.update(t0.Add(time.Second), []Acknowledgment{})
+	rc.update([]Acknowledgment{{
+		TLCC:      0,
+		Size:      0,
+		Departure: time.Time{},
+		Arrival:   t0.Add(time.Second),
+		RTT:       0,
+	}})
 	assert.Equal(t, 0, rc.rate)
 }
 

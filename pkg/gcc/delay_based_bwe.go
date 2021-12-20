@@ -84,10 +84,15 @@ type rateCalculator struct {
 	rate    int
 }
 
-func (rc *rateCalculator) update(now time.Time, acks []Acknowledgment) {
+func (rc *rateCalculator) update(acks []Acknowledgment) {
 	rc.history = append(rc.history, acks...)
 	sum := 0
 	del := 0
+	if len(rc.history) == 0 {
+		rc.rate = 0
+		return
+	}
+	now := rc.history[len(rc.history)-1].Arrival
 	for _, ack := range rc.history {
 		if now.Sub(ack.Arrival) > rc.window {
 			del++
@@ -159,7 +164,7 @@ func (e *delayBasedBandwidthEstimator) loop() {
 }
 
 func (e *delayBasedBandwidthEstimator) incomingFeedbackInternal(p []Acknowledgment) {
-	e.receivedRate.update(time.Now(), p) // TODO: Receive time.Now() from outside?
+	e.receivedRate.update(p)
 	e.estimateAll(preFilter(e.lastGroup, p))
 }
 
