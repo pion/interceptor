@@ -50,8 +50,7 @@ func (f *FeedbackAdapter) OnSent(ts time.Time, header *rtp.Header, size int, att
 	defer f.lock.Unlock()
 	f.history[tccExt.TransportSequence] = Acknowledgment{
 		TLCC:      tccExt.TransportSequence,
-		Header:    header,
-		Size:      size,
+		Size:      header.MarshalSize() + size,
 		Departure: ts,
 		Arrival:   time.Time{},
 		RTT:       0,

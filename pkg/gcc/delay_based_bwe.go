@@ -310,7 +310,7 @@ func calculateReceivedRate(log []Acknowledgment) int {
 		return 0
 	}
 	if len(log) == 1 && !log[0].Arrival.IsZero() {
-		return log[0].Header.MarshalSize() + log[0].Size
+		return log[0].Size
 	}
 
 	start := log[0].Arrival
@@ -323,7 +323,7 @@ func calculateReceivedRate(log []Acknowledgment) int {
 	sum := 0
 	for _, ack := range log {
 		if !ack.Arrival.IsZero() {
-			sum += ack.Header.MarshalSize() + ack.Size
+			sum += ack.Size
 		}
 	}
 
