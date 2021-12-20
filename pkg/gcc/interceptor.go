@@ -253,6 +253,7 @@ func (c *Interceptor) loop() {
 			bitrate := min(dbr.Bitrate, lbr)
 			if bitrate != c.bitrate {
 				bitrateChanged = true
+				c.bitrate = bitrate
 				c.pacer.SetTargetBitrate(c.bitrate)
 			}
 			c.lock.Unlock()
