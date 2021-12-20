@@ -7,9 +7,11 @@ import (
 
 const (
 	beta                = 0.85
-	overuseCoefficientU = 0.0018
-	overuseCoefficientD = 0.01
-	initialDelayVarTh   = 6
+	overuseCoefficientU = 0.01
+	overuseCoefficientD = 0.0018
+	initialDelayVarTh   = 1.25
+	delVarThMin         = 0.6
+	delVarThMax         = 60
 )
 
 const (
@@ -60,9 +62,11 @@ type delayBasedBandwidthEstimator struct {
 
 	receivedRate rateCalculator
 
-	lastGroup *arrivalGroup
-	state     int
-	delVarTh  float64
+	lastGroup      *arrivalGroup
+	state          int
+	delVarTh       float64
+	inOverUse      bool
+	inOverUseSince time.Time
 
 	lastEstimate float64
 
@@ -111,23 +115,21 @@ func newDelayBasedBWE(initialBitrate int) *delayBasedBandwidthEstimator {
 		estimator:         newKalman(),
 		lastBitrateUpdate: time.Time{},
 		bitrate:           initialBitrate,
-		receivedRate: rateCalculator{
-			history: []Acknowledgment{},
-			window:  500 * time.Millisecond,
-			rate:    0,
-		},
-		lastGroup:        nil,
-		state:            increase,
-		delVarTh:         initialDelayVarTh,
-		lastEstimate:     0,
-		decreaseEMAAlpha: 0.95,
-		decreaseEMA:      0,
-		decreaseEMAVar:   0,
-		decreaseStdDev:   0,
-		rtt:              0,
-		delayStats:       make(chan DelayStats),
-		feedback:         make(chan []Acknowledgment),
-		close:            make(chan struct{}),
+		receivedRate:      rateCalculator{history: []Acknowledgment{}, window: 500 * time.Millisecond, rate: 0},
+		lastGroup:         nil,
+		state:             increase,
+		delVarTh:          initialDelayVarTh,
+		inOverUse:         false,
+		inOverUseSince:    time.Time{},
+		lastEstimate:      0,
+		decreaseEMAAlpha:  0.95,
+		decreaseEMA:       0,
+		decreaseEMAVar:    0,
+		decreaseStdDev:    0,
+		rtt:               0,
+		delayStats:        make(chan DelayStats),
+		feedback:          make(chan []Acknowledgment),
+		close:             make(chan struct{}),
 	}
 	go e.loop()
 	return e
@@ -163,40 +165,37 @@ func (e *delayBasedBandwidthEstimator) loop() {
 	}
 }
 
-func (e *delayBasedBandwidthEstimator) incomingFeedbackInternal(p []Acknowledgment) {
-	e.receivedRate.update(p)
-	e.estimateAll(preFilter(e.lastGroup, p))
+func getTLCC(g []Acknowledgment) []uint16 {
+	t := []uint16{}
+	for _, p := range g {
+		t = append(t, p.TLCC)
+	}
+	return t
 }
 
-func (e *delayBasedBandwidthEstimator) estimateAll(groups []arrivalGroup) {
-	//	for i, g := range groups {
-	//		ns := []uint16{}
-	//		for _, pkt := range g.packets {
-	//			ns = append(ns, pkt.Header.SequenceNumber)
-	//		}
-	//		fmt.Printf("group %v: [%v]\n", i, ns)
-	//	}
+func (e *delayBasedBandwidthEstimator) incomingFeedbackInternal(p []Acknowledgment) {
+	e.receivedRate.update(p)
+	groups := preFilter(e.lastGroup, p)
 	if len(groups) == 0 {
 		return
 	}
-	if e.lastGroup == nil {
-		e.lastGroup = &groups[0]
-		groups = groups[1:]
+	if e.lastGroup != nil {
+		e.estimateAll(groups[:len(groups)-1])
+		e.lastGroup = &groups[len(groups)-1]
+		return
 	}
+	e.estimateAll(groups[:len(groups)-1])
+	e.lastGroup = &groups[len(groups)-1]
+}
 
-	d0 := interGroupDelayVariation(*e.lastGroup, groups[0])
-	estimate := e.updateEstimate(float64(d0.Milliseconds()))
-	e.updateState(e.detectOverUse(estimate, float64(groups[0].arrival.Sub(e.lastGroup.arrival).Milliseconds())))
-	e.rtt = groups[0].rtt
-
-	for i := 1; i < len(groups); i++ {
-		dx := interGroupDelayVariation(groups[i-1], groups[i])
-		estimate := e.updateEstimate(float64(dx.Milliseconds()))
-		// fmt.Printf("dx=%v, estimate=%v\n", dx, estimate)
-		e.updateState(e.detectOverUse(estimate, float64(groups[i].arrival.Sub(groups[i-1].arrival).Milliseconds())))
+func (e *delayBasedBandwidthEstimator) estimateAll(groups []arrivalGroup) {
+	for i := 1; i < len(groups)-1; i++ {
+		dx := float64(interGroupDelayVariation(groups[i-1], groups[i]).Microseconds()) / 1000.0
+		estimate := e.updateEstimate(dx)
+		dt := float64(groups[i].arrival.Sub(groups[i-1].arrival).Milliseconds())
+		e.updateState(e.detectOverUse(estimate, dt))
 		e.rtt = groups[i].rtt
 	}
-	e.lastGroup = &groups[len(groups)-1]
 }
 
 func (e *delayBasedBandwidthEstimator) updateState(use int) {
@@ -287,39 +286,42 @@ func (e *delayBasedBandwidthEstimator) increaseBitrate() {
 		responseTimeInMs := 100 + 300.0
 		alpha := 0.5 * math.Min(float64(time.Since(e.lastBitrateUpdate).Milliseconds())/responseTimeInMs, 1.0)
 		increase := int(math.Max(1000.0, alpha*expectedPacketSizeBits))
-		// fmt.Printf("additive increase br += %v\n", increase)
 		e.bitrate += increase
 		return
 	}
 	eta := math.Pow(1.08, math.Min(float64(time.Since(e.lastBitrateUpdate).Milliseconds())/1000, 1.0))
-	// fmt.Printf("multiplicative increase br *= %v\n", eta)
 	e.bitrate = int(eta * float64(e.bitrate))
 }
 
 func (e *delayBasedBandwidthEstimator) detectOverUse(estimate, dt float64) int {
+	use := normal
+	if estimate > e.delVarTh && estimate >= e.lastEstimate {
+		if time.Since(e.inOverUseSince) > 10*time.Millisecond {
+			use = overUse
+		}
+		e.inOverUse = true
+	} else if estimate < -e.delVarTh {
+		use = underUse
+		e.inOverUse = false
+	} else {
+		e.inOverUse = false
+	}
+
 	k := overuseCoefficientU
 	absEstimate := math.Abs(estimate)
 	if absEstimate < e.delVarTh {
 		k = overuseCoefficientD
 	}
 	if absEstimate-e.delVarTh <= 15 {
-		e.delVarTh += dt * k * (absEstimate - e.delVarTh)
+		inc := dt * k * (absEstimate - e.delVarTh)
+		e.delVarTh += inc
 	}
-	e.delVarTh = math.Min(e.delVarTh, 60)
-	e.delVarTh = math.Max(e.delVarTh, 1)
+	e.delVarTh = math.Min(e.delVarTh, delVarThMax)
+	e.delVarTh = math.Max(e.delVarTh, delVarThMin)
 
-	defer func() {
-		e.lastEstimate = estimate
-	}()
+	e.lastEstimate = estimate
 
-	if estimate > e.delVarTh && estimate >= e.lastEstimate {
-		return overUse
-	}
-
-	if estimate < -e.delVarTh {
-		return underUse
-	}
-	return normal
+	return use
 }
 
 func preFilter(lastKnown *arrivalGroup, log []Acknowledgment) []arrivalGroup {
@@ -338,12 +340,12 @@ func preFilter(lastKnown *arrivalGroup, log []Acknowledgment) []arrivalGroup {
 			continue
 		}
 
-		if interDepartureTimePkt(res[len(res)-1], p) < 5*time.Millisecond {
+		if interDepartureTimePkt(res[len(res)-1], p) <= 5*time.Millisecond {
 			res[len(res)-1].add(p)
 			continue
 		}
 
-		if interArrivalTimePkt(res[len(res)-1], p) < 5*time.Millisecond &&
+		if interArrivalTimePkt(res[len(res)-1], p) <= 5*time.Millisecond &&
 			interGroupDelayVariationPkt(res[len(res)-1], p) < 0 {
 			res[len(res)-1].add(p)
 			continue
@@ -372,7 +374,5 @@ func interGroupDelayVariationPkt(a arrivalGroup, b Acknowledgment) time.Duration
 }
 
 func interGroupDelayVariation(a, b arrivalGroup) time.Duration {
-	// fmt.Printf("b.arrival - a.arrival: %v - %v = %v\n", b.arrival.UnixMilli(), a.arrival.UnixMilli(), b.arrival.Sub(a.arrival))
-	// fmt.Printf("b.departure - a.departure: %v - %v = %v\n", b.departure.UnixMilli(), a.departure.UnixMilli(), b.departure.Sub(a.departure))
 	return b.arrival.Sub(a.arrival) - b.departure.Sub(a.departure)
 }

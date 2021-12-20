@@ -157,7 +157,7 @@ func (c *Interceptor) GetStats() map[string]interface{} {
 		"delayEstimate": c.latestStats.Bitrate,
 		"estimate":      c.latestStats.Estimate,
 		"thresh":        c.latestStats.Threshold,
-		"rtt":           c.latestStats.RTT,
+		"rtt":           c.latestStats.RTT.Milliseconds(),
 	}
 }
 

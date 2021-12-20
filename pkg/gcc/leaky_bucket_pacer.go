@@ -109,7 +109,7 @@ func (p *LeakyBucketPacer) Run() {
 		case item := <-p.itemCh:
 			queue = append(queue, item)
 		case <-ticker.C:
-			budget := p.pacingInterval.Milliseconds() * int64(float64(p.targetBitrate)/1000.0)
+			budget := p.pacingInterval.Milliseconds() * int64(float64(p.targetBitrate)/8000.0)
 			for len(queue) != 0 && budget > 0 {
 				p.log.Infof("pacer budget=%v, len(queue)=%v", budget, len(queue))
 				next := queue[0]
@@ -120,11 +120,12 @@ func (p *LeakyBucketPacer) Run() {
 					continue
 				}
 				n, err := writer.Write(next.header, (*next.payload)[:next.size], next.attributes)
+				p.log.Infof("pacer sent %v bytes", n)
 				if err != nil {
 					p.log.Errorf("failed to write packet: %v", err)
 				}
 				p.pool.Put(next.payload)
-				budget -= int64(n * 8)
+				budget -= int64(n)
 			}
 		}
 	}

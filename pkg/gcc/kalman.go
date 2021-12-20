@@ -1,7 +1,13 @@
 package gcc
 
+import (
+	"math"
+)
+
 const (
-	qI = 1e-3
+	qI    = 1e-3
+	chi   = 0.1
+	alpha = 0.95
 )
 
 type kalman struct {
@@ -13,22 +19,28 @@ type kalman struct {
 
 func newKalman() *kalman {
 	return &kalman{
-		gain:                   0,
+		gain:                   0.95,
 		estimate:               0,
 		estimateUncertainty:    0.1 + qI,
-		measurementUncertainty: 0.01,
+		measurementUncertainty: 0.1,
 	}
 }
 
 func (k *kalman) updateEstimate(measurement float64) float64 {
+	z := measurement - k.estimate
+
+	k.measurementUncertainty = math.Max(alpha*k.measurementUncertainty+(1-alpha)*z*z, 1)
+
+	root := math.Sqrt(k.measurementUncertainty)
+	if z > 3*root {
+		z = 3 * root
+	}
+
 	k.gain = (k.estimateUncertainty) / (k.estimateUncertainty + k.measurementUncertainty)
 
-	// TODO:
-	// k.measurementUncertainty = alpha * var_v_hat(i-1) + (1-alpha) * z(i)^2
+	k.estimate += k.gain * z
 
-	k.estimate += k.gain * (measurement - k.estimate)
-
-	k.estimateUncertainty = (1-k.gain)*k.estimateUncertainty + qI
+	k.estimateUncertainty = (1 - k.gain) * (k.estimateUncertainty + qI)
 
 	return k.estimate
 }
