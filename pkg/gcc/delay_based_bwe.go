@@ -223,30 +223,16 @@ func (e *delayBasedBandwidthEstimator) updateState(use int) {
 }
 
 func (e *delayBasedBandwidthEstimator) getEstimateInternal() DelayStats {
-	if e.state == hold {
-		return DelayStats{
-			State:     e.state,
-			Bitrate:   e.bitrate,
-			Estimate:  e.lastEstimate,
-			Threshold: e.delVarTh,
-			RTT:       e.rtt,
-		}
-	}
-
-	if e.state == increase {
+	switch e.state {
+	case hold:
+	case increase:
 		e.increaseBitrate()
 		e.lastBitrateUpdate = time.Now()
-		return DelayStats{
-			State:     e.state,
-			Bitrate:   e.bitrate,
-			Estimate:  e.lastEstimate,
-			Threshold: e.delVarTh,
-			RTT:       e.rtt,
-		}
+	case decrease:
+		e.decreaseBitrate()
+		e.lastBitrateUpdate = time.Now()
 	}
 
-	e.decreaseBitrate()
-	e.lastBitrateUpdate = time.Now()
 	return DelayStats{
 		State:     e.state,
 		Bitrate:   e.bitrate,
