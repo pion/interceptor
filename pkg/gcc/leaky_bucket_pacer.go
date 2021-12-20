@@ -82,8 +82,9 @@ func (p *LeakyBucketPacer) SetTargetBitrate(rate int) {
 func (p *LeakyBucketPacer) Write(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
 	buf := p.pool.Get().(*[]byte)
 	copy(*buf, payload)
+	hdr := header.Clone()
 	p.itemCh <- item{
-		header:     header,
+		header:     &hdr,
 		payload:    buf,
 		size:       len(payload),
 		attributes: attributes,
