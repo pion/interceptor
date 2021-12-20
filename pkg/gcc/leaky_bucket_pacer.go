@@ -123,7 +123,7 @@ func (p *LeakyBucketPacer) Run() {
 					p.log.Errorf("failed to write packet: %v", err)
 				}
 				p.pool.Put(next.payload)
-				budget -= int64(n)
+				budget -= int64(n * 8)
 			}
 		}
 	}
