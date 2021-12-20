@@ -5,9 +5,50 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pion/rtp"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestRateCalculator(t *testing.T) {
+	rc := rateCalculator{
+		history: []Acknowledgment{},
+		window:  500 * time.Millisecond,
+	}
+
+	t0 := time.Now()
+
+	rc.update(t0, []Acknowledgment{})
+	assert.Equal(t, 0, rc.rate)
+
+	rc.update(t0, []Acknowledgment{{
+		TLCC:      0,
+		Size:      125,
+		Departure: time.Time{},
+		Arrival:   t0.Add(-200 * time.Millisecond),
+		RTT:       0,
+	}})
+	assert.Equal(t, 2000, rc.rate)
+
+	rc.update(t0, []Acknowledgment{{
+		TLCC:      1,
+		Size:      125,
+		Departure: time.Time{},
+		Arrival:   t0.Add(-100 * time.Millisecond),
+		RTT:       0,
+	}})
+	assert.Equal(t, 4000, rc.rate)
+
+	rc.update(t0.Add(350*time.Millisecond), []Acknowledgment{{
+		TLCC:      0,
+		Size:      125,
+		Departure: time.Time{},
+		Arrival:   t0.Add(150 * time.Millisecond),
+		RTT:       0,
+	}})
+	assert.Equal(t, 4000, rc.rate)
+
+	rc.update(t0.Add(time.Second), []Acknowledgment{})
+	assert.Equal(t, 0, rc.rate)
+}
 
 func TestInterArrivalTime(t *testing.T) {
 	cases := []struct {
@@ -239,62 +280,7 @@ func TestPreFilter(t *testing.T) {
 		i := i
 		tc := tc
 		t.Run(fmt.Sprintf("%v", i), func(t *testing.T) {
-			assert.Equal(t, tc.exp, preFilter(tc.log))
-		})
-	}
-}
-
-func TestCalculateReceivingRate(t *testing.T) {
-	t0 := time.Time{}.Add(2 * time.Second)
-	cases := []struct {
-		expected int
-		log      []Acknowledgment
-	}{
-		{
-			expected: 0,
-			log:      []Acknowledgment{},
-		},
-		{
-			expected: 0,
-			log: []Acknowledgment{
-				{
-					Size:      (&rtp.Header{}).MarshalSize() + 100,
-					Departure: time.Time{},
-					Arrival:   time.Time{},
-				},
-			},
-		},
-		{
-			expected: 112,
-			log: []Acknowledgment{
-				{
-					Size:      (&rtp.Header{}).MarshalSize() + 100,
-					Departure: time.Time{},
-					Arrival:   t0.Add(1 * time.Millisecond),
-				},
-			},
-		},
-		{
-			expected: (12 + 12 + 1200 + 1200) * 8 * 10, // *8: Bytes to bits, *10: calculate rate in 100ms
-			log: []Acknowledgment{
-				{
-					Size:      (&rtp.Header{}).MarshalSize() + 1200,
-					Departure: time.Time{},
-					Arrival:   t0.Add(500 * time.Millisecond),
-				},
-				{
-					Size:      (&rtp.Header{}).MarshalSize() + 1200,
-					Departure: time.Time{},
-					Arrival:   t0.Add(600 * time.Millisecond),
-				},
-			},
-		},
-	}
-	for i, tc := range cases {
-		i := i
-		tc := tc
-		t.Run(fmt.Sprintf("%v", i), func(t *testing.T) {
-			assert.Equal(t, tc.expected, calculateReceivedRate(tc.log))
+			assert.Equal(t, tc.exp, preFilter(nil, tc.log))
 		})
 	}
 }

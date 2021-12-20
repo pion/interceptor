@@ -58,7 +58,8 @@ type delayBasedBandwidthEstimator struct {
 	lastBitrateUpdate time.Time
 	bitrate           int
 
-	history   []Acknowledgment
+	receivedRate rateCalculator
+
 	lastGroup *arrivalGroup
 	state     int
 	delVarTh  float64
@@ -77,24 +78,51 @@ type delayBasedBandwidthEstimator struct {
 	close      chan struct{}
 }
 
+type rateCalculator struct {
+	history []Acknowledgment
+	window  time.Duration
+	rate    int
+}
+
+func (rc *rateCalculator) update(now time.Time, acks []Acknowledgment) {
+	rc.history = append(rc.history, acks...)
+	sum := 0
+	del := 0
+	for _, ack := range rc.history {
+		if now.Sub(ack.Arrival) > rc.window {
+			del++
+			continue
+		}
+		if !ack.Arrival.IsZero() {
+			sum += ack.Size
+		}
+	}
+	rc.history = rc.history[del:]
+	rc.rate = int(float64(8*sum) / rc.window.Seconds())
+}
+
 func newDelayBasedBWE(initialBitrate int) *delayBasedBandwidthEstimator {
 	e := &delayBasedBandwidthEstimator{
 		estimator:         newKalman(),
 		lastBitrateUpdate: time.Time{},
 		bitrate:           initialBitrate,
-		history:           []Acknowledgment{},
-		lastGroup:         nil,
-		state:             increase,
-		delVarTh:          initialDelayVarTh,
-		lastEstimate:      0,
-		decreaseEMAAlpha:  0.95,
-		decreaseEMA:       0,
-		decreaseEMAVar:    0,
-		decreaseStdDev:    0,
-		rtt:               0,
-		delayStats:        make(chan DelayStats),
-		feedback:          make(chan []Acknowledgment),
-		close:             make(chan struct{}),
+		receivedRate: rateCalculator{
+			history: []Acknowledgment{},
+			window:  500 * time.Millisecond,
+			rate:    0,
+		},
+		lastGroup:        nil,
+		state:            increase,
+		delVarTh:         initialDelayVarTh,
+		lastEstimate:     0,
+		decreaseEMAAlpha: 0.95,
+		decreaseEMA:      0,
+		decreaseEMAVar:   0,
+		decreaseStdDev:   0,
+		rtt:              0,
+		delayStats:       make(chan DelayStats),
+		feedback:         make(chan []Acknowledgment),
+		close:            make(chan struct{}),
 	}
 	go e.loop()
 	return e
@@ -131,23 +159,8 @@ func (e *delayBasedBandwidthEstimator) loop() {
 }
 
 func (e *delayBasedBandwidthEstimator) incomingFeedbackInternal(p []Acknowledgment) {
-	// TODO: Improve mechanism to delete old entries.
-	// How many to keep?
-	if len(p) == 0 {
-		return
-	}
-	latestAckArrival := p[len(p)-1].Arrival
-	for _, h := range e.history {
-		if latestAckArrival.Sub(h.Arrival) > 500*time.Millisecond {
-			e.history = e.history[1:]
-		}
-	}
-	for _, ack := range p {
-		if !ack.Arrival.IsZero() {
-			e.history = append(e.history, ack)
-		}
-	}
-	e.estimateAll(preFilter(e.history))
+	e.receivedRate.update(time.Now(), p) // TODO: Receive time.Now() from outside?
+	e.estimateAll(preFilter(e.lastGroup, p))
 }
 
 func (e *delayBasedBandwidthEstimator) estimateAll(groups []arrivalGroup) {
@@ -163,7 +176,7 @@ func (e *delayBasedBandwidthEstimator) estimateAll(groups []arrivalGroup) {
 	}
 	if e.lastGroup == nil {
 		e.lastGroup = &groups[0]
-		return
+		groups = groups[1:]
 	}
 
 	d0 := interGroupDelayVariation(*e.lastGroup, groups[0])
@@ -243,7 +256,7 @@ func (e *delayBasedBandwidthEstimator) getEstimateInternal() DelayStats {
 }
 
 func (e *delayBasedBandwidthEstimator) decreaseBitrate() {
-	r := calculateReceivedRate(e.history)
+	r := e.receivedRate.rate
 
 	e.bitrate = int(beta * float64(r))
 
@@ -258,7 +271,7 @@ func (e *delayBasedBandwidthEstimator) decreaseBitrate() {
 }
 
 func (e *delayBasedBandwidthEstimator) increaseBitrate() {
-	r := calculateReceivedRate(e.history)
+	r := e.receivedRate.rate
 
 	if float64(r) > e.decreaseEMA-3*e.decreaseStdDev &&
 		float64(r) < e.decreaseEMA+3*e.decreaseStdDev {
@@ -304,36 +317,11 @@ func (e *delayBasedBandwidthEstimator) detectOverUse(estimate, dt float64) int {
 	return normal
 }
 
-// calculateReceivedRate calculates the rate of RTP bytes in log between a and b
-func calculateReceivedRate(log []Acknowledgment) int {
-	if len(log) == 0 {
-		return 0
-	}
-	if len(log) == 1 && !log[0].Arrival.IsZero() {
-		return log[0].Size
-	}
-
-	start := log[0].Arrival
-	end := log[len(log)-1].Arrival
-	d := end.Sub(start)
-	if d == 0 {
-		return 0
-	}
-
-	sum := 0
-	for _, ack := range log {
-		if !ack.Arrival.IsZero() {
-			sum += ack.Size
-		}
-	}
-
-	rate := int(float64(8*sum) / d.Seconds())
-	// fmt.Printf("calculating rate for: from %v to %v => %v / %v = %v\n", start, end, sum, d.Seconds(), rate)
-	return rate
-}
-
-func preFilter(log []Acknowledgment) []arrivalGroup {
+func preFilter(lastKnown *arrivalGroup, log []Acknowledgment) []arrivalGroup {
 	res := []arrivalGroup{}
+	if lastKnown != nil {
+		res = append(res, *lastKnown)
+	}
 	for _, p := range log {
 		if p.Arrival.IsZero() {
 			continue
