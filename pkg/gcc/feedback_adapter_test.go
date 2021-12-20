@@ -57,7 +57,6 @@ func TestUnpackRunLengthChunk(t *testing.T) {
 			acks: []Acknowledgment{
 				{
 					TLCC:      0,
-					Header:    nil,
 					Size:      0,
 					Departure: time.Time{},
 					Arrival:   time.Time{},
@@ -65,7 +64,6 @@ func TestUnpackRunLengthChunk(t *testing.T) {
 				},
 				{
 					TLCC:      1,
-					Header:    nil,
 					Size:      0,
 					Departure: time.Time{},
 					Arrival:   time.Time{},
@@ -73,7 +71,6 @@ func TestUnpackRunLengthChunk(t *testing.T) {
 				},
 				{
 					TLCC:      2,
-					Header:    nil,
 					Size:      0,
 					Departure: time.Time{},
 					Arrival:   time.Time{},
@@ -81,7 +78,6 @@ func TestUnpackRunLengthChunk(t *testing.T) {
 				},
 				{
 					TLCC:      3,
-					Header:    nil,
 					Size:      0,
 					Departure: time.Time{},
 					Arrival:   time.Time{},
@@ -89,7 +85,6 @@ func TestUnpackRunLengthChunk(t *testing.T) {
 				},
 				{
 					TLCC:      4,
-					Header:    nil,
 					Size:      0,
 					Departure: time.Time{},
 					Arrival:   time.Time{},
@@ -97,7 +92,6 @@ func TestUnpackRunLengthChunk(t *testing.T) {
 				},
 				{
 					TLCC:      5,
-					Header:    nil,
 					Size:      0,
 					Departure: time.Time{},
 					Arrival:   time.Time{},
@@ -127,7 +121,6 @@ func TestUnpackRunLengthChunk(t *testing.T) {
 			acks: []Acknowledgment{
 				{
 					TLCC:      65534,
-					Header:    nil,
 					Size:      0,
 					Departure: time.Time{},
 					Arrival:   time.Time{}.Add(250 * time.Microsecond),
@@ -135,7 +128,6 @@ func TestUnpackRunLengthChunk(t *testing.T) {
 				},
 				{
 					TLCC:      65535,
-					Header:    nil,
 					Size:      0,
 					Departure: time.Time{},
 					Arrival:   time.Time{}.Add(500 * time.Microsecond),
@@ -143,7 +135,6 @@ func TestUnpackRunLengthChunk(t *testing.T) {
 				},
 				{
 					TLCC:      0,
-					Header:    nil,
 					Size:      0,
 					Departure: time.Time{},
 					Arrival:   time.Time{}.Add(750 * time.Microsecond),
@@ -151,7 +142,6 @@ func TestUnpackRunLengthChunk(t *testing.T) {
 				},
 				{
 					TLCC:      1,
-					Header:    nil,
 					Size:      0,
 					Departure: time.Time{},
 					Arrival:   time.Time{}.Add(1000 * time.Microsecond),
@@ -159,7 +149,6 @@ func TestUnpackRunLengthChunk(t *testing.T) {
 				},
 				{
 					TLCC:      2,
-					Header:    nil,
 					Size:      0,
 					Departure: time.Time{},
 					Arrival:   time.Time{}.Add(1250 * time.Microsecond),
@@ -167,7 +156,6 @@ func TestUnpackRunLengthChunk(t *testing.T) {
 				},
 				{
 					TLCC:      3,
-					Header:    nil,
 					Size:      0,
 					Departure: time.Time{},
 					Arrival:   time.Time{}.Add(1500 * time.Microsecond),
@@ -191,7 +179,6 @@ func TestUnpackRunLengthChunk(t *testing.T) {
 			acks: []Acknowledgment{
 				{
 					TLCC:      65534,
-					Header:    nil,
 					Size:      0,
 					Departure: time.Time{},
 					Arrival:   time.Time{},
@@ -199,7 +186,6 @@ func TestUnpackRunLengthChunk(t *testing.T) {
 				},
 				{
 					TLCC:      65535,
-					Header:    nil,
 					Size:      0,
 					Departure: time.Time{},
 					Arrival:   time.Time{},
@@ -207,7 +193,6 @@ func TestUnpackRunLengthChunk(t *testing.T) {
 				},
 				{
 					TLCC:      0,
-					Header:    nil,
 					Size:      0,
 					Departure: time.Time{},
 					Arrival:   time.Time{},
@@ -215,7 +200,6 @@ func TestUnpackRunLengthChunk(t *testing.T) {
 				},
 				{
 					TLCC:      1,
-					Header:    nil,
 					Size:      0,
 					Departure: time.Time{},
 					Arrival:   time.Time{},
@@ -223,7 +207,6 @@ func TestUnpackRunLengthChunk(t *testing.T) {
 				},
 				{
 					TLCC:      2,
-					Header:    nil,
 					Size:      0,
 					Departure: time.Time{},
 					Arrival:   time.Time{},
@@ -231,7 +214,6 @@ func TestUnpackRunLengthChunk(t *testing.T) {
 				},
 				{
 					TLCC:      3,
-					Header:    nil,
 					Size:      0,
 					Departure: time.Time{},
 					Arrival:   time.Time{},
@@ -253,7 +235,7 @@ func TestUnpackRunLengthChunk(t *testing.T) {
 			headers := []*rtp.Header{}
 			for i, nr := range tc.sentTLCC {
 				headers = append(headers, &getPacketWithTransportCCExt(t, nr).Header)
-				tc.acks[i].Header = headers[i]
+				tc.acks[i].Size += headers[i].MarshalSize()
 			}
 			for _, h := range headers {
 				assert.NoError(t, fa.OnSent(time.Time{}, h, 0, attributes))
@@ -324,7 +306,6 @@ func TestUnpackStatusVectorChunk(t *testing.T) {
 			acks: []Acknowledgment{
 				{
 					TLCC:      0,
-					Header:    nil,
 					Size:      0,
 					Departure: time.Time{},
 					Arrival:   time.Time{},
@@ -332,7 +313,6 @@ func TestUnpackStatusVectorChunk(t *testing.T) {
 				},
 				{
 					TLCC:      1,
-					Header:    nil,
 					Size:      0,
 					Departure: time.Time{},
 					Arrival:   time.Time{},
@@ -340,7 +320,6 @@ func TestUnpackStatusVectorChunk(t *testing.T) {
 				},
 				{
 					TLCC:      2,
-					Header:    nil,
 					Size:      0,
 					Departure: time.Time{},
 					Arrival:   time.Time{},
@@ -348,7 +327,6 @@ func TestUnpackStatusVectorChunk(t *testing.T) {
 				},
 				{
 					TLCC:      3,
-					Header:    nil,
 					Size:      0,
 					Departure: time.Time{},
 					Arrival:   time.Time{},
@@ -356,7 +334,6 @@ func TestUnpackStatusVectorChunk(t *testing.T) {
 				},
 				{
 					TLCC:      4,
-					Header:    nil,
 					Size:      0,
 					Departure: time.Time{},
 					Arrival:   time.Time{},
@@ -364,7 +341,6 @@ func TestUnpackStatusVectorChunk(t *testing.T) {
 				},
 				{
 					TLCC:      5,
-					Header:    nil,
 					Size:      0,
 					Departure: time.Time{},
 					Arrival:   time.Time{},
@@ -400,7 +376,6 @@ func TestUnpackStatusVectorChunk(t *testing.T) {
 			acks: []Acknowledgment{
 				{
 					TLCC:      65534,
-					Header:    nil,
 					Size:      0,
 					Departure: time.Time{},
 					Arrival:   time.Time{}.Add(250 * time.Microsecond),
@@ -408,7 +383,6 @@ func TestUnpackStatusVectorChunk(t *testing.T) {
 				},
 				{
 					TLCC:      65535,
-					Header:    nil,
 					Size:      0,
 					Departure: time.Time{},
 					Arrival:   time.Time{}.Add(500 * time.Microsecond),
@@ -416,7 +390,6 @@ func TestUnpackStatusVectorChunk(t *testing.T) {
 				},
 				{
 					TLCC:      0,
-					Header:    nil,
 					Size:      0,
 					Departure: time.Time{},
 					Arrival:   time.Time{}.Add(750 * time.Microsecond),
@@ -424,7 +397,6 @@ func TestUnpackStatusVectorChunk(t *testing.T) {
 				},
 				{
 					TLCC:      1,
-					Header:    nil,
 					Size:      0,
 					Departure: time.Time{},
 					Arrival:   time.Time{}.Add(1000 * time.Microsecond),
@@ -432,7 +404,6 @@ func TestUnpackStatusVectorChunk(t *testing.T) {
 				},
 				{
 					TLCC:      2,
-					Header:    nil,
 					Size:      0,
 					Departure: time.Time{},
 					Arrival:   time.Time{},
@@ -440,7 +411,6 @@ func TestUnpackStatusVectorChunk(t *testing.T) {
 				},
 				{
 					TLCC:      3,
-					Header:    nil,
 					Size:      0,
 					Departure: time.Time{},
 					Arrival:   time.Time{}.Add(1250 * time.Microsecond),
@@ -462,7 +432,7 @@ func TestUnpackStatusVectorChunk(t *testing.T) {
 			headers := []*rtp.Header{}
 			for i, nr := range tc.sentTLCC {
 				headers = append(headers, &getPacketWithTransportCCExt(t, nr).Header)
-				tc.acks[i].Header = headers[i]
+				tc.acks[i].Size += headers[i].MarshalSize()
 			}
 			for _, h := range headers {
 				assert.NoError(t, fa.OnSent(time.Time{}, h, 0, attributes))
@@ -590,8 +560,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 
 		assert.Contains(t, results, Acknowledgment{
 			TLCC:      0,
-			Header:    &headers[0],
-			Size:      1200,
+			Size:      headers[0].MarshalSize() + 1200,
 			Departure: t0,
 			Arrival:   t0.Add(4 * time.Microsecond),
 			RTT:       0,
@@ -599,8 +568,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 
 		assert.Contains(t, results, Acknowledgment{
 			TLCC:      1,
-			Header:    &headers[1],
-			Size:      1200,
+			Size:      headers[1].MarshalSize() + 1200,
 			Departure: t0,
 			Arrival:   t0.Add(104 * time.Microsecond),
 			RTT:       0,
@@ -609,8 +577,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		for i := uint16(2); i < 7; i++ {
 			assert.Contains(t, results, Acknowledgment{
 				TLCC:      i,
-				Header:    &headers[i],
-				Size:      1200,
+				Size:      headers[i].MarshalSize() + 1200,
 				Departure: t0,
 				Arrival:   time.Time{},
 				RTT:       0,
@@ -619,8 +586,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 
 		assert.Contains(t, results, Acknowledgment{
 			TLCC:      7,
-			Header:    &headers[7],
-			Size:      1200,
+			Size:      headers[7].MarshalSize() + 1200,
 			Departure: t0,
 			Arrival:   t0.Add(116 * time.Microsecond),
 			RTT:       0,
@@ -629,8 +595,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		for i := uint16(8); i < 21; i++ {
 			assert.Contains(t, results, Acknowledgment{
 				TLCC:      i,
-				Header:    &headers[i],
-				Size:      1200,
+				Size:      headers[i].MarshalSize() + 1200,
 				Departure: t0,
 				Arrival:   time.Time{},
 				RTT:       0,
@@ -639,8 +604,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 
 		assert.Contains(t, results, Acknowledgment{
 			TLCC:      21,
-			Header:    &headers[21],
-			Size:      1200,
+			Size:      headers[21].MarshalSize() + 1200,
 			Departure: t0,
 			Arrival:   t0.Add(120 * time.Microsecond),
 			RTT:       0,
@@ -734,16 +698,14 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		assert.Len(t, results, 7)
 		assert.Contains(t, results, Acknowledgment{
 			TLCC:      65535,
-			Header:    &pkt65535.Header,
-			Size:      1200,
+			Size:      pkt65535.Header.MarshalSize() + 1200,
 			Departure: t0,
 			Arrival:   t0.Add(4 * time.Microsecond),
 			RTT:       0,
 		})
 		assert.Contains(t, results, Acknowledgment{
 			TLCC:      0,
-			Header:    &pkt0.Header,
-			Size:      1200,
+			Size:      pkt0.Header.MarshalSize() + 1200,
 			Departure: t0,
 			Arrival:   t0.Add(8 * time.Microsecond),
 			RTT:       0,
@@ -804,8 +766,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		for i := uint16(0); i < 3; i++ {
 			assert.Contains(t, results, Acknowledgment{
 				TLCC:      i,
-				Header:    &headers[i],
-				Size:      1200,
+				Size:      headers[i].MarshalSize() + 1200,
 				Departure: t0,
 				Arrival:   t0.Add(time.Duration((i + 1)) * 4 * time.Microsecond),
 				RTT:       0,
@@ -814,8 +775,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		for i := uint16(3); i < 7; i++ {
 			assert.Contains(t, results, Acknowledgment{
 				TLCC:      i,
-				Header:    &headers[i],
-				Size:      1200,
+				Size:      headers[i].MarshalSize() + 1200,
 				Departure: t0,
 				Arrival:   time.Time{},
 				RTT:       0,

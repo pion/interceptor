@@ -150,7 +150,6 @@ func TestPreFilter(t *testing.T) {
 		{
 			log: []Acknowledgment{
 				{
-					Header:    nil,
 					Size:      0,
 					Departure: time.Time{},
 					Arrival:   time.Time{}.Add(time.Millisecond),
@@ -160,7 +159,6 @@ func TestPreFilter(t *testing.T) {
 			exp: []arrivalGroup{
 				{
 					packets: []Acknowledgment{{
-						Header:    nil,
 						Size:      0,
 						Departure: time.Time{},
 						Arrival:   time.Time{}.Add(time.Millisecond),
@@ -260,8 +258,7 @@ func TestCalculateReceivingRate(t *testing.T) {
 			expected: 0,
 			log: []Acknowledgment{
 				{
-					Header:    &rtp.Header{},
-					Size:      100,
+					Size:      (&rtp.Header{}).MarshalSize() + 100,
 					Departure: time.Time{},
 					Arrival:   time.Time{},
 				},
@@ -271,8 +268,7 @@ func TestCalculateReceivingRate(t *testing.T) {
 			expected: 112,
 			log: []Acknowledgment{
 				{
-					Header:    &rtp.Header{},
-					Size:      100,
+					Size:      (&rtp.Header{}).MarshalSize() + 100,
 					Departure: time.Time{},
 					Arrival:   t0.Add(1 * time.Millisecond),
 				},
@@ -282,14 +278,12 @@ func TestCalculateReceivingRate(t *testing.T) {
 			expected: (12 + 12 + 1200 + 1200) * 8 * 10, // *8: Bytes to bits, *10: calculate rate in 100ms
 			log: []Acknowledgment{
 				{
-					Header:    &rtp.Header{},
-					Size:      1200,
+					Size:      (&rtp.Header{}).MarshalSize() + 1200,
 					Departure: time.Time{},
 					Arrival:   t0.Add(500 * time.Millisecond),
 				},
 				{
-					Header:    &rtp.Header{},
-					Size:      1200,
+					Size:      (&rtp.Header{}).MarshalSize() + 1200,
 					Departure: time.Time{},
 					Arrival:   t0.Add(600 * time.Millisecond),
 				},
