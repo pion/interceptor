@@ -77,14 +77,10 @@ func (f *FeedbackAdapter) unpackRunLengthChunk(ts time.Time, start uint16, refTi
 	result := make([]Acknowledgment, chunk.RunLength)
 	deltaIndex := 0
 
-	// Rollover if necessary
-	end := int(start + chunk.RunLength)
-	if end < int(start) {
-		end += 65536
-	}
+	end := start + chunk.RunLength
 	resultIndex := 0
-	for i := int(start); i < end; i++ {
-		if ack, ok := f.history[uint16(i)]; ok {
+	for i := start; i != end; i++ {
+		if ack, ok := f.history[i]; ok {
 			if chunk.PacketStatusSymbol != rtcp.TypeTCCPacketNotReceived {
 				if len(deltas)-1 < deltaIndex {
 					return deltaIndex, refTime, result, errInvalidFeedback

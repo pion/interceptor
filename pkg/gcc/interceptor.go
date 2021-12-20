@@ -198,10 +198,13 @@ func (c *Interceptor) BindLocalStream(info *interceptor.StreamInfo, writer inter
 			break
 		}
 	}
+	if hdrExtID == 0 { // Nothing to do if header extension ID is 0, because 0 is an invalid extension ID. Means stream is not using TWCC.
+		return writer
+	}
 
 	c.pacer.AddStream(info.SSRC, interceptor.RTPWriterFunc(func(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
 		// Call adapter.onSent
-		if err := c.OnSent(time.Now(), header, len(payload), attributes); err != nil && err != errMissingTWCCExtension {
+		if err := c.OnSent(time.Now(), header, len(payload), attributes); err != nil {
 			return 0, err
 		}
 
