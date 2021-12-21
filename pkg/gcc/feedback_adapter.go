@@ -10,6 +10,8 @@ import (
 	"github.com/pion/rtp"
 )
 
+const twccExtensionAttributesKey = iota
+
 var (
 	errMissingTWCCExtension  = errors.New("missing transport layer cc header extension")
 	errUnknownFeedbackFormat = errors.New("unknown feedback format")
@@ -32,6 +34,9 @@ func NewFeedbackAdapter() *FeedbackAdapter {
 }
 
 // OnSent records when a packet was been sent.
+// TODO: Refactor: Store history in map with SSRC/SeqNr key and another map from
+// TWCC SeqNr to history key.
+// TODO: Remove header param, replace by size and TWCC SeqNr
 func (f *FeedbackAdapter) OnSent(ts time.Time, header *rtp.Header, size int, attributes interceptor.Attributes) error {
 	hdrExtensionID := attributes.Get(twccExtensionAttributesKey)
 	id, ok := hdrExtensionID.(uint8)

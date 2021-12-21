@@ -14,40 +14,14 @@ const (
 	delVarThMax         = 60
 )
 
-const (
-	increase = iota
-	decrease
-	hold
-)
-
-const (
-	overUse = iota
-	underUse
-	normal
-)
-
 // DelayStats contains some internal statistics of the delay based congestion
 // controller
 type DelayStats struct {
-	State     int
-	Bitrate   int
-	Estimate  float64
-	Threshold float64
-	RTT       time.Duration
-}
-
-type arrivalGroup struct {
-	packets   []Acknowledgment
-	arrival   time.Time
-	departure time.Time
-	rtt       time.Duration
-}
-
-func (g *arrivalGroup) add(a Acknowledgment) {
-	g.packets = append(g.packets, a)
-	g.arrival = a.Arrival
-	g.departure = a.Departure
-	g.rtt = a.RTT
+	State         state
+	TargetBitrate int
+	Estimate      float64
+	Threshold     float64
+	RTT           time.Duration
 }
 
 type estimator interface {
@@ -63,7 +37,7 @@ type delayBasedBandwidthEstimator struct {
 	receivedRate rateCalculator
 
 	lastGroup      *arrivalGroup
-	state          int
+	state          state
 	delVarTh       float64
 	inOverUse      bool
 	inOverUseSince time.Time
@@ -80,34 +54,6 @@ type delayBasedBandwidthEstimator struct {
 	delayStats chan DelayStats
 	feedback   chan []Acknowledgment
 	close      chan struct{}
-}
-
-type rateCalculator struct {
-	history []Acknowledgment
-	window  time.Duration
-	rate    int
-}
-
-func (rc *rateCalculator) update(acks []Acknowledgment) {
-	rc.history = append(rc.history, acks...)
-	sum := 0
-	del := 0
-	if len(rc.history) == 0 {
-		rc.rate = 0
-		return
-	}
-	now := rc.history[len(rc.history)-1].Arrival
-	for _, ack := range rc.history {
-		if now.Sub(ack.Arrival) > rc.window {
-			del++
-			continue
-		}
-		if !ack.Arrival.IsZero() {
-			sum += ack.Size
-		}
-	}
-	rc.history = rc.history[del:]
-	rc.rate = int(float64(8*sum) / rc.window.Seconds())
 }
 
 func newDelayBasedBWE(initialBitrate int) *delayBasedBandwidthEstimator {
@@ -144,7 +90,7 @@ func (e *delayBasedBandwidthEstimator) getEstimate() DelayStats {
 	return <-e.delayStats
 }
 
-func (e *delayBasedBandwidthEstimator) incomingFeedback(p []Acknowledgment) {
+func (e *delayBasedBandwidthEstimator) updateDelayEstimate(p []Acknowledgment) {
 	e.feedback <- p
 }
 
@@ -190,45 +136,8 @@ func (e *delayBasedBandwidthEstimator) estimateAll(groups []arrivalGroup) {
 	}
 }
 
-func (e *delayBasedBandwidthEstimator) updateState(use int) {
-	switch e.state {
-	case hold:
-		switch use {
-		case overUse:
-			e.state = decrease
-			return
-		case normal:
-			e.state = increase
-			return
-		case underUse:
-			return
-		}
-
-	case increase:
-		switch use {
-		case overUse:
-			e.state = decrease
-			return
-		case normal:
-			return
-		case underUse:
-			e.state = hold
-			return
-		}
-
-	case decrease:
-		switch use {
-		case overUse:
-			return
-		case normal:
-			e.state = hold
-			return
-		case underUse:
-			e.state = hold
-		default:
-			return
-		}
-	}
+func (e *delayBasedBandwidthEstimator) updateState(use usage) {
+	e.state = e.state.transition(use)
 }
 
 func (e *delayBasedBandwidthEstimator) getEstimateInternal() DelayStats {
@@ -243,11 +152,11 @@ func (e *delayBasedBandwidthEstimator) getEstimateInternal() DelayStats {
 	}
 
 	return DelayStats{
-		State:     e.state,
-		Bitrate:   e.bitrate,
-		Estimate:  e.lastEstimate,
-		Threshold: e.delVarTh,
-		RTT:       e.rtt,
+		State:         e.state,
+		TargetBitrate: e.bitrate,
+		Estimate:      e.lastEstimate,
+		Threshold:     e.delVarTh,
+		RTT:           e.rtt,
 	}
 }
 
@@ -285,16 +194,16 @@ func (e *delayBasedBandwidthEstimator) increaseBitrate() {
 	e.bitrate = int(eta * float64(e.bitrate))
 }
 
-func (e *delayBasedBandwidthEstimator) detectOverUse(estimate, dt float64) int {
+func (e *delayBasedBandwidthEstimator) detectOverUse(estimate, dt float64) usage {
 	use := normal
 	switch {
 	case estimate > e.delVarTh && estimate >= e.lastEstimate:
 		if time.Since(e.inOverUseSince) > 10*time.Millisecond {
-			use = overUse
+			use = over
 		}
 		e.inOverUse = true
 	case estimate < -e.delVarTh:
-		use = underUse
+		use = under
 		e.inOverUse = false
 	default:
 		e.inOverUse = false

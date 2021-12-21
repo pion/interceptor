@@ -8,6 +8,10 @@ import (
 	"github.com/pion/logging"
 )
 
+type LossStats struct {
+	TargetBitrate int
+}
+
 type lossBasedBandwidthEstimator struct {
 	lock           sync.Mutex
 	maxBitrate     int
@@ -34,7 +38,7 @@ func newLossBasedBWE(initialBitrate int) *lossBasedBandwidthEstimator {
 	}
 }
 
-func (e *lossBasedBandwidthEstimator) getEstimate(wantedRate int) int {
+func (e *lossBasedBandwidthEstimator) getEstimate(wantedRate int) LossStats {
 	e.lock.Lock()
 	defer e.lock.Unlock()
 
@@ -43,10 +47,12 @@ func (e *lossBasedBandwidthEstimator) getEstimate(wantedRate int) int {
 	}
 	e.bitrate = min(wantedRate, e.bitrate)
 
-	return e.bitrate
+	return LossStats{
+		TargetBitrate: e.bitrate,
+	}
 }
 
-func (e *lossBasedBandwidthEstimator) updateLossStats(results []Acknowledgment) {
+func (e *lossBasedBandwidthEstimator) updateLossEstimate(results []Acknowledgment) {
 	if len(results) == 0 {
 		return
 	}
@@ -66,6 +72,9 @@ func (e *lossBasedBandwidthEstimator) updateLossStats(results []Acknowledgment) 
 	decreaseLoss := math.Min(e.averageLoss, lossRatio)
 
 	e.log.Infof("averageLoss: %v, decreaseLoss: %v, increaseLoss: %v", e.averageLoss, decreaseLoss, increaseLoss)
+
+	e.lock.Lock()
+	defer e.lock.Unlock()
 
 	if increaseLoss < 0.02 && time.Since(e.lastIncrease) > 200*time.Millisecond {
 		e.lastIncrease = time.Now()
