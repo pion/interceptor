@@ -27,6 +27,8 @@ func NewNoOpPacer() *NoOpPacer {
 	}
 }
 
+// SetTargetBitrate sets the bitrate at which the pacer sends data. NoOp for
+// NoOp pacer.
 func (p *NoOpPacer) SetTargetBitrate(int) {
 }
 

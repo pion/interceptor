@@ -6,7 +6,6 @@ import (
 
 const (
 	qI    = 1e-3
-	chi   = 0.1
 	alpha = 0.95
 )
 

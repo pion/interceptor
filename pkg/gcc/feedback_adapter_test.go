@@ -958,7 +958,6 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 
 		//nolint:dupl
 		assert.NotPanics(t, func() {
-			// TODO(mathis): Run length seems off, maybe check why TWCC generated this?
 			packets, err := adapter.OnFeedback(t0, &rtcp.TransportLayerCC{
 				Header:             rtcp.Header{},
 				SenderSSRC:         0,

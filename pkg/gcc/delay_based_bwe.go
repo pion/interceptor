@@ -165,14 +165,6 @@ func (e *delayBasedBandwidthEstimator) loop() {
 	}
 }
 
-func getTLCC(g []Acknowledgment) []uint16 {
-	t := []uint16{}
-	for _, p := range g {
-		t = append(t, p.TLCC)
-	}
-	return t
-}
-
 func (e *delayBasedBandwidthEstimator) incomingFeedbackInternal(p []Acknowledgment) {
 	e.receivedRate.update(p)
 	groups := preFilter(e.lastGroup, p)
@@ -295,15 +287,16 @@ func (e *delayBasedBandwidthEstimator) increaseBitrate() {
 
 func (e *delayBasedBandwidthEstimator) detectOverUse(estimate, dt float64) int {
 	use := normal
-	if estimate > e.delVarTh && estimate >= e.lastEstimate {
+	switch {
+	case estimate > e.delVarTh && estimate >= e.lastEstimate:
 		if time.Since(e.inOverUseSince) > 10*time.Millisecond {
 			use = overUse
 		}
 		e.inOverUse = true
-	} else if estimate < -e.delVarTh {
+	case estimate < -e.delVarTh:
 		use = underUse
 		e.inOverUse = false
-	} else {
+	default:
 		e.inOverUse = false
 	}
 

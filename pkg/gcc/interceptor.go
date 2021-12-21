@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/pion/interceptor"
+	"github.com/pion/logging"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 )
@@ -36,6 +37,7 @@ func InitialBitrate(rate int) Option {
 	}
 }
 
+// SetPacer sets the pacer
 func SetPacer(pacer Pacer) Option {
 	return func(g *Interceptor) error {
 		g.pacer = pacer
@@ -43,6 +45,9 @@ func SetPacer(pacer Pacer) Option {
 	}
 }
 
+// BandwidthEstimator is the interface that will be returned by a
+// NewPeerConnectionCallback and can be used to query current bandwidth
+// metrics and add feedback manually.
 type BandwidthEstimator interface {
 	AddFeedback(cc *rtcp.TransportLayerCC)
 
@@ -52,6 +57,8 @@ type BandwidthEstimator interface {
 	GetStats() map[string]interface{}
 }
 
+// NewPeerConnectionCallback returns the BandwidthEstimator for the
+// PeerConnection with id
 type NewPeerConnectionCallback func(id string, estimator BandwidthEstimator)
 
 // InterceptorFactory is a factory for GCC interceptors
@@ -67,6 +74,8 @@ func NewInterceptor(opts ...Option) (*InterceptorFactory, error) {
 	}, nil
 }
 
+// OnNewPeerConnection sets a callback that is called when a new GCC interceptor
+// is created.
 func (f *InterceptorFactory) OnNewPeerConnection(cb NewPeerConnectionCallback) {
 	f.addPeerConnection = cb
 }
@@ -75,8 +84,10 @@ func (f *InterceptorFactory) OnNewPeerConnection(cb NewPeerConnectionCallback) {
 func (f *InterceptorFactory) NewInterceptor(id string) (interceptor.Interceptor, error) {
 	i := &Interceptor{
 		NoOp:            interceptor.NoOp{},
+		log:             logging.NewDefaultLoggerFactory().NewLogger("gcc_interceptor"),
 		lock:            sync.Mutex{},
 		bitrate:         100_000,
+		statsLock:       sync.Mutex{},
 		latestStats:     &Stats{},
 		pacer:           nil,
 		FeedbackAdapter: nil,
@@ -84,6 +95,8 @@ func (f *InterceptorFactory) NewInterceptor(id string) (interceptor.Interceptor,
 		delay:           nil,
 		feedback:        make(chan []rtcp.Packet),
 		close:           make(chan struct{}),
+		onTargetBitrateChange: func(bitrate int) {
+		},
 	}
 
 	for _, opt := range f.opts {
@@ -116,6 +129,8 @@ type Stats struct {
 type Interceptor struct {
 	interceptor.NoOp
 
+	log logging.LeveledLogger
+
 	lock    sync.Mutex
 	bitrate int
 
@@ -135,20 +150,28 @@ type Interceptor struct {
 	onTargetBitrateChange func(bitrate int)
 }
 
+// AddFeedback passes an RTCP TransportLayerCC packet to the bandwidth
+// estimator. This is useful if RTCP packets are not routed through the
+// interceptor
 func (c *Interceptor) AddFeedback(cc *rtcp.TransportLayerCC) {
 	c.feedback <- []rtcp.Packet{cc}
 }
 
+// GetTargetBitrate returns the current target bitrate
 func (c *Interceptor) GetTargetBitrate() int {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	return c.bitrate
 }
 
+// OnTargetBitrateChange sets the callback that is called when the target
+// bitrate changes
 func (c *Interceptor) OnTargetBitrateChange(f func(bitrate int)) {
 	c.onTargetBitrateChange = f
 }
 
+// GetStats returns some internal statistics of the GCC BandwidthEstimator,
+// mainly useful for debugging.
 func (c *Interceptor) GetStats() map[string]interface{} {
 	c.statsLock.Lock()
 	defer c.statsLock.Unlock()
@@ -218,9 +241,7 @@ func (c *Interceptor) BindLocalStream(info *interceptor.StreamInfo, writer inter
 			}
 			attributes.Set(twccExtensionAttributesKey, hdrExtID)
 		}
-		c.pacer.Write(header, payload, attributes)
-
-		return header.MarshalSize() + len(payload), nil
+		return c.pacer.Write(header, payload, attributes)
 	})
 }
 
@@ -239,7 +260,8 @@ func (c *Interceptor) loop() {
 			for _, pkt := range pkts {
 				acks, err := c.OnFeedback(time.Now(), pkt)
 				if err != nil {
-					// TODO Add log warning?
+					c.log.Errorf("failed to record feedback", "error", err)
+					continue
 				}
 				c.loss.updateLossStats(acks)
 				c.delay.incomingFeedback(acks)

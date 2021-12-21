@@ -32,7 +32,6 @@ func NewFeedbackAdapter() *FeedbackAdapter {
 }
 
 // OnSent records when a packet was been sent.
-// TODO(mathis): Is there a better way to get attributes in here?
 func (f *FeedbackAdapter) OnSent(ts time.Time, header *rtp.Header, size int, attributes interceptor.Attributes) error {
 	hdrExtensionID := attributes.Get(twccExtensionAttributesKey)
 	id, ok := hdrExtensionID.(uint8)
