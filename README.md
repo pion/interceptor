@@ -74,12 +74,5 @@ If you need commercial support or don't want to use public methods you can conta
 ### Contributing
 Check out the **[contributing wiki](https://github.com/pion/webrtc/wiki/Contributing)** to join the group of amazing people making this project possible:
 
-* [Adam Kiss](https://github.com/masterada) - *Original Author*
-* [Sean DuBois](https://github.com/sean-der) - *Original Author*
-* [Atsushi Watanabe](https://github.com/at-wat)
-* [Alessandro Ros](https://github.com/aler9)
-* [Mathis Engelbart](https://github.com/mengelbart)
-* [Antoine Baché](https://github.com/Antonito)
-
 ### License
 MIT License - see [LICENSE](LICENSE) for full text
