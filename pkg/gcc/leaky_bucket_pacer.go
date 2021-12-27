@@ -1,6 +1,7 @@
 package gcc
 
 import (
+	"container/list"
 	"sync"
 	"time"
 
@@ -24,7 +25,8 @@ type LeakyBucketPacer struct {
 	targetBitrate  int
 	pacingInterval time.Duration
 
-	itemCh    chan item
+	qLock     sync.RWMutex
+	queue     *list.List
 	bitrateCh chan int
 	streamCh  chan stream
 	done      chan struct{}
@@ -41,7 +43,7 @@ func NewLeakyBucketPacer(initialBitrate int) *LeakyBucketPacer {
 		f:              1.5,
 		targetBitrate:  initialBitrate,
 		pacingInterval: 5 * time.Millisecond,
-		itemCh:         make(chan item),
+		queue:          list.New(),
 		bitrateCh:      make(chan int),
 		streamCh:       make(chan stream),
 		done:           make(chan struct{}),
@@ -83,20 +85,22 @@ func (p *LeakyBucketPacer) Write(header *rtp.Header, payload []byte, attributes 
 	buf := p.pool.Get().(*[]byte)
 	copy(*buf, payload)
 	hdr := header.Clone()
-	p.itemCh <- item{
+
+	p.qLock.Lock()
+	p.queue.PushBack(&item{
 		header:     &hdr,
 		payload:    buf,
 		size:       len(payload),
 		attributes: attributes,
-	}
+	})
+	p.qLock.Unlock()
+
 	return header.MarshalSize() + len(payload), nil
 }
 
 // Run starts the LeakyBucketPacer
 func (p *LeakyBucketPacer) Run() {
 	ticker := time.NewTicker(p.pacingInterval)
-
-	queue := []item{}
 
 	for {
 		select {
@@ -106,27 +110,34 @@ func (p *LeakyBucketPacer) Run() {
 			p.targetBitrate = rate
 		case stream := <-p.streamCh:
 			p.ssrcToWriter[stream.ssrc] = stream.writer
-		case item := <-p.itemCh:
-			queue = append(queue, item)
 		case <-ticker.C:
 			budget := p.pacingInterval.Milliseconds() * int64(float64(p.targetBitrate)/8000.0)
-			for len(queue) != 0 && budget > 0 {
-				p.log.Infof("pacer budget=%v, len(queue)=%v", budget, len(queue))
-				next := queue[0]
-				queue = queue[1:]
+			p.qLock.Lock()
+			for p.queue.Len() != 0 && budget > 0 {
+				p.log.Infof("pacer budget=%v, len(queue)=%v", budget, p.queue.Len())
+				next := p.queue.Remove(p.queue.Front()).(*item)
+				p.qLock.Unlock()
+
 				writer, ok := p.ssrcToWriter[next.header.SSRC]
 				if !ok {
 					p.log.Warnf("no writer found for ssrc: %v", next.header.SSRC)
+					p.pool.Put(next.payload)
+					p.qLock.Lock()
 					continue
 				}
+
 				n, err := writer.Write(next.header, (*next.payload)[:next.size], next.attributes)
 				p.log.Infof("pacer sent %v bytes", n)
 				if err != nil {
 					p.log.Errorf("failed to write packet: %v", err)
 				}
-				p.pool.Put(next.payload)
+
 				budget -= int64(n)
+
+				p.pool.Put(next.payload)
+				p.qLock.Lock()
 			}
+			p.qLock.Unlock()
 		}
 	}
 }
