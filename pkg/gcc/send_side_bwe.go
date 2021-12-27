@@ -49,6 +49,13 @@ func SendSideBWEInitialBitrate(rate int) SendSideBWEOption {
 	}
 }
 
+func SendSideBWEPacer(p Pacer) SendSideBWEOption {
+	return func(e *SendSideBWE) error {
+		e.Pacer = p
+		return nil
+	}
+}
+
 func NewSendSideBWE(opts ...SendSideBWEOption) (*SendSideBWE, error) {
 	e := &SendSideBWE{
 		lastBitrate:                  100_000,
