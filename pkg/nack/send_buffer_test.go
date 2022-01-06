@@ -4,20 +4,23 @@ import (
 	"testing"
 
 	"github.com/pion/rtp"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSendBuffer(t *testing.T) {
+	pm := newPacketManager()
 	for _, start := range []uint16{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 511, 512, 513, 32767, 32768, 32769, 65527, 65528, 65529, 65530, 65531, 65532, 65533, 65534, 65535} {
 		start := start
 
 		sb, err := newSendBuffer(8)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		add := func(nums ...uint16) {
 			for _, n := range nums {
 				seq := start + n
-				sb.add(&rtp.Packet{Header: rtp.Header{SequenceNumber: seq}})
+				pkt, err := pm.NewPacket(&rtp.Header{SequenceNumber: seq}, nil)
+				require.NoError(t, err)
+				sb.add(pkt)
 			}
 		}
 
@@ -30,9 +33,10 @@ func TestSendBuffer(t *testing.T) {
 					t.Errorf("packet not found: %d", seq)
 					continue
 				}
-				if packet.SequenceNumber != seq {
-					t.Errorf("packet for %d returned with incorrect SequenceNumber: %d", seq, packet.SequenceNumber)
+				if packet.Header().SequenceNumber != seq {
+					t.Errorf("packet for %d returned with incorrect SequenceNumber: %d", seq, packet.Header().SequenceNumber)
 				}
+				packet.Release()
 			}
 		}
 		assertNOTGet := func(nums ...uint16) {
@@ -41,7 +45,7 @@ func TestSendBuffer(t *testing.T) {
 				seq := start + n
 				packet := sb.get(seq)
 				if packet != nil {
-					t.Errorf("packet found for %d: %d", seq, packet.SequenceNumber)
+					t.Errorf("packet found for %d: %d", seq, packet.Header().SequenceNumber)
 				}
 			}
 		}
@@ -63,20 +67,52 @@ func TestSendBuffer(t *testing.T) {
 	}
 }
 
+func TestSendBuffer_Overridden(t *testing.T) {
+	// override original packet content and get
+	pm := newPacketManager()
+	sb, err := newSendBuffer(1)
+	require.NoError(t, err)
+	require.Equal(t, uint16(1), sb.size)
+
+	originalBytes := []byte("originalContent")
+	pkt, err := pm.NewPacket(&rtp.Header{SequenceNumber: 1}, originalBytes)
+	require.NoError(t, err)
+	sb.add(pkt)
+
+	// change payload
+	copy(originalBytes, "altered")
+	retrieved := sb.get(1)
+	require.NotNil(t, retrieved)
+	require.Equal(t, "originalContent", string(retrieved.Payload()))
+	retrieved.Release()
+	require.Equal(t, 1, retrieved.count)
+
+	// ensure original packet is released
+	pkt, err = pm.NewPacket(&rtp.Header{SequenceNumber: 2}, originalBytes)
+	require.NoError(t, err)
+	sb.add(pkt)
+	require.Equal(t, 0, retrieved.count)
+
+	require.Nil(t, sb.get(1))
+}
+
 // this test is only useful when being run with the race detector, it won't fail otherwise:
 //
 //     go test -race ./pkg/nack/
 func TestSendBuffer_Race(t *testing.T) {
+	pm := newPacketManager()
 	for _, start := range []uint16{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 511, 512, 513, 32767, 32768, 32769, 65527, 65528, 65529, 65530, 65531, 65532, 65533, 65534, 65535} {
 		start := start
 
 		sb, err := newSendBuffer(8)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		add := func(nums ...uint16) {
 			for _, n := range nums {
 				seq := start + n
-				sb.add(&rtp.Packet{Header: rtp.Header{SequenceNumber: seq}})
+				pkt, err := pm.NewPacket(&rtp.Header{SequenceNumber: seq}, nil)
+				require.NoError(t, err)
+				sb.add(pkt)
 			}
 		}
 

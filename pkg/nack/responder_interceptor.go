@@ -17,9 +17,10 @@ type ResponderInterceptorFactory struct {
 // NewInterceptor constructs a new ResponderInterceptor
 func (r *ResponderInterceptorFactory) NewInterceptor(id string) (interceptor.Interceptor, error) {
 	i := &ResponderInterceptor{
-		size:    8192,
-		log:     logging.NewDefaultLoggerFactory().NewLogger("nack_responder"),
-		streams: map[uint32]*localStream{},
+		size:      8192,
+		log:       logging.NewDefaultLoggerFactory().NewLogger("nack_responder"),
+		streams:   map[uint32]*localStream{},
+		packetMan: newPacketManager(),
 	}
 
 	for _, opt := range r.opts {
@@ -38,8 +39,9 @@ func (r *ResponderInterceptorFactory) NewInterceptor(id string) (interceptor.Int
 // ResponderInterceptor responds to nack feedback messages
 type ResponderInterceptor struct {
 	interceptor.NoOp
-	size uint16
-	log  logging.LeveledLogger
+	size      uint16
+	log       logging.LeveledLogger
+	packetMan *packetManager
 
 	streams   map[uint32]*localStream
 	streamsMu sync.Mutex
@@ -98,7 +100,11 @@ func (n *ResponderInterceptor) BindLocalStream(info *interceptor.StreamInfo, wri
 	n.streamsMu.Unlock()
 
 	return interceptor.RTPWriterFunc(func(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
-		sendBuffer.add(&rtp.Packet{Header: *header, Payload: payload})
+		pkt, err := n.packetMan.NewPacket(header, payload)
+		if err != nil {
+			return 0, err
+		}
+		sendBuffer.add(pkt)
 		return writer.Write(header, payload, attributes)
 	})
 }
@@ -121,9 +127,10 @@ func (n *ResponderInterceptor) resendPackets(nack *rtcp.TransportLayerNack) {
 	for i := range nack.Nacks {
 		nack.Nacks[i].Range(func(seq uint16) bool {
 			if p := stream.sendBuffer.get(seq); p != nil {
-				if _, err := stream.rtpWriter.Write(&p.Header, p.Payload, interceptor.Attributes{}); err != nil {
+				if _, err := stream.rtpWriter.Write(p.Header(), p.Payload(), interceptor.Attributes{}); err != nil {
 					n.log.Warnf("failed resending nacked packet: %+v", err)
 				}
+				p.Release()
 			}
 
 			return true
