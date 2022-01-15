@@ -115,7 +115,7 @@ func (p *LeakyBucketPacer) Run() {
 			budget := int(float64(now.Sub(lastSent).Milliseconds()) * float64(p.getTargetBitrate()) / 8000.0)
 			p.qLock.Lock()
 			for p.queue.Len() != 0 && budget > 0 {
-				p.log.Infof("budget=%v, len(queue)=%v, targetBitrate=%v", budget, p.queue.Len(), p.targetBitrate)
+				p.log.Infof("budget=%v, len(queue)=%v, targetBitrate=%v", budget, p.queue.Len(), p.getTargetBitrate())
 				next := p.queue.Remove(p.queue.Front()).(*item)
 				p.qLock.Unlock()
 
