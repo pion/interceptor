@@ -17,9 +17,7 @@ const TwccExtensionAttributesKey = iota
 var (
 	errMissingTWCCExtensionID = errors.New("missing transport layer cc header extension id")
 	errMissingTWCCExtension   = errors.New("missing transport layer cc header extension")
-	errUnknownFeedbackFormat  = errors.New("unknown feedback format")
-
-	errInvalidFeedback = errors.New("invalid feedback")
+	errInvalidFeedback        = errors.New("invalid feedback")
 )
 
 // FeedbackAdapter converts incoming RTCP Packets (TWCC and RFC8888) into Acknowledgments.
@@ -61,20 +59,6 @@ func (f *FeedbackAdapter) OnSent(ts time.Time, header *rtp.Header, size int, att
 		RTT:       0,
 	}
 	return nil
-}
-
-// OnFeedback converts incoming RTCP packet feedback to Acknowledgments.
-// Currently only TWCC is supported.
-func (f *FeedbackAdapter) OnFeedback(ts time.Time, feedback rtcp.Packet) ([]Acknowledgment, error) {
-	f.lock.Lock()
-	defer f.lock.Unlock()
-
-	switch fb := feedback.(type) {
-	case *rtcp.TransportLayerCC:
-		return f.onIncomingTransportCC(ts, fb)
-	default:
-		return nil, errUnknownFeedbackFormat
-	}
 }
 
 func (f *FeedbackAdapter) unpackRunLengthChunk(ts time.Time, start uint16, refTime time.Time, chunk *rtcp.RunLengthChunk, deltas []*rtcp.RecvDelta) (consumedDeltas int, nextRef time.Time, acks []Acknowledgment, err error) {
@@ -124,9 +108,13 @@ func (f *FeedbackAdapter) unpackStatusVectorChunk(ts time.Time, start uint16, re
 	return deltaIndex, refTime, result, nil
 }
 
-func (f *FeedbackAdapter) onIncomingTransportCC(ts time.Time, feedback *rtcp.TransportLayerCC) ([]Acknowledgment, error) {
-	result := []Acknowledgment{}
+// OnTransportCCFeedback converts incoming TWCC RTCP packet feedback to
+// Acknowledgments.
+func (f *FeedbackAdapter) OnTransportCCFeedback(ts time.Time, feedback *rtcp.TransportLayerCC) ([]Acknowledgment, error) {
+	f.lock.Lock()
+	defer f.lock.Unlock()
 
+	result := []Acknowledgment{}
 	index := feedback.BaseSequenceNumber
 	refTime := time.Time{}.Add(time.Duration(feedback.ReferenceTime) * 64 * time.Millisecond)
 	recvDeltas := feedback.RecvDeltas

@@ -469,7 +469,7 @@ func getPacketWithTransportCCExt(t *testing.T, sequenceNumber uint16) *rtp.Packe
 func TestFeedbackAdapterTWCC(t *testing.T) {
 	t.Run("empty", func(t *testing.T) {
 		adapter := NewFeedbackAdapter()
-		result, err := adapter.onIncomingTransportCC(time.Time{}, &rtcp.TransportLayerCC{})
+		result, err := adapter.OnTransportCCFeedback(time.Time{}, &rtcp.TransportLayerCC{})
 		assert.NoError(t, err)
 		assert.Empty(t, result)
 	})
@@ -483,7 +483,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 			headers = append(headers, pkt.Header)
 			assert.NoError(t, adapter.OnSent(t0, &pkt.Header, 1200, interceptor.Attributes{TwccExtensionAttributesKey: hdrExtID}))
 		}
-		results, err := adapter.OnFeedback(t0, &rtcp.TransportLayerCC{
+		results, err := adapter.OnTransportCCFeedback(t0, &rtcp.TransportLayerCC{
 			Header:             rtcp.Header{},
 			SenderSSRC:         0,
 			MediaSSRC:          0,
@@ -614,7 +614,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 	t.Run("doesNotCrashOnTooManyFeedbackReports", func(*testing.T) {
 		adapter := NewFeedbackAdapter()
 		assert.NotPanics(t, func() {
-			_, err := adapter.OnFeedback(time.Time{}, &rtcp.TransportLayerCC{
+			_, err := adapter.OnTransportCCFeedback(time.Time{}, &rtcp.TransportLayerCC{
 				Header:             rtcp.Header{},
 				SenderSSRC:         0,
 				MediaSSRC:          0,
@@ -657,7 +657,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		assert.NoError(t, adapter.OnSent(t0, &pkt65535.Header, 1200, interceptor.Attributes{TwccExtensionAttributesKey: hdrExtID}))
 		assert.NoError(t, adapter.OnSent(t0, &pkt0.Header, 1200, interceptor.Attributes{TwccExtensionAttributesKey: hdrExtID}))
 
-		results, err := adapter.OnFeedback(t0, &rtcp.TransportLayerCC{
+		results, err := adapter.OnTransportCCFeedback(t0, &rtcp.TransportLayerCC{
 			Header:             rtcp.Header{},
 			SenderSSRC:         0,
 			MediaSSRC:          0,
@@ -722,7 +722,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 			assert.NoError(t, adapter.OnSent(t0, &pkt.Header, 1200, interceptor.Attributes{TwccExtensionAttributesKey: hdrExtID}))
 		}
 
-		results, err := adapter.OnFeedback(t0, &rtcp.TransportLayerCC{
+		results, err := adapter.OnTransportCCFeedback(t0, &rtcp.TransportLayerCC{
 			Header:             rtcp.Header{},
 			SenderSSRC:         0,
 			MediaSSRC:          0,
@@ -790,7 +790,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 			pkt := getPacketWithTransportCCExt(t, i)
 			assert.NoError(t, adapter.OnSent(t0, &pkt.Header, 1200, interceptor.Attributes{TwccExtensionAttributesKey: hdrExtID}))
 		}
-		packets, err := adapter.OnFeedback(t0, &rtcp.TransportLayerCC{
+		packets, err := adapter.OnTransportCCFeedback(t0, &rtcp.TransportLayerCC{
 			Header:             rtcp.Header{},
 			SenderSSRC:         0,
 			MediaSSRC:          0,
@@ -831,7 +831,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 			pkt := getPacketWithTransportCCExt(t, i)
 			assert.NoError(t, adapter.OnSent(t0, &pkt.Header, 1200, interceptor.Attributes{TwccExtensionAttributesKey: hdrExtID}))
 		}
-		packets, err := adapter.OnFeedback(t0, &rtcp.TransportLayerCC{
+		packets, err := adapter.OnTransportCCFeedback(t0, &rtcp.TransportLayerCC{
 			Header:             rtcp.Header{},
 			SenderSSRC:         0,
 			MediaSSRC:          0,
@@ -890,7 +890,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		}
 
 		//nolint:dupl
-		packets, err := adapter.OnFeedback(t0, &rtcp.TransportLayerCC{
+		packets, err := adapter.OnTransportCCFeedback(t0, &rtcp.TransportLayerCC{
 			Header:             rtcp.Header{},
 			SenderSSRC:         0,
 			MediaSSRC:          0,
@@ -958,7 +958,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 
 		//nolint:dupl
 		assert.NotPanics(t, func() {
-			packets, err := adapter.OnFeedback(t0, &rtcp.TransportLayerCC{
+			packets, err := adapter.OnTransportCCFeedback(t0, &rtcp.TransportLayerCC{
 				Header:             rtcp.Header{},
 				SenderSSRC:         0,
 				MediaSSRC:          0,
