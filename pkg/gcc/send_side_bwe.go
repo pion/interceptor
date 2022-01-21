@@ -132,12 +132,14 @@ func (e *SendSideBWE) AddStream(info *interceptor.StreamInfo, writer interceptor
 // WriteRTCP adds some RTCP feedback to the bandwidth estimator
 func (e *SendSideBWE) WriteRTCP(pkts []rtcp.Packet, attributes interceptor.Attributes) error {
 	for _, pkt := range pkts {
-		acks, err := e.feedbackAdapter.OnFeedback(time.Now(), pkt)
-		if err != nil {
-			return err
+		if fb, ok := pkt.(*rtcp.TransportLayerCC); ok {
+			acks, err := e.feedbackAdapter.OnTransportCCFeedback(time.Now(), fb)
+			if err != nil {
+				return err
+			}
+			e.lossController.updateLossEstimate(acks)
+			e.delayController.updateDelayEstimate(acks)
 		}
-		e.lossController.updateLossEstimate(acks)
-		e.delayController.updateDelayEstimate(acks)
 	}
 	return nil
 }
