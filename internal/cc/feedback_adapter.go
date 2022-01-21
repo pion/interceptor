@@ -15,8 +15,9 @@ import (
 const TwccExtensionAttributesKey = iota
 
 var (
-	errMissingTWCCExtension  = errors.New("missing transport layer cc header extension")
-	errUnknownFeedbackFormat = errors.New("unknown feedback format")
+	errMissingTWCCExtensionID = errors.New("missing transport layer cc header extension id")
+	errMissingTWCCExtension   = errors.New("missing transport layer cc header extension")
+	errUnknownFeedbackFormat  = errors.New("unknown feedback format")
 
 	errInvalidFeedback = errors.New("invalid feedback")
 )
@@ -41,13 +42,13 @@ func (f *FeedbackAdapter) OnSent(ts time.Time, header *rtp.Header, size int, att
 	hdrExtensionID := attributes.Get(TwccExtensionAttributesKey)
 	id, ok := hdrExtensionID.(uint8)
 	if !ok || hdrExtensionID == 0 {
-		return errMissingTWCCExtension
+		return errMissingTWCCExtensionID
 	}
 	sequenceNumber := header.GetExtension(id)
 	var tccExt rtp.TransportCCExtension
 	err := tccExt.Unmarshal(sequenceNumber)
 	if err != nil {
-		return err
+		return errMissingTWCCExtension
 	}
 
 	f.lock.Lock()
