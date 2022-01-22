@@ -144,7 +144,7 @@ func (e *SendSideBWE) WriteRTCP(pkts []rtcp.Packet, attributes interceptor.Attri
 	return nil
 }
 
-// GetTargetBitrate returns the current target bitrate
+// GetTargetBitrate returns the current target bitrate in bits per second
 func (e *SendSideBWE) GetTargetBitrate() int {
 	e.lock.Lock()
 	defer e.lock.Unlock()
@@ -171,7 +171,7 @@ func (e *SendSideBWE) GetStats() map[string]interface{} {
 }
 
 // OnTargetBitrateChange sets the callback that is called when the target
-// bitrate changes
+// bitrate in bits per second changes
 func (e *SendSideBWE) OnTargetBitrateChange(f func(bitrate int)) {
 	e.onTargetBitrateChange = f
 }
