@@ -60,6 +60,22 @@ func (m *packetManager) releasePacket(header *rtp.Header, payload *[]byte) {
 	}
 }
 
+type noOpPacketFactory struct {
+}
+
+func (f *noOpPacketFactory) NewPacket(header *rtp.Header, payload []byte) (*retainablePacket, error) {
+	return &retainablePacket{
+		onRelease: f.releasePacket,
+		count:     1,
+		header:    header,
+		payload:   payload,
+	}, nil
+}
+
+func (f *noOpPacketFactory) releasePacket(header *rtp.Header, payload *[]byte) {
+	// no-op
+}
+
 type retainablePacket struct {
 	onRelease func(*rtp.Header, *[]byte)
 
