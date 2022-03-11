@@ -32,7 +32,7 @@ type LeakyBucketPacer struct {
 	done  chan struct{}
 
 	ssrcToWriter map[uint32]interceptor.RTPWriter
-	writerLock   sync.Mutex
+	writerLock   sync.RWMutex
 
 	pool *sync.Pool
 }
@@ -119,7 +119,9 @@ func (p *LeakyBucketPacer) Run() {
 				next := p.queue.Remove(p.queue.Front()).(*item)
 				p.qLock.Unlock()
 
+				p.writerLock.RLock()
 				writer, ok := p.ssrcToWriter[next.header.SSRC]
+				p.writerLock.RUnlock()
 				if !ok {
 					p.log.Warnf("no writer found for ssrc: %v", next.header.SSRC)
 					p.pool.Put(next.payload)
