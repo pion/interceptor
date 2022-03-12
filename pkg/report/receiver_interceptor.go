@@ -100,11 +100,7 @@ func (r *ReceiverInterceptor) loop(rtcpWriter interceptor.RTCPWriter) {
 			r.streams.Range(func(key, value interface{}) bool {
 				stream := value.(*receiverStream)
 
-				var pkts []rtcp.Packet
-
-				pkts = append(pkts, stream.generateReport(now))
-
-				if _, err := rtcpWriter.Write(pkts, interceptor.Attributes{}); err != nil {
+				if _, err := rtcpWriter.Write([]rtcp.Packet{stream.generateReport(now)}, interceptor.Attributes{}); err != nil {
 					r.log.Warnf("failed sending: %+v", err)
 				}
 
