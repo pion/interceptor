@@ -5,6 +5,7 @@
 # see `.github/generate-authors.sh` for the scripting
 Adam Kiss <masterada@gmail.com>
 adamroach <adam@nostrum.com>
+Aditya Kumar <k.aditya00@gmail.com>
 aler9 <46489434+aler9@users.noreply.github.com>
 Antoine Baché <antoine@tenten.app>
 Atsushi Watanabe <atsushi.w@ieee.org>
