@@ -105,6 +105,7 @@ func (p *LeakyBucketPacer) Write(header *rtp.Header, payload []byte, attributes 
 // Run starts the LeakyBucketPacer
 func (p *LeakyBucketPacer) Run() {
 	ticker := time.NewTicker(p.pacingInterval)
+	defer ticker.Stop()
 
 	lastSent := time.Now()
 	for {
