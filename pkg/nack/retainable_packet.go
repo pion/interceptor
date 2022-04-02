@@ -60,8 +60,7 @@ func (m *packetManager) releasePacket(header *rtp.Header, payload *[]byte) {
 	}
 }
 
-type noOpPacketFactory struct {
-}
+type noOpPacketFactory struct{}
 
 func (f *noOpPacketFactory) NewPacket(header *rtp.Header, payload []byte) (*retainablePacket, error) {
 	return &retainablePacket{
