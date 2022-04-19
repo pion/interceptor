@@ -80,7 +80,7 @@ func (f *noOpPacketFactory) NewPacket(header *rtp.Header, payload []byte) (*reta
 	}, nil
 }
 
-func (f *noOpPacketFactory) releasePacket(header *rtp.Header, payload *[]byte) {
+func (f *noOpPacketFactory) releasePacket(*rtp.Header, *[]byte) {
 	// no-op
 }
 

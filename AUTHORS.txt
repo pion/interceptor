@@ -15,8 +15,10 @@ boks1971 <raja.gobi@tutanota.com>
 David Zhao <david@davidzhao.com>
 Jonathan Müller <jonathan@fotokite.com>
 Kevin Caffrey <kcaffrey@gmail.com>
+Maksim Nesterov <msnesterov@avito.ru>
 Mathis Engelbart <mathis.engelbart@gmail.com>
 Sean DuBois <sean@siobud.com>
+ziminghua <565209960@qq.com>
 
 # List of contributors not appearing in Git history
 

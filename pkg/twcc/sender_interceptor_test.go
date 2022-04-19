@@ -8,6 +8,7 @@ import (
 	"github.com/pion/interceptor/internal/test"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
+	transportTest "github.com/pion/transport/v2/test"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -264,4 +265,38 @@ func TestSenderInterceptor(t *testing.T) {
 			},
 		}, cc.PacketChunks)
 	})
+}
+
+func TestSenderInterceptor_Leak(t *testing.T) {
+	lim := transportTest.TimeOut(time.Second * 10)
+	defer lim.Stop()
+
+	report := transportTest.CheckRoutines(t)
+	defer report()
+
+	f, err := NewSenderInterceptor(SendInterval(200 * time.Millisecond))
+	assert.NoError(t, err)
+
+	i, err := f.NewInterceptor("")
+	assert.NoError(t, err)
+
+	stream := test.NewMockStream(&interceptor.StreamInfo{RTPHeaderExtensions: []interceptor.RTPHeaderExtension{
+		{
+			URI: transportCCURI,
+			ID:  1,
+		},
+	}}, i)
+	defer func() {
+		assert.NoError(t, stream.Close())
+	}()
+
+	assert.NoError(t, i.Close())
+	for _, i := range []int{0, 1, 2, 3, 4, 5} {
+		hdr := rtp.Header{}
+		tcc, err := (&rtp.TransportCCExtension{TransportSequence: uint16(i)}).Marshal()
+		assert.NoError(t, err)
+
+		assert.NoError(t, hdr.SetExtension(1, tcc))
+		stream.ReceiveRTP(&rtp.Packet{Header: hdr})
+	}
 }

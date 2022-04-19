@@ -15,7 +15,7 @@ type ReceiverInterceptorFactory struct {
 }
 
 // NewInterceptor constructs a new ReceiverInterceptor
-func (r *ReceiverInterceptorFactory) NewInterceptor(id string) (interceptor.Interceptor, error) {
+func (r *ReceiverInterceptorFactory) NewInterceptor(string) (interceptor.Interceptor, error) {
 	i := &ReceiverInterceptor{
 		interval: 1 * time.Second,
 		now:      time.Now,

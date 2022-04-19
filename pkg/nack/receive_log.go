@@ -127,8 +127,11 @@ func (s *receiveLog) getReceived(seq uint16) bool {
 
 func (s *receiveLog) fixLastConsecutive() {
 	i := s.lastConsecutive + 1
+
+	// nolint:revive
 	for ; i != s.end+1 && s.getReceived(i); i++ {
 		// find all consecutive packets
 	}
+
 	s.lastConsecutive = i - 1
 }

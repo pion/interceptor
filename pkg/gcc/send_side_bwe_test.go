@@ -19,7 +19,7 @@ type mockTWCCResponder struct {
 	rtpChan chan []byte
 }
 
-func (m *mockTWCCResponder) Read(out []byte, attributes interceptor.Attributes) (int, interceptor.Attributes, error) {
+func (m *mockTWCCResponder) Read(out []byte, _ interceptor.Attributes) (int, interceptor.Attributes, error) {
 	pkt := <-m.rtpChan
 	copy(out, pkt)
 	return len(pkt), nil, nil
@@ -35,7 +35,7 @@ type mockGCCWriteStream struct {
 	twccResponder *mockTWCCResponder
 }
 
-func (m *mockGCCWriteStream) Write(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
+func (m *mockGCCWriteStream) Write(header *rtp.Header, payload []byte, _ interceptor.Attributes) (int, error) {
 	pkt, err := (&rtp.Packet{Header: *header, Payload: payload}).Marshal()
 	if err != nil {
 		panic(err)
@@ -125,12 +125,10 @@ func BenchmarkSendSideBWE_WriteRTCP(b *testing.B) {
 				for j := 0; j < seqs; j++ {
 					seq++
 
-					if rand.Intn(5) == 0 { //nolint:gosec,staticcheck
-						// skip this packet
+					if rand.Intn(5) != 0 { //nolint:gosec,staticcheck
+						arrivalTime += int64(rtcp.TypeTCCDeltaScaleFactor * (rand.Intn(128) + 1)) //nolint:gosec
+						r.Record(5000, seq, arrivalTime)
 					}
-
-					arrivalTime += int64(rtcp.TypeTCCDeltaScaleFactor * (rand.Intn(128) + 1)) //nolint:gosec
-					r.Record(5000, seq, arrivalTime)
 				}
 
 				rtcpPackets := r.BuildFeedbackPacket()
