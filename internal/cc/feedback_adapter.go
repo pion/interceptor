@@ -136,7 +136,7 @@ func (f *FeedbackAdapter) unpackStatusVectorChunk(start uint16, refTime time.Tim
 
 // OnTransportCCFeedback converts incoming TWCC RTCP packet feedback to
 // Acknowledgments.
-func (f *FeedbackAdapter) OnTransportCCFeedback(ts time.Time, feedback *rtcp.TransportLayerCC) ([]Acknowledgment, error) {
+func (f *FeedbackAdapter) OnTransportCCFeedback(_ time.Time, feedback *rtcp.TransportLayerCC) ([]Acknowledgment, error) {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 
@@ -175,7 +175,7 @@ func (f *FeedbackAdapter) OnTransportCCFeedback(ts time.Time, feedback *rtcp.Tra
 
 // OnRFC8888Feedback converts incoming Congestion Control Feedback RTCP packet
 // to Acknowledgments.
-func (f *FeedbackAdapter) OnRFC8888Feedback(ts time.Time, feedback *rtcp.CCFeedbackReport) []Acknowledgment {
+func (f *FeedbackAdapter) OnRFC8888Feedback(_ time.Time, feedback *rtcp.CCFeedbackReport) []Acknowledgment {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 

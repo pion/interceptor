@@ -182,7 +182,7 @@ func TestReceiverInterceptor(t *testing.T) {
 		assert.Equal(t, 1, len(rr.Reports))
 		assert.Equal(t, rtcp.ReceptionReport{
 			SSRC:               uint32(123456),
-			LastSequenceNumber: 1<<16 | 0x0000,
+			LastSequenceNumber: 1 << 16,
 			LastSenderReport:   0,
 			FractionLost:       0,
 			TotalLost:          0,

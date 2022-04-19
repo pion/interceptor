@@ -113,7 +113,7 @@ func TestResponderInterceptor_DisableCopy(t *testing.T) {
 
 // this test is only useful when being run with the race detector, it won't fail otherwise:
 //
-//     go test -race ./pkg/nack/
+// go test -race ./pkg/nack/
 func TestResponderInterceptor_Race(t *testing.T) {
 	f, err := NewResponderInterceptor(
 		ResponderSize(32768),

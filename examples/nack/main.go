@@ -1,3 +1,4 @@
+// Package demonstrates how to use the NACK interceptor
 package main
 
 import (

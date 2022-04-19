@@ -17,7 +17,7 @@ func NewReceiverInterceptor(opts ...PacketDumperOption) (*ReceiverInterceptorFac
 }
 
 // NewInterceptor returns a new ReceiverInterceptor interceptor.
-func (r *ReceiverInterceptorFactory) NewInterceptor(id string) (interceptor.Interceptor, error) {
+func (r *ReceiverInterceptorFactory) NewInterceptor(string) (interceptor.Interceptor, error) {
 	dumper, err := NewPacketDumper(r.opts...)
 	if err != nil {
 		return nil, err
@@ -38,7 +38,7 @@ type ReceiverInterceptor struct {
 
 // BindRemoteStream lets you modify any incoming RTP packets. It is called once for per RemoteStream. The returned method
 // will be called once per rtp packet.
-func (r *ReceiverInterceptor) BindRemoteStream(info *interceptor.StreamInfo, reader interceptor.RTPReader) interceptor.RTPReader {
+func (r *ReceiverInterceptor) BindRemoteStream(_ *interceptor.StreamInfo, reader interceptor.RTPReader) interceptor.RTPReader {
 	return interceptor.RTPReaderFunc(func(bytes []byte, attributes interceptor.Attributes) (int, interceptor.Attributes, error) {
 		i, attr, err := reader.Read(bytes, attributes)
 		if err != nil {
