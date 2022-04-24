@@ -2,6 +2,7 @@
 package test
 
 import (
+	"errors"
 	"io"
 
 	"github.com/pion/interceptor"
@@ -105,7 +106,7 @@ func NewMockStream(info *interceptor.StreamInfo, i interceptor.Interceptor) *Moc
 		for {
 			i, _, err := s.rtcpReader.Read(buf, interceptor.Attributes{})
 			if err != nil {
-				if err != io.EOF {
+				if !errors.Is(err, io.EOF) {
 					s.rtcpInModified <- RTCPWithError{Err: err}
 				}
 				return
@@ -125,7 +126,7 @@ func NewMockStream(info *interceptor.StreamInfo, i interceptor.Interceptor) *Moc
 		for {
 			i, _, err := s.rtpReader.Read(buf, interceptor.Attributes{})
 			if err != nil {
-				if err != io.EOF {
+				if errors.Is(err, io.EOF) {
 					s.rtpInModified <- RTPWithError{Err: err}
 				}
 				return

@@ -8,6 +8,18 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func rtcpToTwcc(t *testing.T, in []rtcp.Packet) []*rtcp.TransportLayerCC {
+	out := make([]*rtcp.TransportLayerCC, len(in))
+	var ok bool
+	for i, pkt := range in {
+		if out[i], ok = pkt.(*rtcp.TransportLayerCC); !ok {
+			t.Fatal("Failed to cast")
+		}
+	}
+
+	return out
+}
+
 func Test_chunk_add(t *testing.T) {
 	t.Run("fill with not received", func(t *testing.T) {
 		c := &chunk{}
@@ -416,7 +428,7 @@ func TestBuildFeedbackPacket(t *testing.T) {
 			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: rtcp.TypeTCCDeltaScaleFactor},
 			{Type: rtcp.TypeTCCPacketReceivedLargeDelta, Delta: rtcp.TypeTCCDeltaScaleFactor * 256},
 		},
-	}, rtcpPackets[0].(*rtcp.TransportLayerCC))
+	}, rtcpToTwcc(t, rtcpPackets)[0])
 	marshalAll(t, rtcpPackets)
 }
 
@@ -475,7 +487,7 @@ func TestBuildFeedbackPacket_Rolling(t *testing.T) {
 			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: rtcp.TypeTCCDeltaScaleFactor},
 			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: rtcp.TypeTCCDeltaScaleFactor},
 		},
-	}, rtcpPackets[0].(*rtcp.TransportLayerCC))
+	}, rtcpToTwcc(t, rtcpPackets)[0])
 	marshalAll(t, rtcpPackets)
 }
 
@@ -490,7 +502,7 @@ func TestBuildFeedbackPacketCount(t *testing.T) {
 	pkts := r.BuildFeedbackPacket()
 	assert.Len(t, pkts, 1)
 
-	twcc := pkts[0].(*rtcp.TransportLayerCC)
+	twcc := rtcpToTwcc(t, pkts)[0]
 	assert.Equal(t, uint8(0), twcc.FbPktCount)
 
 	addRun(t, r, []uint16{0}, []int64{
@@ -500,7 +512,7 @@ func TestBuildFeedbackPacketCount(t *testing.T) {
 	pkts = r.BuildFeedbackPacket()
 	assert.Len(t, pkts, 1)
 
-	twcc = pkts[0].(*rtcp.TransportLayerCC)
+	twcc = rtcpToTwcc(t, pkts)[0]
 	assert.Equal(t, uint8(1), twcc.FbPktCount)
 }
 
@@ -544,7 +556,7 @@ func TestDuplicatePackets(t *testing.T) {
 			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
 			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
 		},
-	}, rtcpPackets[0].(*rtcp.TransportLayerCC))
+	}, rtcpToTwcc(t, rtcpPackets)[0])
 	marshalAll(t, rtcpPackets)
 }
 
@@ -569,7 +581,7 @@ func TestShortDeltas(t *testing.T) {
 		rtcpPackets := r.BuildFeedbackPacket()
 		assert.Equal(t, 1, len(rtcpPackets))
 
-		pkt := rtcpPackets[0].(*rtcp.TransportLayerCC)
+		pkt := rtcpToTwcc(t, rtcpPackets)[0]
 		bs, err := pkt.Marshal()
 		unmarshalled := &rtcp.TransportLayerCC{}
 		assert.NoError(t, err)
@@ -632,7 +644,7 @@ func TestShortDeltas(t *testing.T) {
 		rtcpPackets := r.BuildFeedbackPacket()
 		assert.Equal(t, 1, len(rtcpPackets))
 
-		pkt := rtcpPackets[0].(*rtcp.TransportLayerCC)
+		pkt := rtcpToTwcc(t, rtcpPackets)[0]
 		bs, err := pkt.Marshal()
 		unmarshalled := &rtcp.TransportLayerCC{}
 		assert.NoError(t, err)
@@ -690,7 +702,7 @@ func TestReorderedPackets(t *testing.T) {
 	rtcpPackets := r.BuildFeedbackPacket()
 	assert.Equal(t, 1, len(rtcpPackets))
 
-	pkt := rtcpPackets[0].(*rtcp.TransportLayerCC)
+	pkt := rtcpToTwcc(t, rtcpPackets)[0]
 	bs, err := pkt.Marshal()
 	unmarshalled := &rtcp.TransportLayerCC{}
 	assert.NoError(t, err)
