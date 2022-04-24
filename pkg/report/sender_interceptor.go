@@ -99,9 +99,9 @@ func (s *SenderInterceptor) loop(rtcpWriter interceptor.RTCPWriter) {
 		case <-ticker.C:
 			now := s.now()
 			s.streams.Range(func(key, value interface{}) bool {
-				stream := value.(*senderStream)
-
-				if _, err := rtcpWriter.Write([]rtcp.Packet{stream.generateReport(now)}, interceptor.Attributes{}); err != nil {
+				if stream, ok := value.(*senderStream); !ok {
+					s.log.Warnf("failed to cast SenderInterceptor stream")
+				} else if _, err := rtcpWriter.Write([]rtcp.Packet{stream.generateReport(now)}, interceptor.Attributes{}); err != nil {
 					s.log.Warnf("failed sending: %+v", err)
 				}
 

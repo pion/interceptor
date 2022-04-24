@@ -2,6 +2,7 @@ package gcc
 
 import (
 	"container/list"
+	"errors"
 	"sync"
 	"time"
 
@@ -9,6 +10,8 @@ import (
 	"github.com/pion/logging"
 	"github.com/pion/rtp"
 )
+
+var errLeakyBucketPacerPoolCastFailed = errors.New("failed to access leaky bucket pacer pool, cast failed")
 
 type item struct {
 	header     *rtp.Header
@@ -86,7 +89,11 @@ func (p *LeakyBucketPacer) getTargetBitrate() int {
 // Write sends a packet with header and payload the a previously registered
 // stream.
 func (p *LeakyBucketPacer) Write(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
-	buf := p.pool.Get().(*[]byte)
+	buf, ok := p.pool.Get().(*[]byte)
+	if !ok {
+		return 0, errLeakyBucketPacerPoolCastFailed
+	}
+
 	copy(*buf, payload)
 	hdr := header.Clone()
 
@@ -117,8 +124,12 @@ func (p *LeakyBucketPacer) Run() {
 			p.qLock.Lock()
 			for p.queue.Len() != 0 && budget > 0 {
 				p.log.Infof("budget=%v, len(queue)=%v, targetBitrate=%v", budget, p.queue.Len(), p.getTargetBitrate())
-				next := p.queue.Remove(p.queue.Front()).(*item)
+				next, ok := p.queue.Remove(p.queue.Front()).(*item)
 				p.qLock.Unlock()
+				if !ok {
+					p.log.Warnf("failed to access leaky bucket pacer queue, cast failed")
+					continue
+				}
 
 				p.writerLock.RLock()
 				writer, ok := p.ssrcToWriter[next.header.SSRC]
