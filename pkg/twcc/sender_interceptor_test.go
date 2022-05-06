@@ -29,17 +29,12 @@ func TestSenderInterceptor(t *testing.T) {
 			assert.NoError(t, stream.Close())
 		}()
 
-		pkts := <-stream.WrittenRTCP()
-		assert.Equal(t, 1, len(pkts))
-		tlcc, ok := pkts[0].(*rtcp.TransportLayerCC)
-		assert.True(t, ok)
-		assert.Equal(t, uint16(0), tlcc.PacketStatusCount)
-		assert.Equal(t, uint8(0), tlcc.FbPktCount)
-		assert.Equal(t, uint16(0), tlcc.BaseSequenceNumber)
-		assert.Equal(t, uint32(0), tlcc.MediaSSRC)
-		assert.Equal(t, uint32(0), tlcc.ReferenceTime)
-		assert.Equal(t, 0, len(tlcc.RecvDeltas))
-		assert.Equal(t, 0, len(tlcc.PacketChunks))
+		var pkts []rtcp.Packet
+		select {
+		case pkts = <-stream.WrittenRTCP():
+		case <-time.After(300 * time.Millisecond): // wait longer than default interval
+		}
+		assert.Equal(t, 0, len(pkts))
 	})
 
 	t.Run("after RTP packets", func(t *testing.T) {
