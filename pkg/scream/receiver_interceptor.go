@@ -25,7 +25,6 @@ func (f *ReceiverInterceptorFactory) NewInterceptor(id string) (interceptor.Inte
 		log:      logging.NewDefaultLoggerFactory().NewLogger("scream_receiver"),
 		screamRx: map[uint32]*scream.Rx{},
 		receive:  make(chan *rtp.Packet),
-		t0:       getNTPT0(),
 	}
 	for _, opt := range f.opts {
 		if err := opt(r); err != nil {
@@ -52,12 +51,10 @@ type ReceiverInterceptor struct {
 	screamRxMu sync.Mutex
 	interval   time.Duration
 	receive    chan *rtp.Packet
-
-	t0 float64
 }
 
 func (r *ReceiverInterceptor) getTimeNTP(t time.Time) uint64 {
-	return getTimeBetweenNTP(r.t0, t)
+	return uint64(ntpTime32(t))
 }
 
 // BindRTCPWriter lets you modify any outgoing RTCP packets. It is called once per PeerConnection. The returned method
@@ -128,6 +125,20 @@ func (r *ReceiverInterceptor) Close() error {
 
 func (r *ReceiverInterceptor) loop(rtcpWriter interceptor.RTCPWriter) {
 	defer r.wg.Done()
+
+	select {
+	case <-r.close:
+		return
+	case pkt := <-r.receive:
+		t := r.getTimeNTP(time.Now())
+
+		r.screamRxMu.Lock()
+		if rx, ok := r.screamRx[pkt.SSRC]; ok {
+			//fmt.Printf("receive pkt %v at t=%v\n", pkt.SequenceNumber, t)
+			rx.Receive(t, pkt.SSRC, pkt.MarshalSize(), pkt.SequenceNumber, 0)
+		}
+		r.screamRxMu.Unlock()
+	}
 
 	ticker := time.NewTicker(r.interval)
 	defer ticker.Stop()

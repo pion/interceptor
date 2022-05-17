@@ -66,7 +66,6 @@ func (f *SenderInterceptorFactory) NewInterceptor(id string) (interceptor.Interc
 		minBitrate:     1_000,
 		initialBitrate: 100_000,
 		maxBitrate:     2048000000,
-		t0:             getNTPT0(),
 	}
 	for _, opt := range f.opts {
 		if err := opt(s); err != nil {
@@ -95,12 +94,10 @@ type SenderInterceptor struct {
 	minBitrate     float64
 	initialBitrate float64
 	maxBitrate     float64
-
-	t0 float64
 }
 
 func (s *SenderInterceptor) getTimeNTP(t time.Time) uint64 {
-	return getTimeBetweenNTP(s.t0, t)
+	return uint64(ntpTime32(t))
 }
 
 // BindRTCPReader lets you modify any incoming RTCP packets. It is called once per sender/receiver, however this might
@@ -120,8 +117,14 @@ func (s *SenderInterceptor) BindRTCPReader(reader interceptor.RTCPReader) interc
 
 		t := s.getTimeNTP(time.Now())
 		for _, pkt := range pkts {
-			packet, ok := pkt.(*rtcp.RawPacket)
-			if !ok {
+
+			var ssrcs []uint32
+			switch report := pkt.(type) {
+			case *rtcp.RawPacket:
+				ssrcs = extractSSRCs(*report)
+			case *rtcp.CCFeedbackReport:
+				ssrcs = extractSSRCsReport(report)
+			default:
 				s.log.Info("got incorrect packet type, skipping feedback")
 				continue
 			}
@@ -129,8 +132,6 @@ func (s *SenderInterceptor) BindRTCPReader(reader interceptor.RTCPReader) interc
 			s.m.Lock()
 			s.tx.IncomingStandardizedFeedback(t, b[:n])
 			s.m.Unlock()
-
-			ssrcs := extractSSRCs(*packet)
 
 			for _, ssrc := range ssrcs {
 				s.rtpStreamsMu.Lock()
@@ -143,6 +144,14 @@ func (s *SenderInterceptor) BindRTCPReader(reader interceptor.RTCPReader) interc
 
 		return n, attr, nil
 	})
+}
+
+func extractSSRCsReport(report *rtcp.CCFeedbackReport) []uint32 {
+	ssrcs := make([]uint32, len(report.ReportBlocks))
+	for i, block := range report.ReportBlocks {
+		ssrcs[i] = block.MediaSSRC
+	}
+	return ssrcs
 }
 
 func extractSSRCs(packet []byte) []uint32 {
@@ -218,7 +227,7 @@ func (s *SenderInterceptor) BindLocalStream(info *interceptor.StreamInfo, writer
 		//fmt.Printf("newMediaFrame at t=%v\n", t)
 		s.tx.NewMediaFrame(t, header.SSRC, size)
 		s.m.Unlock()
-		localStream.newFeedback <- struct{}{}
+		localStream.newFrame <- struct{}{}
 		return size, nil
 	})
 }

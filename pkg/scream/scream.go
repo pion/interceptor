@@ -17,18 +17,13 @@ func streamSupportSCReAM(info *interceptor.StreamInfo) bool {
 	return false
 }
 
-func getNTPT0() float64 {
-	now := time.Now()
-	secs := now.Unix()
-	usecs := now.UnixMicro() - secs*1e6
-	return (float64(secs) + float64(usecs)*1e-6) - 1e-3
-}
+func ntpTime32(t time.Time) uint32 {
+	// seconds since 1st January 1900
+	s := (float64(t.UnixNano()) / 1000000000.0) + 2208988800
 
-func getTimeBetweenNTP(t0 float64, tx time.Time) uint64 {
-	secs := tx.Unix()
-	usecs := tx.UnixMicro() - secs*1e6
-	tt := (float64(secs) + float64(usecs)*1e-6) - t0
-	ntp64 := uint64(tt * 65536.0)
-	ntp := 0xFFFFFFFF & ntp64
-	return ntp
+	integerPart := uint32(s)
+	fractionalPart := uint32((s - float64(integerPart)) * 0xFFFFFFFF)
+
+	// higher 32 bits are the integer part, lower 32 bits are the fractional part
+	return uint32(((uint64(integerPart)<<32 | uint64(fractionalPart)) >> 16) & 0xFFFFFFFF)
 }
