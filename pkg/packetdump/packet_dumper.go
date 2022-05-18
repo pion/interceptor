@@ -65,19 +65,25 @@ func NewPacketDumper(opts ...PacketDumperOption) (*PacketDumper, error) {
 }
 
 func (d *PacketDumper) logRTPPacket(header *rtp.Header, payload []byte, attributes interceptor.Attributes) {
-	d.rtpChan <- &rtpDump{
+	select {
+	case d.rtpChan <- &rtpDump{
 		attributes: attributes,
 		packet: &rtp.Packet{
 			Header:  *header,
 			Payload: payload,
 		},
+	}:
+	case <-d.close:
 	}
 }
 
 func (d *PacketDumper) logRTCPPackets(pkts []rtcp.Packet, attributes interceptor.Attributes) {
-	d.rtcpChan <- &rtcpDump{
+	select {
+	case d.rtcpChan <- &rtcpDump{
 		attributes: attributes,
 		packets:    pkts,
+	}:
+	case <-d.close:
 	}
 }
 
