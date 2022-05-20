@@ -90,3 +90,16 @@ func TestSendSideBWE(t *testing.T) {
 	// Sending a stream with zero loss and no RTT should increase estimate
 	require.Less(t, latestBitrate, bwe.GetTargetBitrate())
 }
+
+func TestSendSideBWE_ErrorOnWriteRTCPAtClosedState(t *testing.T) {
+	bwe, err := NewSendSideBWE()
+	require.NoError(t, err)
+	require.NotNil(t, bwe)
+
+	pkts := []rtcp.Packet{&rtcp.TransportLayerCC{}}
+	require.NoError(t, bwe.WriteRTCP(pkts, nil))
+	require.Equal(t, bwe.IsClosed(), false)
+	require.NoError(t, bwe.Close())
+	require.ErrorIs(t, bwe.WriteRTCP(pkts, nil), ErrSendSideBWEClosed)
+	require.Equal(t, bwe.IsClosed(), true)
+}
