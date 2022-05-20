@@ -1,6 +1,7 @@
 package gcc
 
 import (
+	"errors"
 	"sync"
 	"time"
 
@@ -16,6 +17,9 @@ const (
 	minBitrate     = 5_000
 	maxBitrate     = 50_000_000
 )
+
+// ErrSendSideBWEClosed is raised when SendSideBWE.WriteRTCP is called after SendSideBWE.Close
+var ErrSendSideBWEClosed = errors.New("SendSideBwe closed")
 
 // Pacer is the interface implemented by packet pacers
 type Pacer interface {
@@ -131,6 +135,10 @@ func (e *SendSideBWE) AddStream(info *interceptor.StreamInfo, writer interceptor
 
 // WriteRTCP adds some RTCP feedback to the bandwidth estimator
 func (e *SendSideBWE) WriteRTCP(pkts []rtcp.Packet, attributes interceptor.Attributes) error {
+	if e.IsClosed() {
+		return ErrSendSideBWEClosed
+	}
+
 	for _, pkt := range pkts {
 		if fb, ok := pkt.(*rtcp.TransportLayerCC); ok {
 			acks, err := e.feedbackAdapter.OnTransportCCFeedback(time.Now(), fb)
@@ -174,6 +182,16 @@ func (e *SendSideBWE) GetStats() map[string]interface{} {
 // bitrate in bits per second changes
 func (e *SendSideBWE) OnTargetBitrateChange(f func(bitrate int)) {
 	e.onTargetBitrateChange = f
+}
+
+// IsClosed returns true if SendSideBWE is closed
+func (e *SendSideBWE) IsClosed() bool {
+	select {
+	case <-e.close:
+		return true
+	default:
+		return false
+	}
 }
 
 // Close stops and closes the bandwidth estimator
