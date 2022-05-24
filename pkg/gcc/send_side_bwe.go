@@ -50,7 +50,8 @@ type SendSideBWE struct {
 	minBitrate    int
 	maxBitrate    int
 
-	close chan struct{}
+	close     chan struct{}
+	closeLock sync.RWMutex
 }
 
 // Option configures a bandwidth estimator
@@ -135,7 +136,10 @@ func (e *SendSideBWE) AddStream(info *interceptor.StreamInfo, writer interceptor
 
 // WriteRTCP adds some RTCP feedback to the bandwidth estimator
 func (e *SendSideBWE) WriteRTCP(pkts []rtcp.Packet, attributes interceptor.Attributes) error {
-	if e.IsClosed() {
+	e.closeLock.RLock()
+	defer e.closeLock.RUnlock()
+
+	if e.isClosed() {
 		return ErrSendSideBWEClosed
 	}
 
@@ -184,8 +188,8 @@ func (e *SendSideBWE) OnTargetBitrateChange(f func(bitrate int)) {
 	e.onTargetBitrateChange = f
 }
 
-// IsClosed returns true if SendSideBWE is closed
-func (e *SendSideBWE) IsClosed() bool {
+// isClosed returns true if SendSideBWE is closed
+func (e *SendSideBWE) isClosed() bool {
 	select {
 	case <-e.close:
 		return true
@@ -196,6 +200,9 @@ func (e *SendSideBWE) IsClosed() bool {
 
 // Close stops and closes the bandwidth estimator
 func (e *SendSideBWE) Close() error {
+	e.closeLock.Lock()
+	defer e.closeLock.Unlock()
+
 	if err := e.delayController.Close(); err != nil {
 		return err
 	}

@@ -98,8 +98,8 @@ func TestSendSideBWE_ErrorOnWriteRTCPAtClosedState(t *testing.T) {
 
 	pkts := []rtcp.Packet{&rtcp.TransportLayerCC{}}
 	require.NoError(t, bwe.WriteRTCP(pkts, nil))
-	require.Equal(t, bwe.IsClosed(), false)
+	require.Equal(t, bwe.isClosed(), false)
 	require.NoError(t, bwe.Close())
 	require.ErrorIs(t, bwe.WriteRTCP(pkts, nil), ErrSendSideBWEClosed)
-	require.Equal(t, bwe.IsClosed(), true)
+	require.Equal(t, bwe.isClosed(), true)
 }
