@@ -70,6 +70,7 @@ func TestSendSideBWE(t *testing.T) {
 	twccSender.BindRTCPWriter(m.twccResponder)
 
 	require.Equal(t, latestBitrate, bwe.GetTargetBitrate())
+	require.Equal(t, 0.0, bwe.GetLossRate())
 	require.NotEqual(t, 0, len(bwe.GetStats()))
 
 	rtpWriter := bwe.AddStream(streamInfo, m)
@@ -89,6 +90,7 @@ func TestSendSideBWE(t *testing.T) {
 
 	// Sending a stream with zero loss and no RTT should increase estimate
 	require.Less(t, latestBitrate, bwe.GetTargetBitrate())
+	require.Equal(t, 0.0, bwe.GetLossRate())
 }
 
 func TestSendSideBWE_ErrorOnWriteRTCPAtClosedState(t *testing.T) {
