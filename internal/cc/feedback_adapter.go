@@ -1,6 +1,7 @@
 package cc
 
 import (
+	"container/list"
 	"errors"
 	"sync"
 	"time"
@@ -24,14 +25,12 @@ var (
 // Acknowledgments are the common format that Congestion Controllers in Pion understand.
 type FeedbackAdapter struct {
 	lock    sync.Mutex
-	history map[uint16]Acknowledgment
+	history *feedbackHistory
 }
 
 // NewFeedbackAdapter returns a new FeedbackAdapter
 func NewFeedbackAdapter() *FeedbackAdapter {
-	return &FeedbackAdapter{
-		history: make(map[uint16]Acknowledgment),
-	}
+	return &FeedbackAdapter{history: newFeedbackHistory(250)}
 }
 
 // OnSent records that and when an outgoing packet was sent for later mapping to
@@ -51,13 +50,13 @@ func (f *FeedbackAdapter) OnSent(ts time.Time, header *rtp.Header, size int, att
 
 	f.lock.Lock()
 	defer f.lock.Unlock()
-	f.history[tccExt.TransportSequence] = Acknowledgment{
+	f.history.add(Acknowledgment{
 		TLCC:      tccExt.TransportSequence,
 		Size:      header.MarshalSize() + size,
 		Departure: ts,
 		Arrival:   time.Time{},
 		RTT:       0,
-	}
+	})
 	return nil
 }
 
@@ -68,7 +67,7 @@ func (f *FeedbackAdapter) unpackRunLengthChunk(ts time.Time, start uint16, refTi
 	end := start + chunk.RunLength
 	resultIndex := 0
 	for i := start; i != end; i++ {
-		if ack, ok := f.history[i]; ok {
+		if ack, ok := f.history.get(i); ok {
 			if chunk.PacketStatusSymbol != rtcp.TypeTCCPacketNotReceived {
 				if len(deltas)-1 < deltaIndex {
 					return deltaIndex, refTime, result, errInvalidFeedback
@@ -90,7 +89,7 @@ func (f *FeedbackAdapter) unpackStatusVectorChunk(ts time.Time, start uint16, re
 	deltaIndex := 0
 	resultIndex := 0
 	for i, symbol := range chunk.SymbolList {
-		if ack, ok := f.history[start+uint16(i)]; ok {
+		if ack, ok := f.history.get(start + uint16(i)); ok {
 			if symbol != rtcp.TypeTCCPacketNotReceived {
 				if len(deltas)-1 < deltaIndex {
 					return deltaIndex, refTime, result, errInvalidFeedback
@@ -145,4 +144,53 @@ func (f *FeedbackAdapter) OnTransportCCFeedback(ts time.Time, feedback *rtcp.Tra
 	}
 
 	return result, nil
+}
+
+type feedbackHistory struct {
+	size      int
+	evictList *list.List
+	items     map[uint16]*list.Element
+}
+
+func newFeedbackHistory(size int) *feedbackHistory {
+	return &feedbackHistory{
+		size:      size,
+		evictList: list.New(),
+		items:     make(map[uint16]*list.Element),
+	}
+}
+
+func (f *feedbackHistory) get(key uint16) (Acknowledgment, bool) {
+	ent, ok := f.items[key]
+	if ok {
+		if ack, ok := ent.Value.(Acknowledgment); ok {
+			return ack, true
+		}
+	}
+	return Acknowledgment{}, false
+}
+
+func (f *feedbackHistory) add(ack Acknowledgment) {
+	// Check for existing
+	if ent, ok := f.items[ack.TLCC]; ok {
+		f.evictList.MoveToFront(ent)
+		ent.Value = ack
+		return
+	}
+	// Add new
+	ent := f.evictList.PushFront(ack)
+	f.items[ack.TLCC] = ent
+	// Evict if necessary
+	if f.evictList.Len() > f.size {
+		f.removeOldest()
+	}
+}
+
+func (f *feedbackHistory) removeOldest() {
+	if ent := f.evictList.Back(); ent != nil {
+		f.evictList.Remove(ent)
+		if ack, ok := ent.Value.(Acknowledgment); ok {
+			delete(f.items, ack.TLCC)
+		}
+	}
 }
