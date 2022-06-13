@@ -20,34 +20,36 @@ func newArrivalGroupAccumulator() *arrivalGroupAccumulator {
 	}
 }
 
-func (a *arrivalGroupAccumulator) run(in <-chan cc.Acknowledgment, agWriter func(arrivalGroup)) {
+func (a *arrivalGroupAccumulator) run(in <-chan []cc.Acknowledgment, agWriter func(arrivalGroup)) {
 	init := false
 	group := arrivalGroup{}
-	for next := range in {
-		if !init {
-			group.add(next)
-			init = true
-			continue
-		}
-		if next.Arrival.Before(group.arrival) {
-			// ignore out of order arrivals
-			continue
-		}
-		if next.Departure.After(group.departure) {
-			if interDepartureTimePkt(group, next) <= a.interDepartureThreshold {
+	for acks := range in {
+		for _, next := range acks {
+			if !init {
 				group.add(next)
+				init = true
 				continue
 			}
-
-			if interArrivalTimePkt(group, next) <= a.interArrivalThreshold &&
-				interGroupDelayVariationPkt(group, next) < a.interGroupDelayVariationTreshold {
-				group.add(next)
+			if next.Arrival.Before(group.arrival) {
+				// ignore out of order arrivals
 				continue
 			}
+			if next.Departure.After(group.departure) {
+				if interDepartureTimePkt(group, next) <= a.interDepartureThreshold {
+					group.add(next)
+					continue
+				}
 
-			agWriter(group)
-			group = arrivalGroup{}
-			group.add(next)
+				if interArrivalTimePkt(group, next) <= a.interArrivalThreshold &&
+					interGroupDelayVariationPkt(group, next) < a.interGroupDelayVariationTreshold {
+					group.add(next)
+					continue
+				}
+
+				agWriter(group)
+				group = arrivalGroup{}
+				group.add(next)
+			}
 		}
 	}
 }
