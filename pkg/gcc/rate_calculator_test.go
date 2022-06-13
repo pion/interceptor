@@ -81,7 +81,7 @@ func TestRateCalculator(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			rc := newRateCalculator(500 * time.Millisecond)
-			in := make(chan cc.Acknowledgment)
+			in := make(chan []cc.Acknowledgment)
 			out := make(chan int)
 			onRateUpdate := func(rate int) {
 				out <- rate
@@ -91,9 +91,7 @@ func TestRateCalculator(t *testing.T) {
 				rc.run(in, onRateUpdate)
 			}()
 			go func() {
-				for _, ack := range tc.acks {
-					in <- ack
-				}
+				in <- tc.acks
 				close(in)
 			}()
 
