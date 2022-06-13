@@ -1,6 +1,7 @@
 package gcc
 
 import (
+	"math/rand"
 	"testing"
 
 	"github.com/pion/interceptor"
@@ -102,4 +103,35 @@ func TestSendSideBWE_ErrorOnWriteRTCPAtClosedState(t *testing.T) {
 	require.NoError(t, bwe.Close())
 	require.ErrorIs(t, bwe.WriteRTCP(pkts, nil), ErrSendSideBWEClosed)
 	require.Equal(t, bwe.isClosed(), true)
+}
+
+func BenchmarkSendSideBWE_WriteRTCP(b *testing.B) {
+	bwe, err := NewSendSideBWE(SendSideBWEPacer(NewNoOpPacer()))
+	require.NoError(b, err)
+	require.NotNil(b, bwe)
+
+	r := twcc.NewRecorder(5000)
+	seq := uint16(0)
+	arrivalTime := int64(0)
+
+	for i := 0; i < b.N; i++ {
+		seqs := rand.Intn(1000) + 500
+		for j := 0; j < seqs; j++ {
+			seq++
+
+			if rand.Intn(5) == 0 {
+				// skip this packet
+			}
+
+			arrivalTime += int64(rtcp.TypeTCCDeltaScaleFactor * (rand.Intn(128) + 1))
+			r.Record(5000, seq, arrivalTime)
+		}
+
+		rtcpPackets := r.BuildFeedbackPacket()
+		require.Equal(b, 1, len(rtcpPackets))
+
+		require.NoError(b, bwe.WriteRTCP(rtcpPackets, nil))
+	}
+
+	require.NoError(b, bwe.Close())
 }
