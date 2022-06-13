@@ -83,11 +83,11 @@ func TestRateCalculator(t *testing.T) {
 			rc := rateCalculator{
 				window: 500 * time.Millisecond,
 			}
-			in := make(chan cc.Acknowledgment)
+			in := make(chan []cc.Acknowledgment)
 			out := rc.run(in)
 			go func() {
 				for _, ack := range tc.acks {
-					in <- ack
+					in <- []cc.Acknowledgment{ack}
 				}
 				close(in)
 			}()

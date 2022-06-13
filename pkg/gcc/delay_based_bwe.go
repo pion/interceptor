@@ -39,8 +39,8 @@ func (f estimatorFunc) updateEstimate(d time.Duration) time.Duration {
 type now func() time.Time
 
 type delayController struct {
-	ackPipe     chan<- cc.Acknowledgment
-	ackRatePipe chan<- cc.Acknowledgment
+	ackPipe     chan<- []cc.Acknowledgment
+	ackRatePipe chan<- []cc.Acknowledgment
 	ackRTTPipe  chan<- []cc.Acknowledgment
 
 	onUpdateCallback func(DelayStats)
@@ -56,8 +56,8 @@ type delayControllerConfig struct {
 }
 
 func newDelayController(c delayControllerConfig) *delayController {
-	ackPipe := make(chan cc.Acknowledgment)
-	ackRatePipe := make(chan cc.Acknowledgment)
+	ackPipe := make(chan []cc.Acknowledgment)
+	ackRatePipe := make(chan []cc.Acknowledgment)
 	ackRTTPipe := make(chan []cc.Acknowledgment)
 
 	delayController := &delayController{
@@ -92,10 +92,8 @@ func (d *delayController) onUpdate(f func(DelayStats)) {
 }
 
 func (d *delayController) updateDelayEstimate(acks []cc.Acknowledgment) {
-	for _, ack := range acks {
-		d.ackPipe <- ack
-		d.ackRatePipe <- ack
-	}
+	d.ackPipe <- acks
+	d.ackRatePipe <- acks
 	d.ackRTTPipe <- acks
 }
 

@@ -1,6 +1,7 @@
 package gcc
 
 import (
+	"fmt"
 	"math/rand"
 	"testing"
 
@@ -106,32 +107,39 @@ func TestSendSideBWE_ErrorOnWriteRTCPAtClosedState(t *testing.T) {
 }
 
 func BenchmarkSendSideBWE_WriteRTCP(b *testing.B) {
-	bwe, err := NewSendSideBWE(SendSideBWEPacer(NewNoOpPacer()))
-	require.NoError(b, err)
-	require.NotNil(b, bwe)
+	numSequencesPerTwccReport := []int{10, 100, 500, 1000}
 
-	r := twcc.NewRecorder(5000)
-	seq := uint16(0)
-	arrivalTime := int64(0)
+	for _, count := range numSequencesPerTwccReport {
+		b.Run(fmt.Sprintf("num_sequences=%d", count), func(b *testing.B) {
+			bwe, err := NewSendSideBWE(SendSideBWEPacer(NewNoOpPacer()))
+			require.NoError(b, err)
+			require.NotNil(b, bwe)
 
-	for i := 0; i < b.N; i++ {
-		seqs := rand.Intn(1000) + 500
-		for j := 0; j < seqs; j++ {
-			seq++
+			r := twcc.NewRecorder(5000)
+			seq := uint16(0)
+			arrivalTime := int64(0)
 
-			if rand.Intn(5) == 0 {
-				// skip this packet
+			for i := 0; i < b.N; i++ {
+				seqs := rand.Intn(count/2) + count // [count, count * 1.5)
+				for j := 0; j < seqs; j++ {
+					seq++
+
+					if rand.Intn(5) == 0 {
+						// skip this packet
+					}
+
+					arrivalTime += int64(rtcp.TypeTCCDeltaScaleFactor * (rand.Intn(128) + 1))
+					r.Record(5000, seq, arrivalTime)
+				}
+
+				rtcpPackets := r.BuildFeedbackPacket()
+				require.Equal(b, 1, len(rtcpPackets))
+
+				require.NoError(b, bwe.WriteRTCP(rtcpPackets, nil))
 			}
 
-			arrivalTime += int64(rtcp.TypeTCCDeltaScaleFactor * (rand.Intn(128) + 1))
-			r.Record(5000, seq, arrivalTime)
-		}
-
-		rtcpPackets := r.BuildFeedbackPacket()
-		require.Equal(b, 1, len(rtcpPackets))
-
-		require.NoError(b, bwe.WriteRTCP(rtcpPackets, nil))
+			require.NoError(b, bwe.Close())
+		})
 	}
 
-	require.NoError(b, bwe.Close())
 }

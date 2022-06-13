@@ -159,11 +159,11 @@ func TestArrivalGroupAccumulator(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			aga := newArrivalGroupAccumulator()
-			in := make(chan cc.Acknowledgment)
+			in := make(chan []cc.Acknowledgment)
 			out := aga.run(in)
 			go func() {
 				for _, as := range tc.log {
-					in <- as
+					in <- []cc.Acknowledgment{as}
 				}
 				close(in)
 			}()
