@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/pion/interceptor"
+	"github.com/pion/interceptor/internal/ntp"
 	"github.com/pion/interceptor/internal/test"
 	"github.com/pion/logging"
 	"github.com/pion/rtcp"
@@ -40,7 +41,7 @@ func TestSenderInterceptor(t *testing.T) {
 		assert.True(t, ok)
 		assert.Equal(t, &rtcp.SenderReport{
 			SSRC:        123456,
-			NTPTime:     ntpTime(mt.Now()),
+			NTPTime:     ntp.ToNTP(mt.Now()),
 			RTPTime:     2269117121,
 			PacketCount: 0,
 			OctetCount:  0,
@@ -81,7 +82,7 @@ func TestSenderInterceptor(t *testing.T) {
 		assert.True(t, ok)
 		assert.Equal(t, &rtcp.SenderReport{
 			SSRC:        123456,
-			NTPTime:     ntpTime(mt.Now()),
+			NTPTime:     ntp.ToNTP(mt.Now()),
 			RTPTime:     2269117121,
 			PacketCount: 10,
 			OctetCount:  20,
