@@ -46,7 +46,6 @@ type ManualSenderInterceptor struct {
 	interval time.Duration
 	now      func() time.Time
 	ssrcs    []uint32
-	writers  []interceptor.RTCPWriter
 	log      logging.LeveledLogger
 	m        sync.Mutex
 	wg       sync.WaitGroup
@@ -87,23 +86,30 @@ func (s *ManualSenderInterceptor) BindRTCPWriter(writer interceptor.RTCPWriter) 
 
 	s.wg.Add(1)
 
-	s.writers = append(s.writers, writer)
-
-	return writer
+	return &ListeningSenderWriter{writer, s}
 }
 
-func (s *ManualSenderInterceptor) WriteSenderReport(report *rtcp.SenderReport) {
-	defer s.wg.Done()
+type ListeningSenderWriter struct {
+	writer interceptor.RTCPWriter
+	interceptor *ManualSenderInterceptor
+}
 
-	for _, ssrc := range s.ssrcs {
-		report.SSRC = ssrc
-
-		for _, writer := range s.writers {
-			if _, err := writer.Write([]rtcp.Packet{report}, interceptor.Attributes{}); err != nil {
-				s.log.Warnf("failed sending: %+v", err)
+func (w *ListeningSenderWriter) Write(pkts []rtcp.Packet, attr interceptor.Attributes) (int, error) {
+	for _, ssrc := range w.interceptor.ssrcs {
+		// set the ssrc
+		for i := range pkts {
+			switch p := pkts[i].(type) {
+			case *rtcp.SenderReport:
+				p.SSRC = ssrc
 			}
 		}
+	
+		// rebroadcast the packet.
+		if n, err := w.writer.Write(pkts, attr); err != nil {
+			return n, err
+		}
 	}
+	return len(pkts), nil // n doens't matter
 }
 
 // BindLocalStream lets you modify any outgoing RTP packets. It is called once for per LocalStream. The returned method
