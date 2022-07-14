@@ -2,6 +2,7 @@ package gcc
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"sync"
 	"time"
@@ -33,16 +34,16 @@ type Pacer interface {
 
 // Stats contains internal statistics of the bandwidth estimator
 type Stats struct {
-	LossStats
+	LossTargetRate int
 	DelayStats
 }
 
 // SendSideBWE implements a combination of loss and delay based GCC
 type SendSideBWE struct {
-	pacer           Pacer
-	lossController  *lossBasedBandwidthEstimator
-	delayController *delayController
-	feedbackAdapter *cc.FeedbackAdapter
+	pacer               Pacer
+	basicLossController *basicLossBasedBWE
+	delayController     *delayController
+	feedbackAdapter     *cc.FeedbackAdapter
 
 	onTargetBitrateChange func(bitrate int)
 
@@ -95,7 +96,7 @@ func SendSideBWEPacer(p Pacer) Option {
 func NewSendSideBWE(opts ...Option) (*SendSideBWE, error) {
 	e := &SendSideBWE{
 		pacer:                 nil,
-		lossController:        nil,
+		basicLossController:   nil,
 		delayController:       nil,
 		feedbackAdapter:       cc.NewFeedbackAdapter(),
 		onTargetBitrateChange: nil,
@@ -105,6 +106,7 @@ func NewSendSideBWE(opts ...Option) (*SendSideBWE, error) {
 		minBitrate:            minBitrate,
 		maxBitrate:            maxBitrate,
 		close:                 make(chan struct{}),
+		closeLock:             sync.RWMutex{},
 	}
 	for _, opt := range opts {
 		if err := opt(e); err != nil {
@@ -114,7 +116,7 @@ func NewSendSideBWE(opts ...Option) (*SendSideBWE, error) {
 	if e.pacer == nil {
 		e.pacer = NewLeakyBucketPacer(e.latestBitrate)
 	}
-	e.lossController = newLossBasedBWE(e.latestBitrate)
+	e.basicLossController = newBasicLossBasedBWE(e.minBitrate, e.maxBitrate)
 	e.delayController = newDelayController(delayControllerConfig{
 		nowFn:          time.Now,
 		initialBitrate: e.latestBitrate,
@@ -155,6 +157,7 @@ func (e *SendSideBWE) AddStream(info *interceptor.StreamInfo, writer interceptor
 // WriteRTCP adds some RTCP feedback to the bandwidth estimator
 func (e *SendSideBWE) WriteRTCP(pkts []rtcp.Packet, attributes interceptor.Attributes) error {
 	now := time.Now()
+
 	e.closeLock.RLock()
 	defer e.closeLock.RUnlock()
 
@@ -199,9 +202,17 @@ func (e *SendSideBWE) WriteRTCP(pkts []rtcp.Packet, attributes interceptor.Attri
 		}
 		if feedbackMinRTT < math.MaxInt {
 			e.delayController.updateRTT(feedbackMinRTT)
+			e.basicLossController.updateRTT(feedbackMinRTT)
 		}
 
-		e.lossController.updateLossEstimate(acks)
+		lost := 0
+		for _, ack := range acks {
+			if ack.Arrival.IsZero() {
+				lost++
+			}
+		}
+
+		e.basicLossController.updateLoss(now, lost, len(acks))
 		e.delayController.updateDelayEstimate(acks)
 	}
 	return nil
@@ -221,9 +232,8 @@ func (e *SendSideBWE) GetStats() map[string]interface{} {
 	defer e.lock.Unlock()
 
 	return map[string]interface{}{
-		"lossTargetBitrate":  e.latestStats.LossStats.TargetBitrate,
-		"averageLoss":        e.latestStats.AverageLoss,
-		"delayTargetBitrate": e.latestStats.DelayStats.TargetBitrate,
+		"lossTargetBitrate":  e.latestStats.LossTargetRate,
+		"delayTargetBitrate": e.latestStats.TargetBitrate,
 		"delayMeasurement":   float64(e.latestStats.Measurement.Microseconds()) / 1000.0,
 		"delayEstimate":      float64(e.latestStats.Estimate.Microseconds()) / 1000.0,
 		"delayThreshold":     float64(e.latestStats.Threshold.Microseconds()) / 1000.0,
@@ -264,10 +274,12 @@ func (e *SendSideBWE) onDelayUpdate(delayStats DelayStats) {
 	e.lock.Lock()
 	defer e.lock.Unlock()
 
-	lossStats := e.lossController.getEstimate(delayStats.TargetBitrate)
+	lossTargetRate := e.basicLossController.currentTarget
+	e.basicLossController.updateDelayBasedLimit(delayStats.TargetBitrate)
 	bitrateChanged := false
-	bitrate := minInt(delayStats.TargetBitrate, lossStats.TargetBitrate)
+	bitrate := clampInt(minInt(delayStats.TargetBitrate, lossTargetRate), e.minBitrate, e.maxBitrate)
 	if bitrate != e.latestBitrate {
+		fmt.Printf("lossrate:%v, delayrate:%v, result:%v, delaybound: %v\n", lossTargetRate, delayStats.TargetBitrate, bitrate, delayStats.TargetBitrate <= lossTargetRate)
 		bitrateChanged = true
 		e.latestBitrate = bitrate
 		e.pacer.SetTargetBitrate(e.latestBitrate)
@@ -278,7 +290,7 @@ func (e *SendSideBWE) onDelayUpdate(delayStats DelayStats) {
 	}
 
 	e.latestStats = Stats{
-		LossStats:  lossStats,
-		DelayStats: delayStats,
+		LossTargetRate: lossTargetRate,
+		DelayStats:     delayStats,
 	}
 }
