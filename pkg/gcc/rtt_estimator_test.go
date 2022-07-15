@@ -57,7 +57,13 @@ func TestRTTEstimator(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			re := newRTTEstimator()
 			in := make(chan []cc.Acknowledgment)
-			out := re.run(in)
+			out := make(chan time.Duration)
+			go func() {
+				defer close(out)
+				re.run(in, func(d time.Duration) {
+					out <- d
+				})
+			}()
 			go func() {
 				for _, acks := range tc.ackLists {
 					in <- acks

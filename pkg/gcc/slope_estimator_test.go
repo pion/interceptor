@@ -91,15 +91,16 @@ func TestSlopeEstimator(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			se := newSlopeEstimator(estimatorFunc(identity))
-			in := make(chan arrivalGroup)
-			out := se.run(in)
+			out := make(chan DelayStats)
+			se := newSlopeEstimator(estimatorFunc(identity), func(ds DelayStats) {
+				out <- ds
+			})
 			input := []time.Duration{}
 			go func() {
+				defer close(out)
 				for _, ag := range tc.ags {
-					in <- ag
+					se.onArrivalGroup(ag)
 				}
-				close(in)
 			}()
 			received := []DelayStats{}
 			for d := range out {

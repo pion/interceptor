@@ -80,11 +80,16 @@ func TestRateCalculator(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			rc := rateCalculator{
-				window: 500 * time.Millisecond,
-			}
+			rc := newRateCalculator(500 * time.Millisecond)
 			in := make(chan cc.Acknowledgment)
-			out := rc.run(in)
+			out := make(chan int)
+			onRateUpdate := func(rate int) {
+				out <- rate
+			}
+			go func() {
+				defer close(out)
+				rc.run(in, onRateUpdate)
+			}()
 			go func() {
 				for _, ack := range tc.acks {
 					in <- ack

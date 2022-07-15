@@ -160,7 +160,13 @@ func TestArrivalGroupAccumulator(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			aga := newArrivalGroupAccumulator()
 			in := make(chan cc.Acknowledgment)
-			out := aga.run(in)
+			out := make(chan arrivalGroup)
+			go func() {
+				defer close(out)
+				aga.run(in, func(ag arrivalGroup) {
+					out <- ag
+				})
+			}()
 			go func() {
 				for _, as := range tc.log {
 					in <- as

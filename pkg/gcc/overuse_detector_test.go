@@ -86,15 +86,17 @@ func TestOveruseDetectorWithoutDelay(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			od := newOveruseDetector(tc.thresh, tc.delay)
-			in := make(chan DelayStats)
-			out := od.run(in)
+			out := make(chan DelayStats)
+			dsw := func(ds DelayStats) {
+				out <- ds
+			}
+			od := newOveruseDetector(tc.thresh, tc.delay, dsw)
 			go func() {
+				defer close(out)
 				for _, e := range tc.estimates {
-					in <- e
+					od.onDelayStats(e)
 					time.Sleep(tc.delay)
 				}
-				close(in)
 			}()
 			received := []usage{}
 			for s := range out {

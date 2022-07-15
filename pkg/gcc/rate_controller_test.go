@@ -43,16 +43,17 @@ func TestRateControllerRun(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			dc := newRateController(mockNoFn, 100_000, 1_000, 50_000_000)
+			out := make(chan DelayStats)
+			dc := newRateController(mockNoFn, 100_000, 1_000, 50_000_000, func(ds DelayStats) {
+				out <- ds
+			})
 			in := make(chan DelayStats)
-			receivedRate := make(chan int)
-			rtt := make(chan time.Duration)
-			out := dc.run(in, receivedRate, rtt)
-			receivedRate <- 100_000
-			rtt <- 300 * time.Millisecond
+			dc.onReceivedRate(100_000)
+			dc.onRTT(300 * time.Millisecond)
 			go func() {
+				defer close(out)
 				for _, state := range tc.usage {
-					in <- DelayStats{
+					dc.onDelayStats(DelayStats{
 						Measurement:   0,
 						Estimate:      0,
 						Threshold:     0,
@@ -60,9 +61,8 @@ func TestRateControllerRun(t *testing.T) {
 						State:         0,
 						TargetBitrate: 0,
 						RTT:           0,
-					}
+					})
 				}
-				time.Sleep(2 * time.Second)
 				close(in)
 			}()
 			received := []DelayStats{}
