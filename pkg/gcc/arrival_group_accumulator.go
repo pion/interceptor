@@ -20,39 +20,49 @@ func newArrivalGroupAccumulator() *arrivalGroupAccumulator {
 	}
 }
 
-func (a *arrivalGroupAccumulator) run(in <-chan cc.Acknowledgment) <-chan arrivalGroup {
-	out := make(chan arrivalGroup)
-	go func() {
-		init := false
-		group := arrivalGroup{}
-		for next := range in {
-			if !init {
-				group.add(next)
-				init = true
-				continue
-			}
-			if next.Arrival.Before(group.arrival) {
-				// ignore out of order arrivals
-				continue
-			}
-			if next.Departure.After(group.departure) {
-				if interDepartureTimePkt(group, next) <= a.interDepartureThreshold {
-					group.add(next)
-					continue
-				}
-
-				if interArrivalTimePkt(group, next) <= a.interArrivalThreshold &&
-					interGroupDelayVariationPkt(group, next) < a.interGroupDelayVariationTreshold {
-					group.add(next)
-					continue
-				}
-
-				out <- group
-				group = arrivalGroup{}
-				group.add(next)
-			}
+func (a *arrivalGroupAccumulator) run(in <-chan cc.Acknowledgment, agWriter func(arrivalGroup)) {
+	init := false
+	group := arrivalGroup{}
+	for next := range in {
+		if !init {
+			group.add(next)
+			init = true
+			continue
 		}
-		close(out)
-	}()
-	return out
+		if next.Arrival.Before(group.arrival) {
+			// ignore out of order arrivals
+			continue
+		}
+		if next.Departure.After(group.departure) {
+			if interDepartureTimePkt(group, next) <= a.interDepartureThreshold {
+				group.add(next)
+				continue
+			}
+
+			if interArrivalTimePkt(group, next) <= a.interArrivalThreshold &&
+				interGroupDelayVariationPkt(group, next) < a.interGroupDelayVariationTreshold {
+				group.add(next)
+				continue
+			}
+
+			agWriter(group)
+			group = arrivalGroup{}
+			group.add(next)
+		}
+	}
+}
+
+func interArrivalTimePkt(a arrivalGroup, b cc.Acknowledgment) time.Duration {
+	return b.Arrival.Sub(a.arrival)
+}
+
+func interDepartureTimePkt(a arrivalGroup, b cc.Acknowledgment) time.Duration {
+	if len(a.packets) == 0 {
+		return 0
+	}
+	return b.Departure.Sub(a.packets[len(a.packets)-1].Departure)
+}
+
+func interGroupDelayVariationPkt(a arrivalGroup, b cc.Acknowledgment) time.Duration {
+	return b.Arrival.Sub(a.arrival) - b.Departure.Sub(a.departure)
 }
