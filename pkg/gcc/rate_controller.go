@@ -4,8 +4,6 @@ import (
 	"math"
 	"sync"
 	"time"
-
-	"github.com/pion/logging"
 )
 
 const (
@@ -14,7 +12,6 @@ const (
 )
 
 type rateController struct {
-	log                  logging.LeveledLogger
 	now                  now
 	initialTargetBitrate int
 	minBitrate           int
@@ -52,7 +49,6 @@ func (a *exponentialMovingAverage) update(value float64) {
 
 func newRateController(now now, initialTargetBitrate, minBitrate, maxBitrate int, dsw func(DelayStats)) *rateController {
 	return &rateController{
-		log:                  logging.NewDefaultLoggerFactory().NewLogger("gcc_rate_controller"),
 		now:                  now,
 		initialTargetBitrate: initialTargetBitrate,
 		minBitrate:           minBitrate,
