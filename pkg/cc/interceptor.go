@@ -5,11 +5,8 @@ package cc
 import (
 	"github.com/pion/interceptor"
 	"github.com/pion/interceptor/pkg/gcc"
-	"github.com/pion/logging"
 	"github.com/pion/rtcp"
 )
-
-const transportCCURI = "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"
 
 // Option can be used to set initial options on CC interceptors
 type Option func(*Interceptor) error
@@ -68,7 +65,6 @@ func (f *InterceptorFactory) NewInterceptor(id string) (interceptor.Interceptor,
 	}
 	i := &Interceptor{
 		NoOp:      interceptor.NoOp{},
-		log:       logging.NewDefaultLoggerFactory().NewLogger("cc_interceptor"),
 		estimator: bwe,
 		feedback:  make(chan []rtcp.Packet),
 		close:     make(chan struct{}),
@@ -89,7 +85,6 @@ func (f *InterceptorFactory) NewInterceptor(id string) (interceptor.Interceptor,
 // Interceptor implements Google Congestion Control
 type Interceptor struct {
 	interceptor.NoOp
-	log       logging.LeveledLogger
 	estimator BandwidthEstimator
 	feedback  chan []rtcp.Packet
 	close     chan struct{}
@@ -127,17 +122,6 @@ func (c *Interceptor) BindRTCPReader(reader interceptor.RTCPReader) interceptor.
 // BindLocalStream lets you modify any outgoing RTP packets. It is called once
 // for per LocalStream. The returned method will be called once per rtp packet.
 func (c *Interceptor) BindLocalStream(info *interceptor.StreamInfo, writer interceptor.RTPWriter) interceptor.RTPWriter {
-	var hdrExtID uint8
-	for _, e := range info.RTPHeaderExtensions {
-		if e.URI == transportCCURI {
-			hdrExtID = uint8(e.ID)
-			break
-		}
-	}
-	if hdrExtID == 0 { // Nothing to do if header extension ID is 0, because 0 is an invalid extension ID. Means stream is not using TWCC.
-		return writer
-	}
-
 	return c.estimator.AddStream(info, writer)
 }
 

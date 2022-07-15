@@ -144,14 +144,19 @@ func (e *SendSideBWE) WriteRTCP(pkts []rtcp.Packet, attributes interceptor.Attri
 	}
 
 	for _, pkt := range pkts {
-		if fb, ok := pkt.(*rtcp.TransportLayerCC); ok {
-			acks, err := e.feedbackAdapter.OnTransportCCFeedback(time.Now(), fb)
+		var acks []cc.Acknowledgment
+		var err error
+		switch fb := pkt.(type) {
+		case *rtcp.TransportLayerCC:
+			acks, err = e.feedbackAdapter.OnTransportCCFeedback(time.Now(), fb)
 			if err != nil {
 				return err
 			}
-			e.lossController.updateLossEstimate(acks)
-			e.delayController.updateDelayEstimate(acks)
+		case *rtcp.CCFeedbackReport:
+			acks = e.feedbackAdapter.OnRFC8888Feedback(time.Now(), fb)
 		}
+		e.lossController.updateLossEstimate(acks)
+		e.delayController.updateDelayEstimate(acks)
 	}
 	return nil
 }
