@@ -37,7 +37,7 @@ func (d *overuseDetector) onDelayStats(ds DelayStats) {
 	delta := now.Sub(d.lastUpdate)
 	d.lastUpdate = now
 
-	thresholdUse, estimate, currentThreshold := d.threshold.compare(ds.Estimate, ds.lastReceiveDelta)
+	thresholdUse, estimate, currentThreshold := d.threshold.compare(ds.Estimate, ds.LastReceiveDelta)
 
 	use := usageNormal
 	if thresholdUse == usageOver {
@@ -70,10 +70,9 @@ func (d *overuseDetector) onDelayStats(ds DelayStats) {
 		Measurement:      ds.Measurement,
 		Estimate:         estimate,
 		Threshold:        currentThreshold,
-		lastReceiveDelta: delta,
+		LastReceiveDelta: ds.LastReceiveDelta,
 		Usage:            use,
 		State:            0,
 		TargetBitrate:    0,
-		RTT:              0,
 	})
 }

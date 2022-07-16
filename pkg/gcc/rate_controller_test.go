@@ -30,7 +30,6 @@ func TestRateControllerRun(t *testing.T) {
 				TargetBitrate: 108_000,
 				Estimate:      0,
 				Threshold:     0,
-				RTT:           300 * time.Millisecond,
 			}},
 		},
 	}
@@ -49,7 +48,7 @@ func TestRateControllerRun(t *testing.T) {
 			})
 			in := make(chan DelayStats)
 			dc.onReceivedRate(100_000)
-			dc.onRTT(300 * time.Millisecond)
+			dc.updateRTT(300 * time.Millisecond)
 			go func() {
 				defer close(out)
 				for _, state := range tc.usage {
@@ -60,7 +59,6 @@ func TestRateControllerRun(t *testing.T) {
 						Usage:         state,
 						State:         0,
 						TargetBitrate: 0,
-						RTT:           0,
 					})
 				}
 				close(in)

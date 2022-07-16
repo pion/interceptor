@@ -1,6 +1,8 @@
 package gcc
 
-import "time"
+import (
+	"time"
+)
 
 type estimator interface {
 	updateEstimate(measurement time.Duration) time.Duration
@@ -39,11 +41,10 @@ func (e *slopeEstimator) onArrivalGroup(ag arrivalGroup) {
 		Measurement:      measurement,
 		Estimate:         e.updateEstimate(measurement),
 		Threshold:        0,
-		lastReceiveDelta: delta,
+		LastReceiveDelta: delta,
 		Usage:            0,
 		State:            0,
 		TargetBitrate:    0,
-		RTT:              0,
 	})
 }
 

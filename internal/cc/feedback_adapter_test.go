@@ -60,42 +60,36 @@ func TestUnpackRunLengthChunk(t *testing.T) {
 					Size:           0,
 					Departure:      time.Time{},
 					Arrival:        time.Time{},
-					RTT:            0,
 				},
 				{
 					SequenceNumber: 1,
 					Size:           0,
 					Departure:      time.Time{},
 					Arrival:        time.Time{},
-					RTT:            0,
 				},
 				{
 					SequenceNumber: 2,
 					Size:           0,
 					Departure:      time.Time{},
 					Arrival:        time.Time{},
-					RTT:            0,
 				},
 				{
 					SequenceNumber: 3,
 					Size:           0,
 					Departure:      time.Time{},
 					Arrival:        time.Time{},
-					RTT:            0,
 				},
 				{
 					SequenceNumber: 4,
 					Size:           0,
 					Departure:      time.Time{},
 					Arrival:        time.Time{},
-					RTT:            0,
 				},
 				{
 					SequenceNumber: 5,
 					Size:           0,
 					Departure:      time.Time{},
 					Arrival:        time.Time{},
-					RTT:            0,
 				},
 			},
 			n:       6,
@@ -124,42 +118,36 @@ func TestUnpackRunLengthChunk(t *testing.T) {
 					Size:           0,
 					Departure:      time.Time{},
 					Arrival:        time.Time{}.Add(250 * time.Microsecond),
-					RTT:            0,
 				},
 				{
 					SequenceNumber: 65535,
 					Size:           0,
 					Departure:      time.Time{},
 					Arrival:        time.Time{}.Add(500 * time.Microsecond),
-					RTT:            0,
 				},
 				{
 					SequenceNumber: 0,
 					Size:           0,
 					Departure:      time.Time{},
 					Arrival:        time.Time{}.Add(750 * time.Microsecond),
-					RTT:            0,
 				},
 				{
 					SequenceNumber: 1,
 					Size:           0,
 					Departure:      time.Time{},
 					Arrival:        time.Time{}.Add(1000 * time.Microsecond),
-					RTT:            0,
 				},
 				{
 					SequenceNumber: 2,
 					Size:           0,
 					Departure:      time.Time{},
 					Arrival:        time.Time{}.Add(1250 * time.Microsecond),
-					RTT:            0,
 				},
 				{
 					SequenceNumber: 3,
 					Size:           0,
 					Departure:      time.Time{},
 					Arrival:        time.Time{}.Add(1500 * time.Microsecond),
-					RTT:            0,
 				},
 			},
 			n:       6,
@@ -182,42 +170,36 @@ func TestUnpackRunLengthChunk(t *testing.T) {
 					Size:           0,
 					Departure:      time.Time{},
 					Arrival:        time.Time{},
-					RTT:            0,
 				},
 				{
 					SequenceNumber: 65535,
 					Size:           0,
 					Departure:      time.Time{},
 					Arrival:        time.Time{},
-					RTT:            0,
 				},
 				{
 					SequenceNumber: 0,
 					Size:           0,
 					Departure:      time.Time{},
 					Arrival:        time.Time{},
-					RTT:            0,
 				},
 				{
 					SequenceNumber: 1,
 					Size:           0,
 					Departure:      time.Time{},
 					Arrival:        time.Time{},
-					RTT:            0,
 				},
 				{
 					SequenceNumber: 2,
 					Size:           0,
 					Departure:      time.Time{},
 					Arrival:        time.Time{},
-					RTT:            0,
 				},
 				{
 					SequenceNumber: 3,
 					Size:           0,
 					Departure:      time.Time{},
 					Arrival:        time.Time{},
-					RTT:            0,
 				},
 			},
 			n:       0,
@@ -241,7 +223,7 @@ func TestUnpackRunLengthChunk(t *testing.T) {
 				assert.NoError(t, fa.OnSent(time.Time{}, h, 0, attributes))
 			}
 
-			n, refTime, acks, err := fa.unpackRunLengthChunk(time.Time{}, tc.start, time.Time{}, &tc.chunk, tc.deltas)
+			n, refTime, acks, err := fa.unpackRunLengthChunk(tc.start, time.Time{}, &tc.chunk, tc.deltas)
 			assert.NoError(t, err)
 			assert.Len(t, acks, len(tc.acks))
 			assert.Equal(t, tc.n, n)
@@ -309,42 +291,36 @@ func TestUnpackStatusVectorChunk(t *testing.T) {
 					Size:           0,
 					Departure:      time.Time{},
 					Arrival:        time.Time{},
-					RTT:            0,
 				},
 				{
 					SequenceNumber: 1,
 					Size:           0,
 					Departure:      time.Time{},
 					Arrival:        time.Time{},
-					RTT:            0,
 				},
 				{
 					SequenceNumber: 2,
 					Size:           0,
 					Departure:      time.Time{},
 					Arrival:        time.Time{},
-					RTT:            0,
 				},
 				{
 					SequenceNumber: 3,
 					Size:           0,
 					Departure:      time.Time{},
 					Arrival:        time.Time{},
-					RTT:            0,
 				},
 				{
 					SequenceNumber: 4,
 					Size:           0,
 					Departure:      time.Time{},
 					Arrival:        time.Time{},
-					RTT:            0,
 				},
 				{
 					SequenceNumber: 5,
 					Size:           0,
 					Departure:      time.Time{},
 					Arrival:        time.Time{},
-					RTT:            0,
 				},
 			},
 			n:       6,
@@ -379,42 +355,36 @@ func TestUnpackStatusVectorChunk(t *testing.T) {
 					Size:           0,
 					Departure:      time.Time{},
 					Arrival:        time.Time{}.Add(250 * time.Microsecond),
-					RTT:            0,
 				},
 				{
 					SequenceNumber: 65535,
 					Size:           0,
 					Departure:      time.Time{},
 					Arrival:        time.Time{}.Add(500 * time.Microsecond),
-					RTT:            0,
 				},
 				{
 					SequenceNumber: 0,
 					Size:           0,
 					Departure:      time.Time{},
 					Arrival:        time.Time{}.Add(750 * time.Microsecond),
-					RTT:            0,
 				},
 				{
 					SequenceNumber: 1,
 					Size:           0,
 					Departure:      time.Time{},
 					Arrival:        time.Time{}.Add(1000 * time.Microsecond),
-					RTT:            0,
 				},
 				{
 					SequenceNumber: 2,
 					Size:           0,
 					Departure:      time.Time{},
 					Arrival:        time.Time{},
-					RTT:            0,
 				},
 				{
 					SequenceNumber: 3,
 					Size:           0,
 					Departure:      time.Time{},
 					Arrival:        time.Time{}.Add(1250 * time.Microsecond),
-					RTT:            0,
 				},
 			},
 			n:       5,
@@ -438,7 +408,7 @@ func TestUnpackStatusVectorChunk(t *testing.T) {
 				assert.NoError(t, fa.OnSent(time.Time{}, h, 0, attributes))
 			}
 
-			n, refTime, acks, err := fa.unpackStatusVectorChunk(time.Time{}, tc.start, time.Time{}, &tc.chunk, tc.deltas)
+			n, refTime, acks, err := fa.unpackStatusVectorChunk(tc.start, time.Time{}, &tc.chunk, tc.deltas)
 			assert.NoError(t, err)
 			assert.Len(t, acks, len(tc.acks))
 			assert.Equal(t, tc.n, n)
@@ -563,7 +533,6 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 			Size:           headers[0].MarshalSize() + 1200,
 			Departure:      t0,
 			Arrival:        t0.Add(4 * time.Microsecond),
-			RTT:            0,
 		})
 
 		assert.Contains(t, results, Acknowledgment{
@@ -571,7 +540,6 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 			Size:           headers[1].MarshalSize() + 1200,
 			Departure:      t0,
 			Arrival:        t0.Add(104 * time.Microsecond),
-			RTT:            0,
 		})
 
 		for i := uint16(2); i < 7; i++ {
@@ -580,7 +548,6 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 				Size:           headers[i].MarshalSize() + 1200,
 				Departure:      t0,
 				Arrival:        time.Time{},
-				RTT:            0,
 			})
 		}
 
@@ -589,7 +556,6 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 			Size:           headers[7].MarshalSize() + 1200,
 			Departure:      t0,
 			Arrival:        t0.Add(116 * time.Microsecond),
-			RTT:            0,
 		})
 
 		for i := uint16(8); i < 21; i++ {
@@ -598,7 +564,6 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 				Size:           headers[i].MarshalSize() + 1200,
 				Departure:      t0,
 				Arrival:        time.Time{},
-				RTT:            0,
 			})
 		}
 
@@ -607,7 +572,6 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 			Size:           headers[21].MarshalSize() + 1200,
 			Departure:      t0,
 			Arrival:        t0.Add(120 * time.Microsecond),
-			RTT:            0,
 		})
 	})
 
@@ -701,14 +665,12 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 			Size:           pkt65535.Header.MarshalSize() + 1200,
 			Departure:      t0,
 			Arrival:        t0.Add(4 * time.Microsecond),
-			RTT:            0,
 		})
 		assert.Contains(t, results, Acknowledgment{
 			SequenceNumber: 0,
 			Size:           pkt0.Header.MarshalSize() + 1200,
 			Departure:      t0,
 			Arrival:        t0.Add(8 * time.Microsecond),
-			RTT:            0,
 		})
 	})
 
@@ -769,7 +731,6 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 				Size:           headers[i].MarshalSize() + 1200,
 				Departure:      t0,
 				Arrival:        t0.Add(time.Duration((i + 1)) * 4 * time.Microsecond),
-				RTT:            0,
 			})
 		}
 		for i := uint16(3); i < 7; i++ {
@@ -778,7 +739,6 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 				Size:           headers[i].MarshalSize() + 1200,
 				Departure:      t0,
 				Arrival:        time.Time{},
-				RTT:            0,
 			})
 		}
 	})

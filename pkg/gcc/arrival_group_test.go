@@ -21,7 +21,6 @@ func TestArrivalGroup(t *testing.T) {
 				packets:   nil,
 				arrival:   time.Time{},
 				departure: time.Time{},
-				rtt:       0,
 			},
 		},
 		{
@@ -31,7 +30,6 @@ func TestArrivalGroup(t *testing.T) {
 				Size:           0,
 				Departure:      time.Time{},
 				Arrival:        time.Time{},
-				RTT:            0,
 			}},
 			expected: arrivalGroup{
 				packets: []cc.Acknowledgment{{
@@ -39,11 +37,9 @@ func TestArrivalGroup(t *testing.T) {
 					Size:           0,
 					Departure:      time.Time{},
 					Arrival:        time.Time{},
-					RTT:            0,
 				}},
 				arrival:   time.Time{},
 				departure: time.Time{},
-				rtt:       0,
 			},
 		},
 		{
@@ -53,13 +49,11 @@ func TestArrivalGroup(t *testing.T) {
 				Size:           0,
 				Departure:      time.Time{},
 				Arrival:        time.Time{},
-				RTT:            0,
 			}, {
 				SequenceNumber: 0,
 				Size:           0,
 				Departure:      time.Time{}.Add(time.Second),
 				Arrival:        time.Time{}.Add(time.Second),
-				RTT:            time.Hour,
 			}},
 			expected: arrivalGroup{
 				packets: []cc.Acknowledgment{{
@@ -67,17 +61,14 @@ func TestArrivalGroup(t *testing.T) {
 					Size:           0,
 					Departure:      time.Time{},
 					Arrival:        time.Time{},
-					RTT:            0,
 				}, {
 					SequenceNumber: 0,
 					Size:           0,
 					Departure:      time.Time{}.Add(time.Second),
 					Arrival:        time.Time{}.Add(time.Second),
-					RTT:            time.Hour,
 				}},
 				arrival:   time.Time{}.Add(time.Second),
 				departure: time.Time{}.Add(time.Second),
-				rtt:       time.Hour,
 			},
 		},
 	}
