@@ -2,11 +2,13 @@ package gcc
 
 import (
 	"errors"
+	"math"
 	"sync"
 	"time"
 
 	"github.com/pion/interceptor"
 	"github.com/pion/interceptor/internal/cc"
+	"github.com/pion/interceptor/internal/ntp"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 )
@@ -152,6 +154,7 @@ func (e *SendSideBWE) AddStream(info *interceptor.StreamInfo, writer interceptor
 
 // WriteRTCP adds some RTCP feedback to the bandwidth estimator
 func (e *SendSideBWE) WriteRTCP(pkts []rtcp.Packet, attributes interceptor.Attributes) error {
+	now := time.Now()
 	e.closeLock.RLock()
 	defer e.closeLock.RUnlock()
 
@@ -162,15 +165,42 @@ func (e *SendSideBWE) WriteRTCP(pkts []rtcp.Packet, attributes interceptor.Attri
 	for _, pkt := range pkts {
 		var acks []cc.Acknowledgment
 		var err error
+		var feedbackSentTime time.Time
 		switch fb := pkt.(type) {
 		case *rtcp.TransportLayerCC:
-			acks, err = e.feedbackAdapter.OnTransportCCFeedback(time.Now(), fb)
+			acks, err = e.feedbackAdapter.OnTransportCCFeedback(now, fb)
 			if err != nil {
 				return err
 			}
+			for i, ack := range acks {
+				if i == 0 {
+					feedbackSentTime = ack.Arrival
+					continue
+				}
+				if ack.Arrival.After(feedbackSentTime) {
+					feedbackSentTime = ack.Arrival
+				}
+			}
 		case *rtcp.CCFeedbackReport:
-			acks = e.feedbackAdapter.OnRFC8888Feedback(time.Now(), fb)
+			acks = e.feedbackAdapter.OnRFC8888Feedback(now, fb)
+			feedbackSentTime = ntp.ToTime(uint64(fb.ReportTimestamp) << 16)
+		default:
+			continue
 		}
+
+		feedbackMinRTT := time.Duration(math.MaxInt)
+		for _, ack := range acks {
+			if ack.Arrival.IsZero() {
+				continue
+			}
+			pendingTime := feedbackSentTime.Sub(ack.Arrival)
+			rtt := now.Sub(ack.Departure) - pendingTime
+			feedbackMinRTT = time.Duration(minInt(int(rtt), int(feedbackMinRTT)))
+		}
+		if feedbackMinRTT < math.MaxInt {
+			e.delayController.updateRTT(feedbackMinRTT)
+		}
+
 		e.lossController.updateLossEstimate(acks)
 		e.delayController.updateDelayEstimate(acks)
 	}
@@ -197,7 +227,6 @@ func (e *SendSideBWE) GetStats() map[string]interface{} {
 		"delayMeasurement":   float64(e.latestStats.Measurement.Microseconds()) / 1000.0,
 		"delayEstimate":      float64(e.latestStats.Estimate.Microseconds()) / 1000.0,
 		"delayThreshold":     float64(e.latestStats.Threshold.Microseconds()) / 1000.0,
-		"rtt":                float64(e.latestStats.RTT.Microseconds()) / 1000.0,
 		"usage":              e.latestStats.Usage.String(),
 		"state":              e.latestStats.State.String(),
 	}

@@ -43,7 +43,6 @@ func (f *FeedbackAdapter) onSentRFC8888(ts time.Time, header *rtp.Header, size i
 		Size:           size,
 		Departure:      ts,
 		Arrival:        time.Time{},
-		RTT:            0,
 		ECN:            0,
 	})
 	return nil
@@ -65,7 +64,6 @@ func (f *FeedbackAdapter) onSentTWCC(ts time.Time, extID uint8, header *rtp.Head
 		Size:           header.MarshalSize() + size,
 		Departure:      ts,
 		Arrival:        time.Time{},
-		RTT:            0,
 		ECN:            0,
 	})
 	return nil
@@ -83,7 +81,7 @@ func (f *FeedbackAdapter) OnSent(ts time.Time, header *rtp.Header, size int, att
 	return f.onSentRFC8888(ts, header, size)
 }
 
-func (f *FeedbackAdapter) unpackRunLengthChunk(ts time.Time, start uint16, refTime time.Time, chunk *rtcp.RunLengthChunk, deltas []*rtcp.RecvDelta) (consumedDeltas int, nextRef time.Time, acks []Acknowledgment, err error) {
+func (f *FeedbackAdapter) unpackRunLengthChunk(start uint16, refTime time.Time, chunk *rtcp.RunLengthChunk, deltas []*rtcp.RecvDelta) (consumedDeltas int, nextRef time.Time, acks []Acknowledgment, err error) {
 	result := make([]Acknowledgment, chunk.RunLength)
 	deltaIndex := 0
 
@@ -101,7 +99,6 @@ func (f *FeedbackAdapter) unpackRunLengthChunk(ts time.Time, start uint16, refTi
 				}
 				refTime = refTime.Add(time.Duration(deltas[deltaIndex].Delta) * time.Microsecond)
 				ack.Arrival = refTime
-				ack.RTT = ts.Sub(ack.Departure)
 				deltaIndex++
 			}
 			result[resultIndex] = ack
@@ -111,7 +108,7 @@ func (f *FeedbackAdapter) unpackRunLengthChunk(ts time.Time, start uint16, refTi
 	return deltaIndex, refTime, result, nil
 }
 
-func (f *FeedbackAdapter) unpackStatusVectorChunk(ts time.Time, start uint16, refTime time.Time, chunk *rtcp.StatusVectorChunk, deltas []*rtcp.RecvDelta) (consumedDeltas int, nextRef time.Time, acks []Acknowledgment, err error) {
+func (f *FeedbackAdapter) unpackStatusVectorChunk(start uint16, refTime time.Time, chunk *rtcp.StatusVectorChunk, deltas []*rtcp.RecvDelta) (consumedDeltas int, nextRef time.Time, acks []Acknowledgment, err error) {
 	result := make([]Acknowledgment, len(chunk.SymbolList))
 	deltaIndex := 0
 	resultIndex := 0
@@ -127,7 +124,6 @@ func (f *FeedbackAdapter) unpackStatusVectorChunk(ts time.Time, start uint16, re
 				}
 				refTime = refTime.Add(time.Duration(deltas[deltaIndex].Delta) * time.Microsecond)
 				ack.Arrival = refTime
-				ack.RTT = ts.Sub(ack.Departure)
 				deltaIndex++
 			}
 			result[resultIndex] = ack
@@ -152,7 +148,7 @@ func (f *FeedbackAdapter) OnTransportCCFeedback(ts time.Time, feedback *rtcp.Tra
 	for _, chunk := range feedback.PacketChunks {
 		switch chunk := chunk.(type) {
 		case *rtcp.RunLengthChunk:
-			n, nextRefTime, acks, err := f.unpackRunLengthChunk(ts, index, refTime, chunk, recvDeltas)
+			n, nextRefTime, acks, err := f.unpackRunLengthChunk(index, refTime, chunk, recvDeltas)
 			if err != nil {
 				return nil, err
 			}
@@ -161,7 +157,7 @@ func (f *FeedbackAdapter) OnTransportCCFeedback(ts time.Time, feedback *rtcp.Tra
 			recvDeltas = recvDeltas[n:]
 			index = uint16(int(index) + len(acks))
 		case *rtcp.StatusVectorChunk:
-			n, nextRefTime, acks, err := f.unpackStatusVectorChunk(ts, index, refTime, chunk, recvDeltas)
+			n, nextRefTime, acks, err := f.unpackStatusVectorChunk(index, refTime, chunk, recvDeltas)
 			if err != nil {
 				return nil, err
 			}
@@ -196,7 +192,6 @@ func (f *FeedbackAdapter) OnRFC8888Feedback(ts time.Time, feedback *rtcp.CCFeedb
 				if mb.Received {
 					delta := time.Duration((float64(mb.ArrivalTimeOffset) / 1024.0) * float64(time.Second))
 					ack.Arrival = referenceTime.Add(-delta)
-					ack.RTT = ts.Sub(ack.Departure)
 					ack.ECN = mb.ECN
 				}
 				result = append(result, ack)

@@ -71,7 +71,7 @@ func (c *rateController) onReceivedRate(rate int) {
 	c.latestReceivedRate = rate
 }
 
-func (c *rateController) onRTT(rtt time.Duration) {
+func (c *rateController) updateRTT(rtt time.Duration) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	c.latestRTT = rtt
@@ -106,11 +106,10 @@ func (c *rateController) onDelayStats(ds DelayStats) {
 			Measurement:      c.delayStats.Measurement,
 			Estimate:         c.delayStats.Estimate,
 			Threshold:        c.delayStats.Threshold,
-			lastReceiveDelta: c.delayStats.lastReceiveDelta,
+			LastReceiveDelta: c.delayStats.LastReceiveDelta,
 			Usage:            c.delayStats.Usage,
 			State:            c.delayStats.State,
 			TargetBitrate:    c.target,
-			RTT:              c.latestRTT,
 		}
 
 	case stateDecrease:
@@ -119,11 +118,10 @@ func (c *rateController) onDelayStats(ds DelayStats) {
 			Measurement:      c.delayStats.Measurement,
 			Estimate:         c.delayStats.Estimate,
 			Threshold:        c.delayStats.Threshold,
-			lastReceiveDelta: c.delayStats.lastReceiveDelta,
+			LastReceiveDelta: c.delayStats.LastReceiveDelta,
 			Usage:            c.delayStats.Usage,
 			State:            c.delayStats.State,
 			TargetBitrate:    c.target,
-			RTT:              c.latestRTT,
 		}
 	}
 
