@@ -59,7 +59,7 @@ func newDelayController(c delayControllerConfig) *delayController {
 	}
 
 	rateController := newRateController(c.nowFn, c.initialBitrate, c.minBitrate, c.maxBitrate, func(ds DelayStats) {
-		delayController.log.Infof("delaystats: %v", ds)
+		//delayController.log.Infof("delaystats: %v", ds)
 		if delayController.onUpdateCallback != nil {
 			delayController.onUpdateCallback(ds)
 		}
@@ -69,16 +69,21 @@ func newDelayController(c delayControllerConfig) *delayController {
 	slopeEstimator := newSlopeEstimator(newKalman(), overuseDetector.onDelayStats)
 	arrivalGroupAccumulator := newArrivalGroupAccumulator()
 
-	rc := newRateCalculator(500 * time.Millisecond)
+	rc := newRateCalculator()
 
 	delayController.wg.Add(2)
 	go func() {
 		defer delayController.wg.Done()
-		arrivalGroupAccumulator.run(ackPipe, slopeEstimator.onArrivalGroup)
+		arrivalGroupAccumulator.run(ackPipe, func(ag arrivalGroup) {
+			slopeEstimator.onArrivalGroup(ag)
+		})
 	}()
 	go func() {
 		defer delayController.wg.Done()
-		rc.run(ackRatePipe, rateController.onReceivedRate)
+		rc.run(ackRatePipe, func(i int) {
+			rateController.onReceivedRate(i)
+			delayController.log.Infof("new acked rate: %v", i)
+		})
 	}()
 
 	return delayController

@@ -2,7 +2,6 @@ package gcc
 
 import (
 	"errors"
-	"fmt"
 	"math"
 	"sync"
 	"time"
@@ -279,7 +278,6 @@ func (e *SendSideBWE) onDelayUpdate(delayStats DelayStats) {
 	bitrateChanged := false
 	bitrate := clampInt(minInt(delayStats.TargetBitrate, lossTargetRate), e.minBitrate, e.maxBitrate)
 	if bitrate != e.latestBitrate {
-		fmt.Printf("lossrate:%v, delayrate:%v, result:%v, delaybound: %v\n", lossTargetRate, delayStats.TargetBitrate, bitrate, delayStats.TargetBitrate <= lossTargetRate)
 		bitrateChanged = true
 		e.latestBitrate = bitrate
 		e.pacer.SetTargetBitrate(e.latestBitrate)

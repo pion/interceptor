@@ -13,70 +13,44 @@ func TestRateCalculator(t *testing.T) {
 	cases := []struct {
 		name     string
 		acks     []cc.Acknowledgment
-		expected []int
+		expected int
 	}{
 		{
 			name:     "emptyCreatesNoRate",
 			acks:     []cc.Acknowledgment{},
-			expected: []int{},
+			expected: 0,
 		},
 		{
 			name: "ignoresZeroArrivalTimes",
 			acks: []cc.Acknowledgment{{
 				SequenceNumber: 0,
 				Size:           0,
-				Departure:      time.Time{},
-				Arrival:        time.Time{},
+				Departure:      t0,
+				Arrival:        t0.Add(10 * time.Millisecond),
 			}},
-			expected: []int{},
+			expected: 0,
 		},
 		{
-			name: "singleAckCreatesRate",
+			name: "lessThanRequiredAcksCreatesNoRate",
 			acks: []cc.Acknowledgment{{
 				SequenceNumber: 0,
 				Size:           1000,
-				Departure:      time.Time{},
-				Arrival:        t0,
+				Departure:      t0,
+				Arrival:        t0.Add(10 * time.Millisecond),
 			}},
-			expected: []int{8000},
+			expected: 0,
 		},
 		{
-			name: "twoAcksCalculateCorrectRates",
-			acks: []cc.Acknowledgment{{
-				SequenceNumber: 0,
-				Size:           125,
-				Departure:      time.Time{},
-				Arrival:        t0,
-			}, {
-				SequenceNumber: 0,
-				Size:           125,
-				Departure:      time.Time{},
-				Arrival:        t0.Add(100 * time.Millisecond),
-			}},
-			expected: []int{1000, 20_000},
-		},
-		{
-			name: "steadyACKsCalculateCorrectRates",
-			acks: getACKStream(10, 1200, 100*time.Millisecond),
-			expected: []int{
-				9_600,
-				192_000,
-				144_000,
-				128_000,
-				120_000,
-				115_200,
-				115_200,
-				115_200,
-				115_200,
-				115_200,
-			},
+			name:     "steadyACKsCalculateCorrectRates",
+			acks:     getACKStream(100, 1200, 100*time.Millisecond),
+			expected: 95049,
 		},
 	}
 
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			rc := newRateCalculator(500 * time.Millisecond)
+			rc := newRateCalculator()
 			in := make(chan []cc.Acknowledgment)
 			out := make(chan int)
 			onRateUpdate := func(rate int) {
@@ -95,7 +69,12 @@ func TestRateCalculator(t *testing.T) {
 			for r := range out {
 				received = append(received, r)
 			}
-			assert.Equal(t, tc.expected, received)
+			if tc.expected != 0 {
+				assert.Equal(t, 1, len(received))
+				assert.Equal(t, tc.expected, received[0])
+			} else {
+				assert.Equal(t, 0, len(received))
+			}
 		})
 	}
 }
@@ -105,8 +84,9 @@ func getACKStream(length int, size int, interval time.Duration) []cc.Acknowledgm
 	t0 := time.Now()
 	for i := 0; i < length; i++ {
 		res = append(res, cc.Acknowledgment{
-			Size:    size,
-			Arrival: t0,
+			Size:      size,
+			Departure: t0.Add(time.Duration(i) * time.Millisecond),
+			Arrival:   t0.Add(5*time.Millisecond + time.Duration(i)*time.Millisecond),
 		})
 		t0 = t0.Add(interval)
 	}

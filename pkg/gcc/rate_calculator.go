@@ -7,55 +7,130 @@ import (
 )
 
 type rateCalculator struct {
-	window time.Duration
+	// config
+	maxWindowPackets        int
+	minWindowDuration       time.Duration
+	maxWindowDuration       time.Duration
+	sendRateRequiredPackets int
+
+	// state
+	history                  []cc.Acknowledgment
+	largestDiscardedSendTime time.Time
 }
 
-func newRateCalculator(window time.Duration) *rateCalculator {
+func newRateCalculator() *rateCalculator {
 	return &rateCalculator{
-		window: window,
+		maxWindowPackets:         500,
+		minWindowDuration:        time.Second,
+		maxWindowDuration:        5 * time.Second,
+		sendRateRequiredPackets:  10,
+		history:                  []cc.Acknowledgment{},
+		largestDiscardedSendTime: time.Time{},
 	}
 }
 
 func (c *rateCalculator) run(in <-chan []cc.Acknowledgment, onRateUpdate func(int)) {
-	var history []cc.Acknowledgment
-	init := false
-	sum := 0
 	for acks := range in {
-		for _, next := range acks {
-			if next.Arrival.IsZero() {
-				// Ignore packet if it didn't arrive
-				continue
-			}
-			history = append(history, next)
-			sum += next.Size
-
-			if !init {
-				init = true
-				// Don't know any timeframe here, only arrival of last packet,
-				// which is by definition in the window that ends with the last
-				// arrival time
-				onRateUpdate(next.Size * 8)
+		for _, ack := range acks {
+			if ack.Departure.IsZero() || ack.Arrival.IsZero() {
 				continue
 			}
 
-			del := 0
-			for _, ack := range history {
-				deadline := next.Arrival.Add(-c.window)
-				if !ack.Arrival.Before(deadline) {
-					break
-				}
-				del++
-				sum -= ack.Size
-			}
-			history = history[del:]
-			if len(history) == 0 {
-				onRateUpdate(0)
-				continue
-			}
-			dt := next.Arrival.Sub(history[0].Arrival)
-			bits := 8 * sum
-			rate := int(float64(bits) / dt.Seconds())
-			onRateUpdate(rate)
+			c.history = append(c.history, ack)
 		}
+		for c.firstPacketOutsideWindow() {
+			if c.history[0].Departure.After(c.largestDiscardedSendTime) {
+				c.largestDiscardedSendTime = c.history[0].Departure
+			}
+			c.history = c.history[1:]
+		}
+
+		if len(c.history) == 0 || len(c.history) < c.sendRateRequiredPackets {
+			continue
+		}
+
+		largestReceivGap := time.Duration(0)
+		secondLargestReceiveGap := time.Duration(0)
+		for i := 1; i < len(c.history); i++ {
+			gap := c.history[1].Arrival.Sub(c.history[i-1].Arrival)
+			if gap > largestReceivGap {
+				secondLargestReceiveGap = largestReceivGap
+				largestReceivGap = gap
+			} else if gap > secondLargestReceiveGap {
+				secondLargestReceiveGap = gap
+			}
+		}
+
+		firstSendTime := time.Time{}
+		var lastSendTime time.Time
+		var firstReceiveTime time.Time
+		var lastReceiveTime time.Time
+		receiveSize := 0
+		sendSize := 0
+		firstReceiveSize := 0
+		lastSendSize := 0
+		numSentPacketsInWindow := 0
+		for _, ack := range c.history {
+			if firstReceiveTime.IsZero() || ack.Arrival.Before(firstReceiveTime) {
+				firstReceiveTime = ack.Arrival
+				firstReceiveSize = ack.Size
+			}
+			if lastReceiveTime.IsZero() || ack.Arrival.After(lastReceiveTime) {
+				lastReceiveTime = ack.Arrival
+			}
+			receiveSize += ack.Size
+
+			if ack.Departure.Before(c.largestDiscardedSendTime) {
+				continue
+			}
+			if lastSendTime.IsZero() || ack.Departure.After(lastSendTime) {
+				lastSendTime = ack.Departure
+				lastSendSize = ack.Size
+			}
+			if firstSendTime.IsZero() || ack.Departure.Before(firstSendTime) {
+				firstSendTime = ack.Departure
+			}
+			sendSize += ack.Size
+			numSentPacketsInWindow++
+		}
+		receiveSize -= firstReceiveSize
+		sendSize -= lastSendSize
+
+		receiveDuration := lastReceiveTime.Sub(firstReceiveTime) - (largestReceivGap + secondLargestReceiveGap)
+		receiveRate := 8 * float64(receiveSize) / receiveDuration.Seconds()
+		if numSentPacketsInWindow < c.sendRateRequiredPackets {
+			onRateUpdate(int(receiveRate))
+			continue
+		}
+
+		sendDuration := lastSendTime.Sub(firstSendTime)
+		if sendDuration == 0 {
+			sendDuration = time.Millisecond
+		}
+		sendRate := 8 * float64(sendSize) / sendDuration.Seconds()
+
+		if receiveRate < sendRate {
+			onRateUpdate(int(receiveRate))
+			continue
+		}
+		onRateUpdate(int(sendRate))
 	}
+}
+
+func (c *rateCalculator) firstPacketOutsideWindow() bool {
+	if len(c.history) == 0 {
+		return false
+	}
+	if len(c.history) > c.maxWindowPackets {
+		return true
+	}
+
+	currentWindow := c.history[len(c.history)-1].Arrival.Sub(c.history[0].Arrival)
+	if currentWindow > c.maxWindowDuration {
+		return true
+	}
+	if len(c.history) > c.maxWindowPackets && currentWindow > c.minWindowDuration {
+		return true
+	}
+	return false
 }
