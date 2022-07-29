@@ -227,6 +227,7 @@ func (e *SendSideBWE) GetStats() map[string]interface{} {
 		"delayMeasurement":   float64(e.latestStats.Measurement.Microseconds()) / 1000.0,
 		"delayEstimate":      float64(e.latestStats.Estimate.Microseconds()) / 1000.0,
 		"delayThreshold":     float64(e.latestStats.Threshold.Microseconds()) / 1000.0,
+		"rtt":                float64(e.delayController.latestRTT.Microseconds()) / 1000.0,
 		"usage":              e.latestStats.Usage.String(),
 		"state":              e.latestStats.State.String(),
 	}
