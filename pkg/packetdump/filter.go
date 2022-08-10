@@ -2,7 +2,7 @@ package packetdump
 
 import (
 	"github.com/pion/rtcp"
-	"github.com/pion/rtp"
+	"github.com/pion/rtp/v2"
 )
 
 // RTPFilterCallback can be used to filter RTP packets to dump.

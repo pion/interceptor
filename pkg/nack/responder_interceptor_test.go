@@ -8,7 +8,7 @@ import (
 	"github.com/pion/interceptor/internal/test"
 	"github.com/pion/logging"
 	"github.com/pion/rtcp"
-	"github.com/pion/rtp"
+	"github.com/pion/rtp/v2"
 	"github.com/stretchr/testify/require"
 )
 
@@ -113,7 +113,7 @@ func TestResponderInterceptor_DisableCopy(t *testing.T) {
 
 // this test is only useful when being run with the race detector, it won't fail otherwise:
 //
-//     go test -race ./pkg/nack/
+//	go test -race ./pkg/nack/
 func TestResponderInterceptor_Race(t *testing.T) {
 	f, err := NewResponderInterceptor(
 		ResponderSize(32768),

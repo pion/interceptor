@@ -8,7 +8,7 @@ import (
 	"github.com/pion/interceptor/internal/sequencenumber"
 	"github.com/pion/logging"
 	"github.com/pion/rtcp"
-	"github.com/pion/rtp"
+	"github.com/pion/rtp/v2"
 )
 
 // Stats contains all the available statistics of RTP streams
@@ -301,11 +301,10 @@ func (r *recorder) QueueIncomingRTP(ts time.Time, buf []byte, attr interceptor.A
 		r.logger.Warnf("failed to get RTP Header, skipping incoming RTP packet in stats calculation: %v", err)
 		return
 	}
-	hdr := header.Clone()
 	r.incomingRTPChan <- &incomingRTP{
 		ts:         ts,
-		header:     hdr,
-		payloadLen: len(buf) - hdr.MarshalSize(),
+		header:     *header,
+		payloadLen: len(buf) - header.MarshalSize(),
 		attr:       attr,
 	}
 }
@@ -327,10 +326,9 @@ func (r *recorder) QueueIncomingRTCP(ts time.Time, buf []byte, attr interceptor.
 }
 
 func (r *recorder) QueueOutgoingRTP(ts time.Time, header *rtp.Header, payload []byte, attr interceptor.Attributes) {
-	hdr := header.Clone()
 	r.outgoingRTPChan <- &outgoingRTP{
 		ts:         ts,
-		header:     hdr,
+		header:     *header,
 		payloadLen: len(payload),
 		attr:       attr,
 	}

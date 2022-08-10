@@ -7,7 +7,7 @@ import (
 
 	"github.com/pion/interceptor"
 	"github.com/pion/rtcp"
-	"github.com/pion/rtp"
+	"github.com/pion/rtp/v2"
 )
 
 // Option can be used to configure the stats interceptor

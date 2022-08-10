@@ -4,7 +4,7 @@ import (
 	"sync/atomic"
 
 	"github.com/pion/interceptor"
-	"github.com/pion/rtp"
+	"github.com/pion/rtp/v2"
 )
 
 // HeaderExtensionInterceptorFactory is a interceptor.Factory for a HeaderExtensionInterceptor

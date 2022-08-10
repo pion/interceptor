@@ -9,7 +9,7 @@ import (
 	"github.com/pion/interceptor"
 	"github.com/pion/interceptor/internal/ntp"
 	"github.com/pion/rtcp"
-	"github.com/pion/rtp"
+	"github.com/pion/rtp/v2"
 )
 
 // TwccExtensionAttributesKey identifies the TWCC value in the attribute collection

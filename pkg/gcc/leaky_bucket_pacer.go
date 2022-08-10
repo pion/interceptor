@@ -8,7 +8,7 @@ import (
 
 	"github.com/pion/interceptor"
 	"github.com/pion/logging"
-	"github.com/pion/rtp"
+	"github.com/pion/rtp/v2"
 )
 
 var errLeakyBucketPacerPoolCastFailed = errors.New("failed to access leaky bucket pacer pool, cast failed")
@@ -95,11 +95,10 @@ func (p *LeakyBucketPacer) Write(header *rtp.Header, payload []byte, attributes 
 	}
 
 	copy(*buf, payload)
-	hdr := header.Clone()
 
 	p.qLock.Lock()
 	p.queue.PushBack(&item{
-		header:     &hdr,
+		header:     header,
 		payload:    buf,
 		size:       len(payload),
 		attributes: attributes,

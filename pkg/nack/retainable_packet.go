@@ -4,7 +4,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/pion/rtp"
+	"github.com/pion/rtp/v2"
 )
 
 const maxPayloadLen = 1460
@@ -47,7 +47,7 @@ func (m *packetManager) NewPacket(header *rtp.Header, payload []byte) (*retainab
 		return nil, errFailedToCastHeaderPool
 	}
 
-	*p.header = header.Clone()
+	p.header = header
 
 	if payload != nil {
 		p.buffer, ok = m.payloadPool.Get().(*[]byte)

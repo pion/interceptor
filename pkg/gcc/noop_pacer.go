@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/pion/interceptor"
-	"github.com/pion/rtp"
+	"github.com/pion/rtp/v2"
 )
 
 // ErrUnknownStream is returned when trying to send a packet with a SSRC that
