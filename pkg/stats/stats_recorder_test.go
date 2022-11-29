@@ -1,10 +1,13 @@
 package stats
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
 
+	"github.com/pion/interceptor"
 	"github.com/pion/interceptor/internal/ntp"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
@@ -260,8 +263,7 @@ func TestStatsRecorder(t *testing.T) {
 		t.Run(fmt.Sprintf("%v:%v", i, cc.name), func(t *testing.T) {
 			r := newRecorder(0, 90_000)
 
-			go r.Start()
-			defer r.Stop()
+			r.Start()
 
 			for _, record := range cc.records {
 				switch v := record.content.(type) {
@@ -281,6 +283,8 @@ func TestStatsRecorder(t *testing.T) {
 			}
 
 			s := r.GetStats()
+
+			r.Stop()
 
 			assert.Equal(t, cc.expectedInboundRTPStreamStats, s.InboundRTPStreamStats)
 			assert.Equal(t, cc.expectedOutboundRTPStreamStats, s.OutboundRTPStreamStats)
@@ -312,4 +316,76 @@ func TestStatsRecorder_DLRR_Precision(t *testing.T) {
 	}, report, time.Time{})
 
 	assert.Equal(t, int64(s.RemoteOutboundRTPStreamStats.RoundTripTime), int64(-9223372036854775808))
+}
+
+func TestGetStatsNotBlocking(t *testing.T) {
+	r := newRecorder(0, 90_000)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	go func() {
+		defer cancel()
+		r.Start()
+		r.GetStats()
+	}()
+	go r.Stop()
+
+	<-ctx.Done()
+
+	if err := ctx.Err(); err != nil && errors.Is(err, context.DeadlineExceeded) {
+		t.Error("it shouldn't block")
+	}
+}
+
+func TestQueueNotBlocking(t *testing.T) {
+	for _, i := range []struct {
+		f    func(r *recorder)
+		name string
+	}{
+		{
+			f: func(r *recorder) {
+				r.QueueIncomingRTP(time.Now(), mustMarshalRTP(t, rtp.Packet{}), interceptor.Attributes{})
+			},
+			name: "QueueIncomingRTP",
+		},
+		{
+			f: func(r *recorder) {
+				r.QueueOutgoingRTP(time.Now(), &rtp.Header{}, mustMarshalRTP(t, rtp.Packet{}), interceptor.Attributes{})
+			},
+			name: "QueueOutgoingRTP",
+		},
+		{
+			f: func(r *recorder) {
+				r.QueueIncomingRTCP(time.Now(), mustMarshalRTCPs(t, &rtcp.CCFeedbackReport{}), interceptor.Attributes{})
+			},
+			name: "QueueIncomingRTCP",
+		},
+		{
+			f: func(r *recorder) {
+				r.QueueOutgoingRTCP(time.Now(), []rtcp.Packet{}, interceptor.Attributes{})
+			},
+			name: "QueueOutgoingRTCP",
+		},
+	} {
+		t.Run(i.name+"NotBlocking", func(t *testing.T) {
+			r := newRecorder(0, 90_000)
+
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+
+			go func() {
+				defer cancel()
+				r.Start()
+				i.f(r)
+			}()
+			go r.Stop()
+
+			<-ctx.Done()
+
+			if err := ctx.Err(); err != nil && errors.Is(err, context.DeadlineExceeded) {
+				t.Error("it shouldn't block")
+			}
+		})
+	}
 }
