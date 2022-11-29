@@ -1,6 +1,8 @@
 package stats
 
 import (
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pion/interceptor"
@@ -78,12 +80,9 @@ type recorder struct {
 	maxLastSenderReports          int
 	maxLastReceiverReferenceTimes int
 
-	incomingRTPChan  chan *incomingRTP
-	incomingRTCPChan chan *incomingRTCP
-	outgoingRTPChan  chan *outgoingRTP
-	outgoingRTCPChan chan *outgoingRTCP
-	getStatsChan     chan Stats
-	done             chan struct{}
+	latestStats *internalStats
+	ms          *sync.Mutex // Locks latestStats
+	running     uint32
 }
 
 func newRecorder(ssrc uint32, clockRate float64) *recorder {
@@ -93,21 +92,24 @@ func newRecorder(ssrc uint32, clockRate float64) *recorder {
 		clockRate:                     clockRate,
 		maxLastSenderReports:          5,
 		maxLastReceiverReferenceTimes: 5,
-		incomingRTPChan:               make(chan *incomingRTP),
-		incomingRTCPChan:              make(chan *incomingRTCP),
-		outgoingRTPChan:               make(chan *outgoingRTP),
-		outgoingRTCPChan:              make(chan *outgoingRTCP),
-		getStatsChan:                  make(chan Stats),
-		done:                          make(chan struct{}),
+		latestStats:                   &internalStats{},
+		ms:                            &sync.Mutex{},
 	}
 }
 
 func (r *recorder) Stop() {
-	close(r.done)
+	atomic.StoreUint32(&r.running, 0)
 }
 
 func (r *recorder) GetStats() Stats {
-	return <-r.getStatsChan
+	r.ms.Lock()
+	defer r.ms.Unlock()
+	return Stats{
+		InboundRTPStreamStats:        r.latestStats.InboundRTPStreamStats,
+		OutboundRTPStreamStats:       r.latestStats.OutboundRTPStreamStats,
+		RemoteInboundRTPStreamStats:  r.latestStats.RemoteInboundRTPStreamStats,
+		RemoteOutboundRTPStreamStats: r.latestStats.RemoteOutboundRTPStreamStats,
+	}
 }
 
 func (r *recorder) recordIncomingRTP(latestStats internalStats, v *incomingRTP) internalStats {
@@ -261,38 +263,13 @@ func (r *recorder) recordIncomingRTCP(latestStats internalStats, v *incomingRTCP
 }
 
 func (r *recorder) Start() {
-	latestStats := &internalStats{}
-	for {
-		select {
-		case <-r.done:
-			return
-		case v := <-r.incomingRTPChan:
-			s := r.recordIncomingRTP(*latestStats, v)
-			latestStats = &s
-
-		case v := <-r.outgoingRTCPChan:
-			s := r.recordOutgoingRTCP(*latestStats, v)
-			latestStats = &s
-
-		case v := <-r.outgoingRTPChan:
-			s := r.recordOutgoingRTP(*latestStats, v)
-			latestStats = &s
-
-		case v := <-r.incomingRTCPChan:
-			s := r.recordIncomingRTCP(*latestStats, v)
-			latestStats = &s
-
-		case r.getStatsChan <- Stats{
-			InboundRTPStreamStats:        latestStats.InboundRTPStreamStats,
-			OutboundRTPStreamStats:       latestStats.OutboundRTPStreamStats,
-			RemoteInboundRTPStreamStats:  latestStats.RemoteInboundRTPStreamStats,
-			RemoteOutboundRTPStreamStats: latestStats.RemoteOutboundRTPStreamStats,
-		}:
-		}
-	}
+	atomic.StoreUint32(&r.running, 1)
 }
 
 func (r *recorder) QueueIncomingRTP(ts time.Time, buf []byte, attr interceptor.Attributes) {
+	if atomic.LoadUint32(&r.running) == 0 {
+		return
+	}
 	if attr == nil {
 		attr = make(interceptor.Attributes)
 	}
@@ -302,15 +279,20 @@ func (r *recorder) QueueIncomingRTP(ts time.Time, buf []byte, attr interceptor.A
 		return
 	}
 	hdr := header.Clone()
-	r.incomingRTPChan <- &incomingRTP{
+	r.ms.Lock()
+	*r.latestStats = r.recordIncomingRTP(*r.latestStats, &incomingRTP{
 		ts:         ts,
 		header:     hdr,
 		payloadLen: len(buf) - hdr.MarshalSize(),
 		attr:       attr,
-	}
+	})
+	r.ms.Unlock()
 }
 
 func (r *recorder) QueueIncomingRTCP(ts time.Time, buf []byte, attr interceptor.Attributes) {
+	if atomic.LoadUint32(&r.running) == 0 {
+		return
+	}
 	if attr == nil {
 		attr = make(interceptor.Attributes)
 	}
@@ -319,29 +301,41 @@ func (r *recorder) QueueIncomingRTCP(ts time.Time, buf []byte, attr interceptor.
 		r.logger.Warnf("failed to get RTCP packets, skipping incoming RTCP packet in stats calculation: %v", err)
 		return
 	}
-	r.incomingRTCPChan <- &incomingRTCP{
+	r.ms.Lock()
+	*r.latestStats = r.recordIncomingRTCP(*r.latestStats, &incomingRTCP{
 		ts:   ts,
 		pkts: pkts,
 		attr: attr,
-	}
+	})
+	r.ms.Unlock()
 }
 
 func (r *recorder) QueueOutgoingRTP(ts time.Time, header *rtp.Header, payload []byte, attr interceptor.Attributes) {
+	if atomic.LoadUint32(&r.running) == 0 {
+		return
+	}
 	hdr := header.Clone()
-	r.outgoingRTPChan <- &outgoingRTP{
+	r.ms.Lock()
+	*r.latestStats = r.recordOutgoingRTP(*r.latestStats, &outgoingRTP{
 		ts:         ts,
 		header:     hdr,
 		payloadLen: len(payload),
 		attr:       attr,
-	}
+	})
+	r.ms.Unlock()
 }
 
 func (r *recorder) QueueOutgoingRTCP(ts time.Time, pkts []rtcp.Packet, attr interceptor.Attributes) {
-	r.outgoingRTCPChan <- &outgoingRTCP{
+	if atomic.LoadUint32(&r.running) == 0 {
+		return
+	}
+	r.ms.Lock()
+	*r.latestStats = r.recordOutgoingRTCP(*r.latestStats, &outgoingRTCP{
 		ts:   ts,
 		pkts: pkts,
 		attr: attr,
-	}
+	})
+	r.ms.Unlock()
 }
 
 func min(a, b int) int {

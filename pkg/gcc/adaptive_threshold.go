@@ -92,7 +92,7 @@ func (a *adaptiveThreshold) update(estimate time.Duration) {
 	timeDelta := time.Duration(minInt(int(now.Sub(a.lastUpdate).Milliseconds()), int(maxTimeDelta.Milliseconds()))) * time.Millisecond
 	d := absEstimate - a.thresh
 	add := k * float64(d.Milliseconds()) * float64(timeDelta.Milliseconds())
-	a.thresh += time.Duration(add * 1000) * time.Microsecond
+	a.thresh += time.Duration(add*1000) * time.Microsecond
 	a.thresh = clampDuration(a.thresh, a.min, a.max)
 	a.lastUpdate = now
 }
