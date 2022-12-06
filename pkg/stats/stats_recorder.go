@@ -106,6 +106,8 @@ func (r *recorder) Stop() {
 	close(r.done)
 }
 
+// GetStats returns the Stats object. If Stop() has been called, GetStats() will return
+// a zero value Stats struct.
 func (r *recorder) GetStats() Stats {
 	return <-r.getStatsChan
 }
@@ -265,6 +267,7 @@ func (r *recorder) Start() {
 	for {
 		select {
 		case <-r.done:
+			close(r.getStatsChan)
 			return
 		case v := <-r.incomingRTPChan:
 			s := r.recordIncomingRTP(*latestStats, v)
