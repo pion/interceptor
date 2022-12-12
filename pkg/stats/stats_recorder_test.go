@@ -1,6 +1,7 @@
 package stats
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -288,4 +289,49 @@ func TestStatsRecorder(t *testing.T) {
 			assert.Equal(t, cc.expectedRemoteOutboundRTPStreamStats, s.RemoteOutboundRTPStreamStats)
 		})
 	}
+}
+
+func TestStatsRecord_NoBlock(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	r := newRecorder(0, 90_000)
+	go r.Start()
+
+	now := time.Now()
+	packet := outgoingRTP{
+		ts: now,
+		header: rtp.Header{
+			SequenceNumber: 3,
+		},
+	}
+
+	r.QueueOutgoingRTP(now, &packet.header, []byte{}, packet.attr)
+	expect := Stats{
+		OutboundRTPStreamStats: OutboundRTPStreamStats{
+			HeaderBytesSent: 12,
+			SentRTPStreamStats: SentRTPStreamStats{
+				PacketsSent: 1,
+				BytesSent:   12,
+			},
+		},
+	}
+
+	t.Run("GetStats() called before Stop()", func(t *testing.T) {
+		got := r.GetStats()
+		assert.Equal(t, expect, got)
+	})
+
+	t.Run("GetStats() after Stop() must not block", func(t *testing.T) {
+		r.Stop()
+		statC := make(chan Stats)
+		go func() {
+			statC <- r.GetStats()
+		}()
+		select {
+		case got := <-statC:
+			assert.Equal(t, expect, got)
+		case <-ctx.Done():
+			assert.Fail(t, "recorder.GetStats blocked")
+		}
+	})
 }

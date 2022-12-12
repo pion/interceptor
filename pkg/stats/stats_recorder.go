@@ -43,6 +43,15 @@ type internalStats struct {
 	RemoteOutboundRTPStreamStats
 }
 
+func (i internalStats) Stats() Stats {
+	return Stats{
+		InboundRTPStreamStats:        i.InboundRTPStreamStats,
+		OutboundRTPStreamStats:       i.OutboundRTPStreamStats,
+		RemoteInboundRTPStreamStats:  i.RemoteInboundRTPStreamStats,
+		RemoteOutboundRTPStreamStats: i.RemoteOutboundRTPStreamStats,
+	}
+}
+
 type incomingRTP struct {
 	ts         time.Time
 	header     rtp.Header
@@ -84,6 +93,8 @@ type recorder struct {
 	outgoingRTCPChan chan *outgoingRTCP
 	getStatsChan     chan Stats
 	done             chan struct{}
+
+	latestStats *internalStats
 }
 
 func newRecorder(ssrc uint32, clockRate float64) *recorder {
@@ -99,6 +110,7 @@ func newRecorder(ssrc uint32, clockRate float64) *recorder {
 		outgoingRTCPChan:              make(chan *outgoingRTCP),
 		getStatsChan:                  make(chan Stats),
 		done:                          make(chan struct{}),
+		latestStats:                   &internalStats{},
 	}
 }
 
@@ -106,9 +118,12 @@ func (r *recorder) Stop() {
 	close(r.done)
 }
 
-// GetStats returns the Stats object. If Stop() has been called, GetStats() will return
-// a zero value Stats struct.
 func (r *recorder) GetStats() Stats {
+	select {
+	case <-r.done:
+		return r.latestStats.Stats()
+	default:
+	}
 	return <-r.getStatsChan
 }
 
@@ -263,34 +278,28 @@ func (r *recorder) recordIncomingRTCP(latestStats internalStats, v *incomingRTCP
 }
 
 func (r *recorder) Start() {
-	latestStats := &internalStats{}
 	for {
 		select {
 		case <-r.done:
 			close(r.getStatsChan)
 			return
 		case v := <-r.incomingRTPChan:
-			s := r.recordIncomingRTP(*latestStats, v)
-			latestStats = &s
+			s := r.recordIncomingRTP(*r.latestStats, v)
+			r.latestStats = &s
 
 		case v := <-r.outgoingRTCPChan:
-			s := r.recordOutgoingRTCP(*latestStats, v)
-			latestStats = &s
+			s := r.recordOutgoingRTCP(*r.latestStats, v)
+			r.latestStats = &s
 
 		case v := <-r.outgoingRTPChan:
-			s := r.recordOutgoingRTP(*latestStats, v)
-			latestStats = &s
+			s := r.recordOutgoingRTP(*r.latestStats, v)
+			r.latestStats = &s
 
 		case v := <-r.incomingRTCPChan:
-			s := r.recordIncomingRTCP(*latestStats, v)
-			latestStats = &s
+			s := r.recordIncomingRTCP(*r.latestStats, v)
+			r.latestStats = &s
 
-		case r.getStatsChan <- Stats{
-			InboundRTPStreamStats:        latestStats.InboundRTPStreamStats,
-			OutboundRTPStreamStats:       latestStats.OutboundRTPStreamStats,
-			RemoteInboundRTPStreamStats:  latestStats.RemoteInboundRTPStreamStats,
-			RemoteOutboundRTPStreamStats: latestStats.RemoteOutboundRTPStreamStats,
-		}:
+		case r.getStatsChan <- r.latestStats.Stats():
 		}
 	}
 }
