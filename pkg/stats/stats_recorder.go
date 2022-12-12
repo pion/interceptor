@@ -119,12 +119,10 @@ func (r *recorder) Stop() {
 }
 
 func (r *recorder) GetStats() Stats {
-	select {
-	case <-r.done:
-		return r.latestStats.Stats()
-	default:
+	if stats, ok := <-r.getStatsChan; ok {
+		return stats
 	}
-	return <-r.getStatsChan
+	return r.latestStats.Stats()
 }
 
 func (r *recorder) recordIncomingRTP(latestStats internalStats, v *incomingRTP) internalStats {
