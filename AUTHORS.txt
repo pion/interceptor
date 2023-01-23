@@ -17,3 +17,6 @@ Jonathan Müller <jonathan@fotokite.com>
 Kevin Caffrey <kcaffrey@gmail.com>
 Mathis Engelbart <mathis.engelbart@gmail.com>
 Sean DuBois <sean@siobud.com>
+
+# List of contributors not appearing in Git history
+
