@@ -289,3 +289,27 @@ func TestStatsRecorder(t *testing.T) {
 		})
 	}
 }
+
+func TestStatsRecorder_DLRR_Precision(t *testing.T) {
+	r := newRecorder(0, 90_000)
+
+	report := &rtcp.ExtendedReport{
+		Reports: []rtcp.ReportBlock{
+			&rtcp.DLRRReportBlock{
+				Reports: []rtcp.DLRRReport{
+					{
+						SSRC:   5000,
+						LastRR: 762,
+						DLRR:   30000,
+					},
+				},
+			},
+		},
+	}
+
+	s := r.recordIncomingXR(internalStats{
+		lastReceiverReferenceTimes: []uint64{50000000},
+	}, report, time.Time{})
+
+	assert.Equal(t, int64(s.RemoteOutboundRTPStreamStats.RoundTripTime), int64(-9223372036854775808))
+}
