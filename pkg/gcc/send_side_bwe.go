@@ -45,6 +45,7 @@ type SendSideBWE struct {
 	feedbackAdapter *cc.FeedbackAdapter
 
 	onTargetBitrateChange func(bitrate int)
+	onLossRateChange      func(loss float64)
 
 	lock          sync.Mutex
 	latestStats   Stats
@@ -215,6 +216,14 @@ func (e *SendSideBWE) GetTargetBitrate() int {
 	return e.latestBitrate
 }
 
+// GetLossRate returns the current packet loss rate in the range [0, 1].
+func (e *SendSideBWE) GetLossRate() float64 {
+	e.lossController.lock.Lock()
+	defer e.lossController.lock.Unlock()
+
+	return e.lossController.averageLoss
+}
+
 // GetStats returns some internal statistics of the bandwidth estimator
 func (e *SendSideBWE) GetStats() map[string]interface{} {
 	e.lock.Lock()
@@ -236,6 +245,12 @@ func (e *SendSideBWE) GetStats() map[string]interface{} {
 // bitrate in bits per second changes
 func (e *SendSideBWE) OnTargetBitrateChange(f func(bitrate int)) {
 	e.onTargetBitrateChange = f
+}
+
+// OnLossRateChange sets the callback that is called when the packet loss
+// rate changes
+func (e *SendSideBWE) OnLossRateChange(f func(loss float64)) {
+	e.onLossRateChange = f
 }
 
 // isClosed returns true if SendSideBWE is closed
@@ -275,6 +290,11 @@ func (e *SendSideBWE) onDelayUpdate(delayStats DelayStats) {
 
 	if bitrateChanged && e.onTargetBitrateChange != nil {
 		go e.onTargetBitrateChange(bitrate)
+	}
+
+	// in principle this could update more frequently but this is a convenient place to put this hook.
+	if e.latestStats.LossStats.AverageLoss != lossStats.AverageLoss && e.onLossRateChange != nil {
+		go e.onLossRateChange(lossStats.AverageLoss)
 	}
 
 	e.latestStats = Stats{

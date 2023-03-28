@@ -21,7 +21,9 @@ type BandwidthEstimator interface {
 	AddStream(*interceptor.StreamInfo, interceptor.RTPWriter) interceptor.RTPWriter
 	WriteRTCP([]rtcp.Packet, interceptor.Attributes) error
 	GetTargetBitrate() int
+	GetLossRate() float64
 	OnTargetBitrateChange(f func(bitrate int))
+	OnLossRateChange(f func(loss float64))
 	GetStats() map[string]interface{}
 	Close() error
 }
