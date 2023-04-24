@@ -8,7 +8,6 @@ Adam Kiss <masterada@gmail.com>
 adamroach <adam@nostrum.com>
 Aditya Kumar <k.aditya00@gmail.com>
 aler9 <46489434+aler9@users.noreply.github.com>
-Antoine <antoine@tenten.app>
 Antoine Baché <antoine@tenten.app>
 Atsushi Watanabe <atsushi.w@ieee.org>
 Bobby Peck <rpeck@mux.com>
