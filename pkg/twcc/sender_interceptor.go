@@ -128,12 +128,19 @@ func (s *SenderInterceptor) BindRemoteStream(info *interceptor.StreamInfo, reade
 			if err != nil {
 				return 0, nil, err
 			}
-
-			s.packetChan <- packet{
+			
+			select {
+			case <-s.close:
+				s.log.Warn("interceptor alread closed")
+				return 0, nil, nil
+			case s.packetChan <- packet{
 				hdr:            header,
 				sequenceNumber: tccExt.TransportSequence,
 				arrivalTime:    time.Since(s.startTime).Microseconds(),
 				ssrc:           info.SSRC,
+			}:
+			default:
+				s.log.Warn("write packet error. maybe channel is full")
 			}
 		}
 
