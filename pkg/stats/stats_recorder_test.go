@@ -213,7 +213,12 @@ func TestStatsRecorder(t *testing.T) {
 					ts: now,
 					content: outgoingRTCP{
 						pkts: []rtcp.Packet{
-							&rtcp.ReceiverReport{},
+							&rtcp.ReceiverReport{
+								SSRC: 9999,
+								Reports: []rtcp.ReceptionReport{
+									{SSRC: 0},
+								},
+							},
 							&rtcp.ExtendedReport{
 								SenderSSRC: 0,
 								Reports: []rtcp.ReportBlock{
@@ -257,6 +262,466 @@ func TestStatsRecorder(t *testing.T) {
 				RoundTripTime:             time.Second,
 				TotalRoundTripTime:        time.Second,
 				RoundTripTimeMeasurements: 1,
+			},
+		},
+		{
+			name: "RecordIncomingNACKAfterRR",
+			records: []record{
+				{
+					ts: now,
+					content: outgoingRTP{
+						header: rtp.Header{
+							SequenceNumber: 1,
+						},
+					},
+				},
+				{
+					ts: now,
+					content: outgoingRTP{
+						header: rtp.Header{
+							SequenceNumber: 2,
+						},
+					},
+				},
+				{
+					ts: now,
+					content: outgoingRTP{
+						header: rtp.Header{
+							SequenceNumber: 3,
+						},
+					},
+				},
+				{
+					ts: now.Add(time.Second),
+					content: incomingRTCP{
+						pkts: []rtcp.Packet{
+							&rtcp.ReceiverReport{},
+							cname,
+							&rtcp.TransportLayerNack{
+								SenderSSRC: 9999,
+								MediaSSRC:  0,
+								Nacks:      rtcp.NackPairsFromSequenceNumbers([]uint16{2}),
+							},
+						},
+					},
+				},
+			},
+			expectedOutboundRTPStreamStats: OutboundRTPStreamStats{
+				SentRTPStreamStats: SentRTPStreamStats{
+					PacketsSent: 3,
+					BytesSent:   36,
+				},
+				HeaderBytesSent: 36,
+				NACKCount:       1,
+			},
+		},
+		{
+			name: "IgnoreUnknownOutgoingSSRCs",
+			records: []record{
+				{
+					ts: now,
+					content: outgoingRTP{
+						header: rtp.Header{
+							SequenceNumber: 1,
+							SSRC:           0,
+						},
+					},
+				},
+				{
+					ts: now.Add(33 * time.Millisecond),
+					content: outgoingRTP{
+						header: rtp.Header{
+							SequenceNumber: 2,
+							SSRC:           0,
+						},
+					},
+				},
+				{
+					ts: now.Add(66 * time.Millisecond),
+					content: outgoingRTP{
+						header: rtp.Header{
+							SequenceNumber: 3,
+							SSRC:           0,
+						},
+					},
+				},
+				{
+					ts: now,
+					content: outgoingRTP{
+						header: rtp.Header{
+							SequenceNumber: 1,
+							SSRC:           1,
+						},
+					},
+				},
+				{
+					ts: now,
+					content: outgoingRTP{
+						header: rtp.Header{
+							SequenceNumber: 2,
+							SSRC:           1,
+						},
+					},
+				},
+				{
+					ts: now,
+					content: outgoingRTP{
+						header: rtp.Header{
+							SequenceNumber: 3,
+							SSRC:           1,
+						},
+					},
+				},
+				{
+					ts: now.Add(time.Second),
+					content: incomingRTCP{
+						pkts: []rtcp.Packet{
+							&rtcp.ReceiverReport{
+								SSRC:    9999,
+								Reports: []rtcp.ReceptionReport{},
+							},
+							cname,
+							&rtcp.TransportLayerNack{
+								SenderSSRC: 9999,
+								MediaSSRC:  0,
+								Nacks:      rtcp.NackPairsFromSequenceNumbers([]uint16{2}),
+							},
+							&rtcp.TransportLayerNack{
+								SenderSSRC: 9999,
+								MediaSSRC:  1,
+								Nacks:      rtcp.NackPairsFromSequenceNumbers([]uint16{2}),
+							},
+						},
+					},
+				},
+			},
+			expectedOutboundRTPStreamStats: OutboundRTPStreamStats{
+				SentRTPStreamStats: SentRTPStreamStats{
+					PacketsSent: 3,
+					BytesSent:   36,
+				},
+				HeaderBytesSent: 36,
+				NACKCount:       1,
+			},
+		},
+		{
+			name: "IgnoreIncomingNACKForUnknownSSRC",
+			records: []record{
+				{
+					ts: now,
+					content: outgoingRTP{
+						header: rtp.Header{
+							SequenceNumber: 1,
+						},
+					},
+				},
+				{
+					ts: now,
+					content: outgoingRTP{
+						header: rtp.Header{
+							SequenceNumber: 2,
+						},
+					},
+				},
+				{
+					ts: now,
+					content: outgoingRTP{
+						header: rtp.Header{
+							SequenceNumber: 3,
+						},
+					},
+				},
+				{
+					ts: now.Add(time.Second),
+					content: incomingRTCP{
+						pkts: []rtcp.Packet{
+							&rtcp.ReceiverReport{},
+							cname,
+							&rtcp.TransportLayerNack{
+								SenderSSRC: 9999,
+								MediaSSRC:  1,
+								Nacks:      rtcp.NackPairsFromSequenceNumbers([]uint16{2}),
+							},
+						},
+					},
+				},
+			},
+			expectedOutboundRTPStreamStats: OutboundRTPStreamStats{
+				SentRTPStreamStats: SentRTPStreamStats{
+					PacketsSent: 3,
+					BytesSent:   36,
+				},
+				HeaderBytesSent: 36,
+				NACKCount:       0,
+			},
+		},
+		{
+			name: "IgnoreIncomingFIRForUnknownSSRC",
+			records: []record{
+				{
+					ts: now,
+					content: outgoingRTP{
+						header: rtp.Header{
+							SequenceNumber: 1,
+						},
+					},
+				},
+				{
+					ts: now,
+					content: outgoingRTP{
+						header: rtp.Header{
+							SequenceNumber: 2,
+						},
+					},
+				},
+				{
+					ts: now,
+					content: outgoingRTP{
+						header: rtp.Header{
+							SequenceNumber: 3,
+						},
+					},
+				},
+				{
+					ts: now.Add(time.Second),
+					content: incomingRTCP{
+						pkts: []rtcp.Packet{
+							&rtcp.ReceiverReport{},
+							cname,
+							&rtcp.FullIntraRequest{
+								SenderSSRC: 9999,
+								MediaSSRC:  1,
+							},
+						},
+					},
+				},
+			},
+			expectedOutboundRTPStreamStats: OutboundRTPStreamStats{
+				SentRTPStreamStats: SentRTPStreamStats{
+					PacketsSent: 3,
+					BytesSent:   36,
+				},
+				HeaderBytesSent: 36,
+				FIRCount:        0,
+			},
+		},
+		{
+			name: "IgnoreIncomingPLIForUnknownSSRC",
+			records: []record{
+				{
+					ts: now,
+					content: outgoingRTP{
+						header: rtp.Header{
+							SequenceNumber: 1,
+						},
+					},
+				},
+				{
+					ts: now,
+					content: outgoingRTP{
+						header: rtp.Header{
+							SequenceNumber: 2,
+						},
+					},
+				},
+				{
+					ts: now,
+					content: outgoingRTP{
+						header: rtp.Header{
+							SequenceNumber: 3,
+						},
+					},
+				},
+				{
+					ts: now.Add(time.Second),
+					content: incomingRTCP{
+						pkts: []rtcp.Packet{
+							&rtcp.ReceiverReport{},
+							cname,
+							&rtcp.PictureLossIndication{
+								SenderSSRC: 9999,
+								MediaSSRC:  1,
+							},
+						},
+					},
+				},
+			},
+			expectedOutboundRTPStreamStats: OutboundRTPStreamStats{
+				SentRTPStreamStats: SentRTPStreamStats{
+					PacketsSent: 3,
+					BytesSent:   36,
+				},
+				HeaderBytesSent: 36,
+				PLICount:        0,
+			},
+		},
+		{
+			name: "IgnoreUnknownIncomingSSRCs",
+			records: []record{
+				{
+					ts: now,
+					content: incomingRTP{
+						header: rtp.Header{
+							SequenceNumber: 1,
+							SSRC:           0,
+						},
+					},
+				},
+				{
+					ts: now,
+					content: incomingRTP{
+						header: rtp.Header{
+							SequenceNumber: 2,
+							SSRC:           0,
+						},
+					},
+				},
+				{
+					ts: now,
+					content: incomingRTP{
+						header: rtp.Header{
+							SequenceNumber: 3,
+							SSRC:           0,
+						},
+					},
+				},
+				{
+					ts: now,
+					content: incomingRTP{
+						header: rtp.Header{
+							SequenceNumber: 1,
+							SSRC:           1,
+						},
+					},
+				},
+				{
+					ts: now,
+					content: incomingRTP{
+						header: rtp.Header{
+							SequenceNumber: 2,
+							SSRC:           1,
+						},
+					},
+				},
+				{
+					ts: now,
+					content: incomingRTP{
+						header: rtp.Header{
+							SequenceNumber: 3,
+							SSRC:           1,
+						},
+					},
+				},
+			},
+			expectedInboundRTPStreamStats: InboundRTPStreamStats{
+				ReceivedRTPStreamStats: ReceivedRTPStreamStats{
+					PacketsReceived: 3,
+				},
+				LastPacketReceivedTimestamp: now,
+				HeaderBytesReceived:         36,
+				BytesReceived:               36,
+			},
+		},
+		{
+			name: "IgnoreOutgoingNACKForUnknownSSRC",
+			records: []record{
+				{
+					ts: now,
+					content: incomingRTP{
+						header: rtp.Header{
+							SequenceNumber: 1,
+						},
+					},
+				},
+				{
+					ts: now,
+					content: incomingRTP{
+						header: rtp.Header{
+							SequenceNumber: 2,
+						},
+					},
+				},
+				{
+					ts: now,
+					content: incomingRTP{
+						header: rtp.Header{
+							SequenceNumber: 3,
+						},
+					},
+				},
+				{
+					ts: now.Add(time.Second),
+					content: outgoingRTCP{
+						pkts: []rtcp.Packet{
+							&rtcp.ReceiverReport{},
+							cname,
+							&rtcp.PictureLossIndication{
+								SenderSSRC: 9999,
+								MediaSSRC:  1,
+							},
+						},
+					},
+				},
+			},
+			expectedInboundRTPStreamStats: InboundRTPStreamStats{
+				ReceivedRTPStreamStats: ReceivedRTPStreamStats{
+					PacketsReceived: 3,
+				},
+				LastPacketReceivedTimestamp: now,
+				HeaderBytesReceived:         36,
+				BytesReceived:               36,
+				PLICount:                    0,
+			},
+		},
+		{
+			name: "IgnoreOutgoingFIRForUnknownSSRC",
+			records: []record{
+				{
+					ts: now,
+					content: incomingRTP{
+						header: rtp.Header{
+							SequenceNumber: 1,
+						},
+					},
+				},
+				{
+					ts: now,
+					content: incomingRTP{
+						header: rtp.Header{
+							SequenceNumber: 2,
+						},
+					},
+				},
+				{
+					ts: now,
+					content: incomingRTP{
+						header: rtp.Header{
+							SequenceNumber: 3,
+						},
+					},
+				},
+				{
+					ts: now.Add(time.Second),
+					content: outgoingRTCP{
+						pkts: []rtcp.Packet{
+							&rtcp.ReceiverReport{},
+							cname,
+							&rtcp.FullIntraRequest{
+								SenderSSRC: 9999,
+								MediaSSRC:  1,
+							},
+						},
+					},
+				},
+			},
+			expectedInboundRTPStreamStats: InboundRTPStreamStats{
+				ReceivedRTPStreamStats: ReceivedRTPStreamStats{
+					PacketsReceived: 3,
+				},
+				LastPacketReceivedTimestamp: now,
+				HeaderBytesReceived:         36,
+				BytesReceived:               36,
+				FIRCount:                    0,
 			},
 		},
 	} {
@@ -386,6 +851,23 @@ func TestQueueNotBlocking(t *testing.T) {
 			if err := ctx.Err(); err != nil && errors.Is(err, context.DeadlineExceeded) {
 				t.Error("it shouldn't block")
 			}
+		})
+	}
+}
+
+func TestContains(t *testing.T) {
+	for i, tc := range []struct {
+		list     []uint32
+		element  uint32
+		expected bool
+	}{
+		{list: []uint32{}, element: 0, expected: false},
+		{list: []uint32{0}, element: 0, expected: true},
+		{list: []uint32{0, 1, 2}, element: 1, expected: true},
+		{list: []uint32{0, 1, 2}, element: 3, expected: false},
+	} {
+		t.Run(fmt.Sprintf("%v", i), func(t *testing.T) {
+			assert.Equal(t, tc.expected, contains(tc.list, tc.element))
 		})
 	}
 }
