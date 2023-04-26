@@ -9,6 +9,23 @@ import (
 	"github.com/pion/rtcp"
 )
 
+// ReceiverInterceptorFactory is a interceptor.Factory for a ReceiverInterceptor
+type ReceiverInterceptorFactory struct {
+	opts []GeneratorOption
+}
+
+// NewReceiverInterceptor returns a new ReceiverInterceptor
+func NewReceiverInterceptor(opts ...GeneratorOption) (*ReceiverInterceptorFactory, error) {
+	return &ReceiverInterceptorFactory{
+		opts: opts,
+	}, nil
+}
+
+// NewInterceptor returns a new ReceiverInterceptor interceptor.
+func (r *ReceiverInterceptorFactory) NewInterceptor(string) (interceptor.Interceptor, error) {
+	return NewGeneratorInterceptor(r.opts...)
+}
+
 // GeneratorInterceptor interceptor sends PLI packets.
 // Implements PLI in a naive way: sends a PLI for each new track that support PLI, periodically.
 type GeneratorInterceptor struct {
