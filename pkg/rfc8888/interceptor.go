@@ -23,7 +23,7 @@ type SenderInterceptorFactory struct {
 }
 
 // NewInterceptor constructs a new SenderInterceptor
-func (s *SenderInterceptorFactory) NewInterceptor(string) (interceptor.Interceptor, error) {
+func (s *SenderInterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, error) {
 	i := &SenderInterceptor{
 		NoOp:          interceptor.NoOp{},
 		log:           logging.NewDefaultLoggerFactory().NewLogger("rfc8888_interceptor"),

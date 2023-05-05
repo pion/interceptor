@@ -128,7 +128,7 @@ func BenchmarkSendSideBWE_WriteRTCP(b *testing.B) {
 				for j := 0; j < seqs; j++ {
 					seq++
 
-					if rand.Intn(5) != 0 { //nolint:gosec,staticcheck
+					if rand.Intn(5) != 0 { //nolint:gosec
 						arrivalTime += int64(rtcp.TypeTCCDeltaScaleFactor * (rand.Intn(128) + 1)) //nolint:gosec
 						r.Record(5000, seq, arrivalTime)
 					}

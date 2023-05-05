@@ -14,7 +14,7 @@ import (
 type HeaderExtensionInterceptorFactory struct{}
 
 // NewInterceptor constructs a new HeaderExtensionInterceptor
-func (h *HeaderExtensionInterceptorFactory) NewInterceptor(string) (interceptor.Interceptor, error) {
+func (h *HeaderExtensionInterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, error) {
 	return &HeaderExtensionInterceptor{}, nil
 }
 
