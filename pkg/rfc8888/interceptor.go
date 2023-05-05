@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-License-Identifier: MIT
+
 // Package rfc8888 provides an interceptor that generates congestion control
 // feedback reports as defined by RFC 8888.
 package rfc8888
