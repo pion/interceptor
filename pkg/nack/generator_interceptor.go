@@ -19,7 +19,7 @@ type GeneratorInterceptorFactory struct {
 }
 
 // NewInterceptor constructs a new ReceiverInterceptor
-func (g *GeneratorInterceptorFactory) NewInterceptor(string) (interceptor.Interceptor, error) {
+func (g *GeneratorInterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, error) {
 	i := &GeneratorInterceptor{
 		size:        512,
 		skipLastN:   0,

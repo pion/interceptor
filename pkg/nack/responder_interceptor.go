@@ -22,7 +22,7 @@ type packetFactory interface {
 }
 
 // NewInterceptor constructs a new ResponderInterceptor
-func (r *ResponderInterceptorFactory) NewInterceptor(string) (interceptor.Interceptor, error) {
+func (r *ResponderInterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, error) {
 	i := &ResponderInterceptor{
 		size:    1024,
 		log:     logging.NewDefaultLoggerFactory().NewLogger("nack_responder"),

@@ -22,7 +22,7 @@ func NewSenderInterceptor(opts ...PacketDumperOption) (*SenderInterceptorFactory
 }
 
 // NewInterceptor returns a new SenderInterceptor interceptor
-func (s *SenderInterceptorFactory) NewInterceptor(string) (interceptor.Interceptor, error) {
+func (s *SenderInterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, error) {
 	dumper, err := NewPacketDumper(s.opts...)
 	if err != nil {
 		return nil, err
