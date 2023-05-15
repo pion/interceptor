@@ -4,11 +4,14 @@
 package twcc
 
 import (
+	"errors"
 	"sync/atomic"
 
 	"github.com/pion/interceptor"
 	"github.com/pion/rtp"
 )
+
+var errHeaderIsNil = errors.New("header is nil")
 
 // HeaderExtensionInterceptorFactory is a interceptor.Factory for a HeaderExtensionInterceptor
 type HeaderExtensionInterceptorFactory struct{}
@@ -50,6 +53,9 @@ func (h *HeaderExtensionInterceptor) BindLocalStream(info *interceptor.StreamInf
 		tcc, err := (&rtp.TransportCCExtension{TransportSequence: uint16(sequenceNumber)}).Marshal()
 		if err != nil {
 			return 0, err
+		}
+		if header == nil {
+			return 0, errHeaderIsNil
 		}
 		err = header.SetExtension(hdrExtID, tcc)
 		if err != nil {
