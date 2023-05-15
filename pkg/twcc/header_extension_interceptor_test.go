@@ -4,6 +4,7 @@
 package twcc
 
 import (
+	"io"
 	"sync"
 	"testing"
 	"time"
@@ -15,6 +16,26 @@ import (
 )
 
 func TestHeaderExtensionInterceptor(t *testing.T) {
+	t.Run("if header is nil, return error", func(t *testing.T) {
+		factory, err := NewHeaderExtensionInterceptor()
+		assert.NoError(t, err)
+
+		inter, err := factory.NewInterceptor("")
+		assert.NoError(t, err)
+
+		fn := inter.BindLocalStream(&interceptor.StreamInfo{RTPHeaderExtensions: []interceptor.RTPHeaderExtension{
+			{
+				URI: transportCCURI,
+				ID:  1,
+			},
+		}}, interceptor.RTPWriterFunc(func(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
+			return 0, io.EOF
+		}))
+
+		_, err = fn.Write(nil, []byte{}, interceptor.Attributes{})
+		assert.Equal(t, errHeaderIsNil, err)
+	})
+
 	t.Run("add transport wide cc to each packet", func(t *testing.T) {
 		factory, err := NewHeaderExtensionInterceptor()
 		assert.NoError(t, err)
