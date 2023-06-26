@@ -35,3 +35,20 @@ func SenderNow(f func() time.Time) SenderOption {
 		return nil
 	}
 }
+
+// SenderTicker sets an alternative for the time.NewTicker function.
+func SenderTicker(f TickerFactory) SenderOption {
+	return func(r *SenderInterceptor) error {
+		r.newTicker = f
+		return nil
+	}
+}
+
+// enableStartTracking is used by tests to synchronize whether the loop() has begun
+// and it's safe to start sending ticks to the ticker.
+func enableStartTracking(startedCh chan struct{}) SenderOption {
+	return func(r *SenderInterceptor) error {
+		r.started = startedCh
+		return nil
+	}
+}

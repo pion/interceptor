@@ -91,4 +91,42 @@ func TestSenderInterceptor(t *testing.T) {
 			OctetCount:  20,
 		}, sr)
 	})
+
+	t.Run("inject ticker", func(t *testing.T) {
+		mNow := &test.MockTime{}
+		mTick := &test.MockTicker{
+			C: make(chan time.Time),
+		}
+		advanceTicker := func() {
+			mNow.SetNow(mNow.Now().Add(50 * time.Millisecond))
+			mTick.Tick(mNow.Now())
+		}
+		loopStarted := make(chan struct{})
+		f, err := NewSenderInterceptor(
+			SenderInterval(time.Millisecond*50),
+			SenderLog(logging.NewDefaultLoggerFactory().NewLogger("test")),
+			SenderNow(mNow.Now),
+			SenderTicker(func(d time.Duration) Ticker { return mTick }),
+			enableStartTracking(loopStarted),
+		)
+		assert.NoError(t, err)
+
+		i, err := f.NewInterceptor("")
+		assert.NoError(t, err)
+
+		stream := test.NewMockStream(&interceptor.StreamInfo{
+			SSRC:      123456,
+			ClockRate: 90000,
+		}, i)
+		defer func() {
+			assert.NoError(t, stream.Close())
+		}()
+
+		<-loopStarted
+		for i := 0; i < 5; i++ {
+			advanceTicker()
+			pkts := <-stream.WrittenRTCP()
+			assert.Equal(t, len(pkts), 1)
+		}
+	})
 }
