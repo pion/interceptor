@@ -218,9 +218,9 @@ func (r *recorder) recordOutgoingRTP(latestStats internalStats, v *outgoingRTP) 
 func (r *recorder) recordIncomingRR(latestStats internalStats, pkt *rtcp.ReceiverReport, ts time.Time) internalStats {
 	for _, report := range pkt.Reports {
 		if latestStats.remoteInboundFirstSequenceNumberInitialized {
-			cycles := uint64(report.LastSequenceNumber & 0xFFFF0000)
+			cycles := uint64(report.LastSequenceNumber&0xFFFF0000) >> 16
 			nr := uint64(report.LastSequenceNumber & 0x0000FFFF)
-			highest := cycles*0xFFFF + nr
+			highest := cycles*(0xFFFF+1) + nr
 			latestStats.RemoteInboundRTPStreamStats.PacketsReceived = highest - uint64(report.TotalLost) - uint64(latestStats.remoteInboundFirstSequenceNumber) + 1
 		}
 		latestStats.RemoteInboundRTPStreamStats.PacketsLost = int64(report.TotalLost)
