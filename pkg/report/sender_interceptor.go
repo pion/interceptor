@@ -59,6 +59,8 @@ type SenderInterceptor struct {
 	wg        sync.WaitGroup
 	close     chan struct{}
 	started   chan struct{}
+
+	useLatestPacket bool
 }
 
 func (s *SenderInterceptor) isClosed() bool {
@@ -133,7 +135,7 @@ func (s *SenderInterceptor) loop(rtcpWriter interceptor.RTCPWriter) {
 // BindLocalStream lets you modify any outgoing RTP packets. It is called once for per LocalStream. The returned method
 // will be called once per rtp packet.
 func (s *SenderInterceptor) BindLocalStream(info *interceptor.StreamInfo, writer interceptor.RTPWriter) interceptor.RTPWriter {
-	stream := newSenderStream(info.SSRC, info.ClockRate)
+	stream := newSenderStream(info.SSRC, info.ClockRate, s.useLatestPacket)
 	s.streams.Store(info.SSRC, stream)
 
 	return interceptor.RTPWriterFunc(func(header *rtp.Header, payload []byte, a interceptor.Attributes) (int, error) {
