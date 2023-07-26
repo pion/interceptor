@@ -44,6 +44,15 @@ func SenderTicker(f TickerFactory) SenderOption {
 	}
 }
 
+// SenderUseLatestPacket sets the interceptor to always use the latest packet, even
+// if it appears to be out-of-order.
+func SenderUseLatestPacket() SenderOption {
+	return func(r *SenderInterceptor) error {
+		r.useLatestPacket = true
+		return nil
+	}
+}
+
 // enableStartTracking is used by tests to synchronize whether the loop() has begun
 // and it's safe to start sending ticks to the ticker.
 func enableStartTracking(startedCh chan struct{}) SenderOption {
