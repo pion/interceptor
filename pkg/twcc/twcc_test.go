@@ -940,3 +940,25 @@ func TestInsertSorted(t *testing.T) {
 		})
 	}
 }
+
+func TestPacketsHheld(t *testing.T) {
+	r := NewRecorder(5000)
+	assert.Zero(t, r.PacketsHeld())
+
+	arrivalTime := int64(scaleFactorReferenceTime)
+	addRun(t, r, []uint16{0, 1, 2}, []int64{
+		arrivalTime,
+		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
+		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
+	})
+	assert.Equal(t, r.PacketsHeld(), 3)
+
+	addRun(t, r, []uint16{3, 4}, []int64{
+		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
+		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
+	})
+	assert.Equal(t, r.PacketsHeld(), 5)
+
+	r.BuildFeedbackPacket()
+	assert.Zero(t, r.PacketsHeld())
+}

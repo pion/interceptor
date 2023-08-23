@@ -51,6 +51,11 @@ func (r *Recorder) Record(mediaSSRC uint32, sequenceNumber uint16, arrivalTime i
 	r.lastSequenceNumber = sequenceNumber
 }
 
+// PacketsHeld returns the number of received packets currently held by the recorder
+func (r *Recorder) PacketsHeld() int {
+	return len(r.receivedPackets)
+}
+
 func insertSorted(list []pktInfo, element pktInfo) []pktInfo {
 	if len(list) == 0 {
 		return append(list, element)
