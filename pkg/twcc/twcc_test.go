@@ -4,7 +4,6 @@
 package twcc
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/pion/rtcp"
@@ -572,10 +571,10 @@ func TestDuplicatePackets(t *testing.T) {
 
 	arrivalTime := int64(scaleFactorReferenceTime)
 	addRun(t, r, []uint16{12, 13, 13, 14}, []int64{
-		arrivalTime,
-		arrivalTime,
-		arrivalTime,
-		arrivalTime,
+		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
+		arrivalTime + rtcp.TypeTCCDeltaScaleFactor*256,
+		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
+		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
 	})
 
 	rtcpPackets := r.BuildFeedbackPacket()
@@ -603,9 +602,9 @@ func TestDuplicatePackets(t *testing.T) {
 			},
 		},
 		RecvDeltas: []*rtcp.RecvDelta{
-			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
-			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
-			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
+			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 250},
+			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 250},
+			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 250},
 		},
 	}, rtcpToTwcc(t, rtcpPackets)[0])
 	marshalAll(t, rtcpPackets)
@@ -802,146 +801,7 @@ func TestReorderedPackets(t *testing.T) {
 	marshalAll(t, rtcpPackets)
 }
 
-func TestInsertSorted(t *testing.T) {
-	cases := []struct {
-		l        []pktInfo
-		e        pktInfo
-		expected []pktInfo
-	}{
-		{
-			l: []pktInfo{},
-			e: pktInfo{},
-			expected: []pktInfo{{
-				sequenceNumber: 0,
-				arrivalTime:    0,
-			}},
-		},
-		{
-			l: []pktInfo{
-				{
-					sequenceNumber: 0,
-					arrivalTime:    0,
-				},
-				{
-					sequenceNumber: 1,
-					arrivalTime:    0,
-				},
-			},
-			e: pktInfo{
-				sequenceNumber: 2,
-				arrivalTime:    0,
-			},
-			expected: []pktInfo{
-				{
-					sequenceNumber: 0,
-					arrivalTime:    0,
-				},
-				{
-					sequenceNumber: 1,
-					arrivalTime:    0,
-				},
-				{
-					sequenceNumber: 2,
-					arrivalTime:    0,
-				},
-			},
-		},
-		{
-			l: []pktInfo{
-				{
-					sequenceNumber: 0,
-					arrivalTime:    0,
-				},
-				{
-					sequenceNumber: 2,
-					arrivalTime:    0,
-				},
-			},
-			e: pktInfo{
-				sequenceNumber: 1,
-				arrivalTime:    0,
-			},
-			expected: []pktInfo{
-				{
-					sequenceNumber: 0,
-					arrivalTime:    0,
-				},
-				{
-					sequenceNumber: 1,
-					arrivalTime:    0,
-				},
-				{
-					sequenceNumber: 2,
-					arrivalTime:    0,
-				},
-			},
-		},
-		{
-			l: []pktInfo{
-				{
-					sequenceNumber: 0,
-					arrivalTime:    0,
-				},
-				{
-					sequenceNumber: 1,
-					arrivalTime:    0,
-				},
-				{
-					sequenceNumber: 2,
-					arrivalTime:    0,
-				},
-			},
-			e: pktInfo{
-				sequenceNumber: 1,
-				arrivalTime:    0,
-			},
-			expected: []pktInfo{
-				{
-					sequenceNumber: 0,
-					arrivalTime:    0,
-				},
-				{
-					sequenceNumber: 1,
-					arrivalTime:    0,
-				},
-				{
-					sequenceNumber: 2,
-					arrivalTime:    0,
-				},
-			},
-		},
-		{
-			l: []pktInfo{
-				{
-					sequenceNumber: 10,
-					arrivalTime:    0,
-				},
-			},
-			e: pktInfo{
-				sequenceNumber: 9,
-				arrivalTime:    0,
-			},
-			expected: []pktInfo{
-				{
-					sequenceNumber: 9,
-					arrivalTime:    0,
-				},
-				{
-					sequenceNumber: 10,
-					arrivalTime:    0,
-				},
-			},
-		},
-	}
-	for i, c := range cases {
-		c := c
-		t.Run(fmt.Sprintf("%v", i), func(t *testing.T) {
-			assert.Equal(t, c.expected, insertSorted(c.l, c.e))
-		})
-	}
-}
-
-func TestPacketsHheld(t *testing.T) {
+func TestPacketsHeld(t *testing.T) {
 	r := NewRecorder(5000)
 	assert.Zero(t, r.PacketsHeld())
 
