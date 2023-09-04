@@ -11,7 +11,7 @@ import (
 	"github.com/pion/interceptor/internal/test"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
-	transportTest "github.com/pion/transport/v2/test"
+	transportTest "github.com/pion/transport/v3/test"
 	"github.com/stretchr/testify/assert"
 )
 
