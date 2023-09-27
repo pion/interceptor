@@ -255,6 +255,53 @@ func Test_feedback(t *testing.T) {
 		}
 	})
 
+	t.Run("add received small deltas", func(t *testing.T) {
+		f := newFeedback(0, 0, 0)
+		base := int64(320 * 1000)
+		deltaUS := int64(200)
+		f.setBase(5, base)
+
+		for i := int64(0); i < 5; i++ {
+			got := f.addReceived(5+uint16(i+1), base+deltaUS*i)
+			assert.True(t, got)
+		}
+
+		pkt := f.getRTCP()
+
+		expectedDeltas := []*rtcp.RecvDelta{
+			{
+				Type:  rtcp.TypeTCCPacketReceivedSmallDelta,
+				Delta: 0,
+			},
+			{
+				Type: rtcp.TypeTCCPacketReceivedSmallDelta,
+				// NOTE: The delta is less than the scale factor, but it should be rounded up.
+				// (rtcp.RecvDelta).Marshal() simply truncates to an interval of the scale factor,
+				// so we want to make sure that the deltas have any rounding applied when building
+				// the feedback.
+				Delta: 1 * rtcp.TypeTCCDeltaScaleFactor,
+			},
+			{
+				Type:  rtcp.TypeTCCPacketReceivedSmallDelta,
+				Delta: 1 * rtcp.TypeTCCDeltaScaleFactor,
+			},
+			{
+				Type: rtcp.TypeTCCPacketReceivedSmallDelta,
+				// NOTE: This is zero because even though the deltas are all the same, the rounding error has
+				// built up enough by this packet to cause it to be rounded down.
+				Delta: 0 * rtcp.TypeTCCDeltaScaleFactor,
+			},
+			{
+				Type:  rtcp.TypeTCCPacketReceivedSmallDelta,
+				Delta: 1 * rtcp.TypeTCCDeltaScaleFactor,
+			},
+		}
+		assert.Equal(t, len(expectedDeltas), len(pkt.RecvDeltas))
+		for i, d := range expectedDeltas {
+			assert.Equal(t, d, pkt.RecvDeltas[i])
+		}
+	})
+
 	t.Run("add received wrapped sequence number", func(t *testing.T) {
 		f := newFeedback(0, 0, 0)
 		f.setBase(65535, 320*1000)
