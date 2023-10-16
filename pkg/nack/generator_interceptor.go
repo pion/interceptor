@@ -191,6 +191,10 @@ func (n *GeneratorInterceptor) loop(rtcpWriter interceptor.RTCPWriter) {
 						}
 					}
 
+					if len(filteredMissing) == 0 {
+						continue
+					}
+
 					if _, err := rtcpWriter.Write([]rtcp.Packet{nack}, interceptor.Attributes{}); err != nil {
 						n.log.Warnf("failed sending nack: %+v", err)
 					}
