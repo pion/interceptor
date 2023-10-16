@@ -178,6 +178,10 @@ func TestReceiverInterceptor(t *testing.T) {
 			SequenceNumber: 0x00,
 		}})
 
+		stream.ReceiveRTP(&rtp.Packet{Header: rtp.Header{
+			SequenceNumber: 0xfffe,
+		}})
+
 		pkts := <-stream.WrittenRTCP()
 		assert.Equal(t, len(pkts), 1)
 		rr, ok := pkts[0].(*rtcp.ReceiverReport)

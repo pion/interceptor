@@ -64,10 +64,10 @@ func (stream *receiverStream) processRTP(now time.Time, pktHeader *rtp.Header) {
 	} else { // following frames
 		stream.setReceived(pktHeader.SequenceNumber)
 
-		diff := int32(pktHeader.SequenceNumber) - int32(stream.lastSeqnum)
-		if diff > 0 || diff < -0x0FFF {
-			// overflow
-			if diff < -0x0FFF {
+		diff := pktHeader.SequenceNumber - stream.lastSeqnum
+		if diff > 0 && diff < (1<<15) {
+			// wrap around
+			if pktHeader.SequenceNumber < stream.lastSeqnum {
 				stream.seqnumCycles++
 			}
 
