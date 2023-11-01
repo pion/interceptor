@@ -42,8 +42,44 @@ func NewCoverage(mediaPackets []rtp.Packet, numFecPackets uint32) *ProtectionCov
 	// We allocate the biggest array of bitmasks that respects the max constraints.
 	var packetMasks [MaxFecPackets]util.BitArray
 	for i := 0; i < int(MaxFecPackets); i++ {
-		packetMasks[i] = util.NewBitArray(MaxMediaPackets)
+		packetMasks[i] = util.BitArray{}
 	}
+
+	coverage := &ProtectionCoverage{
+		packetMasks:     packetMasks,
+		numFecPackets:   0,
+		numMediaPackets: 0,
+		mediaPackets:    nil,
+	}
+
+	coverage.UpdateCoverage(mediaPackets, numFecPackets)
+	return coverage
+}
+
+// UpdateCoverage updates the ProtectionCoverage object with new bitmasks accounting for the numFecPackets
+// we want to use to protect the batch media packets.
+func (p *ProtectionCoverage) UpdateCoverage(mediaPackets []rtp.Packet, numFecPackets uint32) {
+	numMediaPackets := uint32(len(mediaPackets))
+
+	// Basic sanity checks
+	if numMediaPackets <= 0 || numMediaPackets > MaxMediaPackets {
+		return
+	}
+
+	p.mediaPackets = mediaPackets
+
+	if numFecPackets == p.numFecPackets && numMediaPackets == p.numMediaPackets {
+		// We have the same number of FEC packets covering the same number of media packets, we can simply
+		// reuse the previous coverage map with the updated media packets.
+		return
+	}
+
+	p.numFecPackets = numFecPackets
+	p.numMediaPackets = numMediaPackets
+
+	// The number of FEC packets and/or the number of packets has changed, we need to update the coverage map
+	// to reflect these new values.
+	p.resetCoverage()
 
 	// Generate FEC bit mask where numFecPackets FEC packets are covering numMediaPackets Media packets.
 	// In the packetMasks array, each FEC packet is represented by a single BitArray, each bit in a given BitArray
@@ -52,26 +88,18 @@ func NewCoverage(mediaPackets []rtp.Packet, numFecPackets uint32) *ProtectionCov
 	for fecPacketIndex := uint32(0); fecPacketIndex < numFecPackets; fecPacketIndex++ {
 		// We use an interleaved method to determine coverage. Given N FEC packets, Media packet X will be
 		// covered by FEC packet X % N.
-		for mediaPacketIndex := uint32(0); mediaPacketIndex < numMediaPackets; mediaPacketIndex++ {
-			coveringFecPktIndex := mediaPacketIndex % numFecPackets
-			packetMasks[coveringFecPktIndex].SetBit(mediaPacketIndex, 1)
+		coveredMediaPacketIndex := fecPacketIndex
+		for coveredMediaPacketIndex < numMediaPackets {
+			p.packetMasks[fecPacketIndex].SetBit(coveredMediaPacketIndex)
+			coveredMediaPacketIndex += numFecPackets
 		}
-	}
-
-	return &ProtectionCoverage{
-		packetMasks:     packetMasks,
-		numFecPackets:   numFecPackets,
-		numMediaPackets: numMediaPackets,
-		mediaPackets:    mediaPackets,
 	}
 }
 
 // ResetCoverage clears the underlying map so that we can reuse it for new batches of RTP packets.
-func (p *ProtectionCoverage) ResetCoverage() {
+func (p *ProtectionCoverage) resetCoverage() {
 	for i := uint32(0); i < MaxFecPackets; i++ {
-		for j := uint32(0); j < MaxMediaPackets; j++ {
-			p.packetMasks[i].SetBit(j, 0)
-		}
+		p.packetMasks[i].Reset()
 	}
 }
 
@@ -86,26 +114,46 @@ func (p *ProtectionCoverage) GetCoveredBy(fecPacketIndex uint32) *util.MediaPack
 	return util.NewMediaPacketIterator(p.mediaPackets, coverage)
 }
 
-// MarshalBitmasks returns the underlying bitmask that defines which media packets are protected by the
-// specified fecPacketIndex.
-func (p *ProtectionCoverage) MarshalBitmasks(fecPacketIndex uint32) []byte {
-	return p.packetMasks[fecPacketIndex].Marshal()
-}
-
 // ExtractMask1 returns the first section of the bitmask as defined by the FEC header.
 // https://datatracker.ietf.org/doc/html/rfc8627#section-4.2.2.1
 func (p *ProtectionCoverage) ExtractMask1(fecPacketIndex uint32) uint16 {
-	return uint16(p.packetMasks[fecPacketIndex].GetBitValue(0, 14))
+	mask := p.packetMasks[fecPacketIndex]
+	// We get the first 16 bits (64 - 16 -> shift by 48) and we shift once more for K field
+	mask1 := mask.Lo >> 49
+	return uint16(mask1)
 }
 
 // ExtractMask2 returns the second section of the bitmask as defined by the FEC header.
 // https://datatracker.ietf.org/doc/html/rfc8627#section-4.2.2.1
 func (p *ProtectionCoverage) ExtractMask2(fecPacketIndex uint32) uint32 {
-	return uint32(p.packetMasks[fecPacketIndex].GetBitValue(15, 45))
+	mask := p.packetMasks[fecPacketIndex]
+	// We remove the first 15 bits
+	mask2 := mask.Lo << 15
+	// We get the first 31 bits (64 - 31 -> shift by 33) and we shift once more for K field
+	mask2 >>= 34
+	return uint32(mask2)
 }
 
 // ExtractMask3 returns the third section of the bitmask as defined by the FEC header.
 // https://datatracker.ietf.org/doc/html/rfc8627#section-4.2.2.1
 func (p *ProtectionCoverage) ExtractMask3(fecPacketIndex uint32) uint64 {
-	return p.packetMasks[fecPacketIndex].GetBitValue(46, 109)
+	mask := p.packetMasks[fecPacketIndex]
+	// We remove the first 46 bits
+	maskLo := mask.Lo << 46
+	maskHi := mask.Hi >> 18
+	mask3 := maskLo | maskHi
+	return mask3
+}
+
+// ExtractMask3_03 returns the third section of the bitmask as defined by the FEC header.
+// https://datatracker.ietf.org/doc/html/draft-ietf-payload-flexible-fec-scheme-03#section-4.2
+func (p *ProtectionCoverage) ExtractMask3_03(fecPacketIndex uint32) uint64 {
+	mask := p.packetMasks[fecPacketIndex]
+	// We remove the first 46 bits
+	maskLo := mask.Lo << 46
+	maskHi := mask.Hi >> 18
+	mask3 := maskLo | maskHi
+	// We shift once for the K bit.
+	mask3 >>= 1
+	return mask3
 }
