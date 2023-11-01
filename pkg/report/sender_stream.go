@@ -39,7 +39,8 @@ func (stream *senderStream) processRTP(now time.Time, header *rtp.Header, payloa
 	stream.m.Lock()
 	defer stream.m.Unlock()
 
-	if stream.useLatestPacket || stream.packetCount == 0 || int16(header.SequenceNumber-stream.lastRTPSN) > 0 {
+	diff := header.SequenceNumber - stream.lastRTPSN
+	if stream.useLatestPacket || stream.packetCount == 0 || (diff > 0 && diff < (1<<15)) {
 		// Told to consider every packet, or this was the first packet, or it's in-order
 		stream.lastRTPSN = header.SequenceNumber
 		stream.lastRTPTimeRTP = header.Timestamp
