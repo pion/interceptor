@@ -34,20 +34,35 @@ type rateController struct {
 }
 
 type exponentialMovingAverage struct {
+	init         bool
 	average      float64
 	variance     float64
 	stdDeviation float64
+	lastUpdate   time.Time
+}
+
+func (a *exponentialMovingAverage) reset() {
+	a.init = false
+	a.average = 0
+	a.variance = 0
+	a.stdDeviation = 0
 }
 
 func (a *exponentialMovingAverage) update(value float64) {
-	if a.average == 0.0 {
+	if !a.init {
 		a.average = value
+		a.init = true
 	} else {
 		x := value - a.average
 		a.average += decreaseEMAAlpha * x
 		a.variance = (1 - decreaseEMAAlpha) * (a.variance + decreaseEMAAlpha*x*x)
 		a.stdDeviation = math.Sqrt(a.variance)
 	}
+	a.lastUpdate = time.Now()
+}
+
+func (a *exponentialMovingAverage) expired(now time.Time) bool {
+	return a.init && now.Sub(a.lastUpdate) > time.Minute
 }
 
 func newRateController(now now, initialTargetBitrate, minBitrate, maxBitrate int, dsw func(DelayStats)) *rateController {
@@ -134,7 +149,16 @@ func (c *rateController) onDelayStats(ds DelayStats) {
 }
 
 func (c *rateController) increase(now time.Time) int {
-	if c.latestDecreaseRate.average > 0 && float64(c.latestReceivedRate) > c.latestDecreaseRate.average-3*c.latestDecreaseRate.stdDeviation &&
+	if c.latestDecreaseRate.init &&
+		float64(c.latestReceivedRate) > c.latestDecreaseRate.average+3*c.latestDecreaseRate.stdDeviation {
+		c.latestDecreaseRate.reset()
+	}
+
+	if c.latestDecreaseRate.expired(now) {
+		c.latestDecreaseRate.reset()
+	}
+
+	if c.latestDecreaseRate.init && float64(c.latestReceivedRate) > c.latestDecreaseRate.average-3*c.latestDecreaseRate.stdDeviation &&
 		float64(c.latestReceivedRate) < c.latestDecreaseRate.average+3*c.latestDecreaseRate.stdDeviation {
 		bitsPerFrame := float64(c.target) / 30.0
 		packetsPerFrame := math.Ceil(bitsPerFrame / (1200 * 8))
