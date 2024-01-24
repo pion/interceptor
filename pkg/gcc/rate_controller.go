@@ -45,7 +45,7 @@ func (a *exponentialMovingAverage) update(value float64) {
 	} else {
 		x := value - a.average
 		a.average += decreaseEMAAlpha * x
-		a.variance = (1 - decreaseEMAAlpha) * (a.variance + decreaseEMAAlpha*x*x)
+		a.variance = decreaseEMAAlpha*x*x + (1-decreaseEMAAlpha)*a.variance
 		a.stdDeviation = math.Sqrt(a.variance)
 	}
 }
