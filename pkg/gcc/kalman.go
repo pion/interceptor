@@ -9,7 +9,8 @@ import (
 )
 
 const (
-	chi = 0.001
+	chi   = 0.001
+	alpha = 0.95
 )
 
 type kalmanOption func(*kalman)
@@ -75,7 +76,6 @@ func (k *kalman) updateEstimate(measurement time.Duration) time.Duration {
 	zms := float64(z.Microseconds()) / 1000.0
 
 	if !k.disableMeasurementUncertaintyUpdates {
-		alpha := math.Pow((1 - chi), 30.0/(1000.0*5*float64(time.Millisecond)))
 		root := math.Sqrt(k.measurementUncertainty)
 		root3 := 3 * root
 		if zms > root3 {
