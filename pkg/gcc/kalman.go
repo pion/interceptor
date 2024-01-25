@@ -10,7 +10,7 @@ import (
 
 const (
 	chi   = 0.001
-	alpha = 0.95
+	Kcount = 10
 )
 
 type kalmanOption func(*kalman)
@@ -21,7 +21,9 @@ type kalman struct {
 	processUncertainty     float64 // Q_i
 	estimateError          float64
 	measurementUncertainty float64
-
+	K                      [Kcount] time.Duration
+	Kmin                   time.Duration
+	kIndex                 int
 	disableMeasurementUncertaintyUpdates bool
 }
 
@@ -70,12 +72,36 @@ func newKalman(opts ...kalmanOption) *kalman {
 	return k
 }
 
-func (k *kalman) updateEstimate(measurement time.Duration) time.Duration {
+func (k *kalman) updateEstimate(measurement, lastReceiveDelta time.Duration) time.Duration {
 	z := measurement - k.estimate
 
 	zms := float64(z.Microseconds()) / 1000.0
 
 	if !k.disableMeasurementUncertaintyUpdates {
+		index:= k.kIndex % Kcount
+
+
+		if k.kIndex == 0 {
+			k.Kmin = lastReceiveDelta
+		} else if lastReceiveDelta < k.Kmin {
+			k.Kmin = lastReceiveDelta
+		} else if k.kIndex >= Kcount && k.K[index] == k.Kmin {
+			k.Kmin = lastReceiveDelta
+
+			for i:= 0; i < k.kIndex && i < Kcount; i++ {
+				if i != index && k.Kmin > k.K[i] {
+					k.Kmin = k.K[i]
+				}
+			}
+		}
+
+		k.K[index] = lastReceiveDelta
+
+		kMinms := float64(k.Kmin.Microseconds()) / 1000.0
+
+		fmax:= 1 / kMinms
+
+		alpha := math.Pow((1 - chi), 30.0/(1000.0 * fmax))
 		root := math.Sqrt(k.measurementUncertainty)
 		root3 := 3 * root
 		if zms > root3 {
@@ -83,6 +109,8 @@ func (k *kalman) updateEstimate(measurement time.Duration) time.Duration {
 		} else {
 			k.measurementUncertainty = math.Max(alpha*k.measurementUncertainty+(1-alpha)*zms*zms, 1)
 		}
+
+		k.kIndex++
 	}
 
 	estimateUncertainty := k.estimateError + k.processUncertainty
