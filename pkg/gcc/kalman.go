@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	chi   = 0.001
-	Kcount = 10
+	chi   = 0.01
+	Kcount = 25
 )
 
 type kalmanOption func(*kalman)
@@ -114,7 +114,7 @@ func (k *kalman) updateEstimate(measurement, lastReceiveDelta time.Duration) tim
 	}
 
 	estimateUncertainty := k.estimateError + k.processUncertainty
-	k.gain = estimateUncertainty / (estimateUncertainty + k.measurementUncertainty)
+	k.gain = math.Max(estimateUncertainty / (estimateUncertainty + k.measurementUncertainty), 0.01)
 
 	k.estimate += time.Duration(k.gain * zms * float64(time.Millisecond))
 
