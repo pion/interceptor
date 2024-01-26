@@ -104,7 +104,7 @@ func TestAdaptiveThreshold(t *testing.T) {
 			},
 			expected: []usage{usageNormal, usageOver, usageNormal},
 			options: []adaptiveThresholdOption{
-				setInitialThreshold(40 * time.Millisecond),
+				setInitialThreshold(20 * time.Millisecond),
 			},
 		},
 		{

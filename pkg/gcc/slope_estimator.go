@@ -11,6 +11,12 @@ type estimator interface {
 	updateEstimate(measurement, lastReceiveDelta time.Duration) time.Duration
 }
 
+type estimatorFunc func(time.Duration, time.Duration) time.Duration
+
+func (f estimatorFunc) updateEstimate(d, c time.Duration) time.Duration {
+	return f(d, c)
+}
+
 type slopeEstimator struct {
 	estimator
 	init             bool
