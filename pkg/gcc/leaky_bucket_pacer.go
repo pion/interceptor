@@ -7,6 +7,7 @@ import (
 	"container/list"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pion/interceptor"
@@ -29,6 +30,8 @@ type LeakyBucketPacer struct {
 
 	f                 float64
 	targetBitrate     int
+	maxQueueSize      int
+	lastDroppedItems  atomic.Uint64
 	targetBitrateLock sync.Mutex
 
 	pacingInterval time.Duration
@@ -43,6 +46,11 @@ type LeakyBucketPacer struct {
 	pool *sync.Pool
 }
 
+// getMaxQueueSize returns max items for given bitrate for 500 milliseconds
+func getMaxQueueSize(bitrate int) int {
+	return int(float64(500)*float64(bitrate)/(8000.0*1460)) + 1
+}
+
 // NewLeakyBucketPacer initializes a new LeakyBucketPacer
 func NewLeakyBucketPacer(initialBitrate int) *LeakyBucketPacer {
 	p := &LeakyBucketPacer{
@@ -50,6 +58,7 @@ func NewLeakyBucketPacer(initialBitrate int) *LeakyBucketPacer {
 		f:              1.5,
 		targetBitrate:  initialBitrate,
 		pacingInterval: 5 * time.Millisecond,
+		maxQueueSize:   getMaxQueueSize(initialBitrate),
 		qLock:          sync.RWMutex{},
 		queue:          list.New(),
 		done:           make(chan struct{}),
@@ -89,6 +98,11 @@ func (p *LeakyBucketPacer) getTargetBitrate() int {
 	return p.targetBitrate
 }
 
+// LastDroppedItems gets dropped bytes from the last call
+func (p *LeakyBucketPacer) LastDroppedItems() uint64 {
+	return p.lastDroppedItems.Swap(0)
+}
+
 // Write sends a packet with header and payload the a previously registered
 // stream.
 func (p *LeakyBucketPacer) Write(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
@@ -107,6 +121,18 @@ func (p *LeakyBucketPacer) Write(header *rtp.Header, payload []byte, attributes 
 		size:       len(payload),
 		attributes: attributes,
 	})
+
+	// this loop never iterates more than once
+	for p.queue.Len() > p.maxQueueSize {
+		next, ok := p.queue.Remove(p.queue.Front()).(*item)
+		p.lastDroppedItems.Add(1)
+		if !ok { // never happens
+			p.log.Warnf("failed to access leaky bucket pacer queue, cast failed")
+		} else {
+			p.pool.Put(next.payload)
+		}
+	}
+
 	p.qLock.Unlock()
 
 	return header.MarshalSize() + len(payload), nil

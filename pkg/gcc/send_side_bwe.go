@@ -31,6 +31,7 @@ type Pacer interface {
 	interceptor.RTPWriter
 	AddStream(ssrc uint32, writer interceptor.RTPWriter)
 	SetTargetBitrate(int)
+	LastDroppedItems() uint64
 	Close() error
 }
 
@@ -216,6 +217,11 @@ func (e *SendSideBWE) GetTargetBitrate() int {
 	defer e.lock.Unlock()
 
 	return e.latestBitrate
+}
+
+// GetLastDroppedPacerItems returns dropped pacer items after the last call
+func (e *SendSideBWE) GetLastDroppedPacerItems() uint64 {
+	return e.pacer.LastDroppedItems()
 }
 
 // GetStats returns some internal statistics of the bandwidth estimator

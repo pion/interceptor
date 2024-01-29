@@ -35,6 +35,12 @@ func NewNoOpPacer() *NoOpPacer {
 func (p *NoOpPacer) SetTargetBitrate(int) {
 }
 
+// LastDroppedItems gets dropped bytes from the last call NoOp for
+// NoOp pacer.
+func (p *NoOpPacer) LastDroppedItems() uint64 {
+	return 0
+}
+
 // AddStream adds a stream and corresponding writer to the p
 func (p *NoOpPacer) AddStream(ssrc uint32, writer interceptor.RTPWriter) {
 	p.lock.Lock()
