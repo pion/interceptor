@@ -142,8 +142,8 @@ func (r *ReceiverInterceptor) BindRemoteStream(info *interceptor.StreamInfo, rea
 	})
 }
 
-// UnbindLocalStream is called when the Stream is removed. It can be used to clean up any data related to that track.
-func (r *ReceiverInterceptor) UnbindLocalStream(info *interceptor.StreamInfo) {
+// UnbindRemoteStream is called when the Stream is removed. It can be used to clean up any data related to that track.
+func (r *ReceiverInterceptor) UnbindRemoteStream(info *interceptor.StreamInfo) {
 	r.streams.Delete(info.SSRC)
 }
 

@@ -179,7 +179,7 @@ func TestNTPTime32(t *testing.T) {
 		},
 		{
 			input:    notSoLongAgo,
-			expected: uint32(int(notSoLongAgo.Sub(zero).Seconds())&0xffff) << 16,
+			expected: uint32(uint(notSoLongAgo.Sub(zero).Seconds())&0xffff) << 16,
 		},
 		{
 			input:    zero.Add(400 * time.Millisecond),
