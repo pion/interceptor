@@ -144,3 +144,8 @@ func (s *SenderInterceptor) BindLocalStream(info *interceptor.StreamInfo, writer
 		return writer.Write(header, payload, a)
 	})
 }
+
+// UnbindLocalStream is called when the Stream is removed. It can be used to clean up any data related to that track.
+func (s *SenderInterceptor) UnbindLocalStream(info *interceptor.StreamInfo) {
+	s.streams.Delete(info.SSRC)
+}
