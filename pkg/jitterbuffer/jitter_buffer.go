@@ -65,14 +65,15 @@ type (
 // order, and allows removing in either sequence number order or via a
 // provided timestamp
 type JitterBuffer struct {
-	packets      *PriorityQueue
-	lastSequence uint16
-	playoutHead  uint16
-	playoutReady bool
-	state        State
-	stats        Stats
-	listeners    map[Event][]EventListener
-	mutex        sync.Mutex
+	packets       *PriorityQueue
+	minStartCount uint16
+	lastSequence  uint16
+	playoutHead   uint16
+	playoutReady  bool
+	state         State
+	stats         Stats
+	listeners     map[Event][]EventListener
+	mutex         sync.Mutex
 }
 
 // Stats Track interesting statistics for the life of this JitterBuffer
@@ -90,11 +91,19 @@ type Stats struct {
 
 // New will initialize a jitter buffer and its associated statistics
 func New(opts ...Option) *JitterBuffer {
-	jb := &JitterBuffer{state: Buffering, stats: Stats{0, 0, 0}, packets: NewQueue(), listeners: make(map[Event][]EventListener)}
+	jb := &JitterBuffer{state: Buffering, stats: Stats{0, 0, 0}, minStartCount: 50, packets: NewQueue(), listeners: make(map[Event][]EventListener)}
 	for _, o := range opts {
 		o(jb)
 	}
 	return jb
+}
+
+// WithMinimumPacketCount will set the required number of packets to be received before
+// any attempt to pop a packet can succeed
+func WithMinimumPacketCount(count uint16) Option {
+	return func(jb *JitterBuffer) {
+		jb.minStartCount = count
+	}
 }
 
 // Listen will register an event listener
@@ -142,7 +151,7 @@ func (jb *JitterBuffer) emit(event Event) {
 
 func (jb *JitterBuffer) updateState() {
 	// For now, we only look at the number of packets captured in the play buffer
-	if jb.packets.Length() >= 50 && jb.state == Buffering {
+	if jb.packets.Length() >= jb.minStartCount && jb.state == Buffering {
 		jb.state = Emitting
 		jb.playoutReady = true
 		jb.emit(BeginPlayback)
@@ -183,6 +192,36 @@ func (jb *JitterBuffer) Pop() (*rtp.Packet, error) {
 	}
 	jb.playoutHead = (jb.playoutHead + 1) % math.MaxUint16
 	jb.updateState()
+	return packet, nil
+}
+
+// PopAtSequence will pop an RTP packet from the jitter buffer at the specified Sequence
+func (jb *JitterBuffer) PopAtSequence(sq uint16) (*rtp.Packet, error) {
+	jb.mutex.Lock()
+	defer jb.mutex.Unlock()
+	if jb.state != Emitting {
+		return nil, ErrPopWhileBuffering
+	}
+	packet, err := jb.packets.PopAt(sq)
+	if err != nil {
+		jb.stats.underflowCount++
+		jb.emit(BufferUnderflow)
+		return (*rtp.Packet)(nil), err
+	}
+	jb.playoutHead = (jb.playoutHead + 1) % math.MaxUint16
+	jb.updateState()
+	return packet, nil
+}
+
+// PeekAtSequence will return an RTP packet from the jitter buffer at the specified Sequence
+// without removing it from the buffer
+func (jb *JitterBuffer) PeekAtSequence(sq uint16) (*rtp.Packet, error) {
+	jb.mutex.Lock()
+	defer jb.mutex.Unlock()
+	packet, err := jb.packets.Find(sq)
+	if err != nil {
+		return (*rtp.Packet)(nil), err
+	}
 	return packet, nil
 }
 
