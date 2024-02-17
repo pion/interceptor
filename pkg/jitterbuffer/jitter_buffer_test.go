@@ -29,13 +29,24 @@ func TestJitterBuffer(t *testing.T) {
 		assert.Equal(jb.packets.Length(), uint16(4))
 		assert.Equal(jb.lastSequence, uint16(5012))
 	})
-
 	t.Run("Appends packets and begins playout", func(*testing.T) {
 		jb := New()
 		for i := 0; i < 100; i++ {
 			jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: uint16(5012 + i), Timestamp: uint32(512 + i)}, Payload: []byte{0x02}})
 		}
 		assert.Equal(jb.packets.Length(), uint16(100))
+		assert.Equal(jb.state, Emitting)
+		assert.Equal(jb.playoutHead, uint16(5012))
+		head, err := jb.Pop()
+		assert.Equal(head.SequenceNumber, uint16(5012))
+		assert.Equal(err, nil)
+	})
+	t.Run("Appends packets and begins playout", func(*testing.T) {
+		jb := New(WithMinimumPacketCount(1))
+		for i := 0; i < 2; i++ {
+			jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: uint16(5012 + i), Timestamp: uint32(512 + i)}, Payload: []byte{0x02}})
+		}
+		assert.Equal(jb.packets.Length(), uint16(2))
 		assert.Equal(jb.state, Emitting)
 		assert.Equal(jb.playoutHead, uint16(5012))
 		head, err := jb.Pop()
@@ -99,6 +110,20 @@ func TestJitterBuffer(t *testing.T) {
 		assert.Equal(pkt.SequenceNumber, uint16(5000))
 		assert.Equal(err, nil)
 	})
+	t.Run("Pops at sequence with an invalid sequence number", func(*testing.T) {
+		jb := New()
+		for i := 0; i < 50; i++ {
+			sqnum := uint16((math.MaxUint16 - 32 + i) % math.MaxUint16)
+			jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: sqnum, Timestamp: uint32(512 + i)}, Payload: []byte{0x02}})
+		}
+		jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: 1019, Timestamp: uint32(9000)}, Payload: []byte{0x02}})
+		jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: 1020, Timestamp: uint32(9000)}, Payload: []byte{0x02}})
+		assert.Equal(jb.packets.Length(), uint16(52))
+		assert.Equal(jb.state, Emitting)
+		head, err := jb.PopAtSequence(uint16(9000))
+		assert.Equal(head, (*rtp.Packet)(nil))
+		assert.NotEqual(err, nil)
+	})
 	t.Run("Pops at timestamp with multiple packets", func(*testing.T) {
 		jb := New()
 		for i := 0; i < 50; i++ {
@@ -117,6 +142,27 @@ func TestJitterBuffer(t *testing.T) {
 		assert.Equal(err, nil)
 
 		head, err = jb.Pop()
+		assert.Equal(head.SequenceNumber, uint16(math.MaxUint16-32))
+		assert.Equal(err, nil)
+	})
+	t.Run("Peeks at timestamp with multiple packets", func(*testing.T) {
+		jb := New()
+		for i := 0; i < 50; i++ {
+			sqnum := uint16((math.MaxUint16 - 32 + i) % math.MaxUint16)
+			jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: sqnum, Timestamp: uint32(512 + i)}, Payload: []byte{0x02}})
+		}
+		jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: 1019, Timestamp: uint32(9000)}, Payload: []byte{0x02}})
+		jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: 1020, Timestamp: uint32(9000)}, Payload: []byte{0x02}})
+		assert.Equal(jb.packets.Length(), uint16(52))
+		assert.Equal(jb.state, Emitting)
+		head, err := jb.PeekAtSequence(uint16(1019))
+		assert.Equal(head.SequenceNumber, uint16(1019))
+		assert.Equal(err, nil)
+		head, err = jb.PeekAtSequence(uint16(1020))
+		assert.Equal(head.SequenceNumber, uint16(1020))
+		assert.Equal(err, nil)
+
+		head, err = jb.PopAtSequence(uint16(math.MaxUint16 - 32))
 		assert.Equal(head.SequenceNumber, uint16(math.MaxUint16-32))
 		assert.Equal(err, nil)
 	})
