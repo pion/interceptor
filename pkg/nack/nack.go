@@ -4,7 +4,11 @@
 // Package nack provides interceptors to implement sending and receiving negative acknowledgements
 package nack
 
-import "github.com/pion/interceptor"
+import (
+	"strings"
+
+	"github.com/pion/interceptor"
+)
 
 func streamSupportNack(info *interceptor.StreamInfo) bool {
 	for _, fb := range info.RTCPFeedback {
@@ -13,5 +17,5 @@ func streamSupportNack(info *interceptor.StreamInfo) bool {
 		}
 	}
 
-	return false
+	return strings.HasSuffix(info.MimeType, "/rtx")
 }
