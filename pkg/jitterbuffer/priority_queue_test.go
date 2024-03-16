@@ -12,7 +12,7 @@ import (
 
 func TestPriorityQueue(t *testing.T) {
 	assert := assert.New(t)
-	t.Run("Appends packets in order", func(t *testing.T) {
+	t.Run("Appends packets in order", func(*testing.T) {
 		pkt := &rtp.Packet{Header: rtp.Header{SequenceNumber: 5000, Timestamp: 500}, Payload: []byte{0x02}}
 		q := NewQueue()
 		q.Push(pkt, pkt.SequenceNumber)
@@ -22,7 +22,7 @@ func TestPriorityQueue(t *testing.T) {
 		assert.Equal(q.next.prio, uint16(5000))
 		assert.Equal(q.next.next.prio, uint16(5004))
 	})
-	t.Run("Appends many in order", func(t *testing.T) {
+	t.Run("Appends many in order", func(*testing.T) {
 		q := NewQueue()
 		for i := 0; i < 100; i++ {
 			q.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: uint16(5012 + i), Timestamp: uint32(512 + i)}, Payload: []byte{0x02}}, uint16(5012+i))
@@ -40,7 +40,7 @@ func TestPriorityQueue(t *testing.T) {
 		assert.Equal(q.next.prio, uint16(5012))
 		assert.Equal(last.prio, uint16(5012+99))
 	})
-	t.Run("Can remove an element", func(t *testing.T) {
+	t.Run("Can remove an element", func(*testing.T) {
 		pkt := &rtp.Packet{Header: rtp.Header{SequenceNumber: 5000, Timestamp: 500}, Payload: []byte{0x02}}
 		q := NewQueue()
 		q.Push(pkt, pkt.SequenceNumber)
@@ -55,7 +55,7 @@ func TestPriorityQueue(t *testing.T) {
 		nextPop, _ := q.Pop()
 		assert.Equal(nextPop.SequenceNumber, uint16(5012))
 	})
-	t.Run("Appends in order", func(t *testing.T) {
+	t.Run("Appends in order", func(*testing.T) {
 		q := NewQueue()
 		for i := 0; i < 100; i++ {
 			q.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: uint16(5012 + i), Timestamp: uint32(512 + i)}, Payload: []byte{0x02}}, uint16(5012+i))
@@ -67,7 +67,7 @@ func TestPriorityQueue(t *testing.T) {
 		assert.Equal(uint16(101), q.Length())
 		assert.Equal(q.next.prio, uint16(5000))
 	})
-	t.Run("Can find", func(t *testing.T) {
+	t.Run("Can find", func(*testing.T) {
 		q := NewQueue()
 		for i := 0; i < 100; i++ {
 			q.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: uint16(5012 + i), Timestamp: uint32(512 + i)}, Payload: []byte{0x02}}, uint16(5012+i))

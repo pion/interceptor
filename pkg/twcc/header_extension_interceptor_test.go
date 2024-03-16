@@ -28,7 +28,7 @@ func TestHeaderExtensionInterceptor(t *testing.T) {
 				URI: transportCCURI,
 				ID:  1,
 			},
-		}}, interceptor.RTPWriterFunc(func(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
+		}}, interceptor.RTPWriterFunc(func(*rtp.Header, []byte, interceptor.Attributes) (int, error) {
 			return 0, io.EOF
 		}))
 

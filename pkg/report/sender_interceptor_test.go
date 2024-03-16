@@ -230,7 +230,7 @@ func TestSenderInterceptor(t *testing.T) {
 			SenderInterval(time.Millisecond*50),
 			SenderLog(logging.NewDefaultLoggerFactory().NewLogger("test")),
 			SenderNow(mNow.Now),
-			SenderTicker(func(d time.Duration) Ticker { return mTick }),
+			SenderTicker(func(time.Duration) Ticker { return mTick }),
 			enableStartTracking(loopStarted),
 		)
 		assert.NoError(t, err)

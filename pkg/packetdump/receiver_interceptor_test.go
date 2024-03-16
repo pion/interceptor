@@ -23,10 +23,10 @@ func TestReceiverFilterEverythingOut(t *testing.T) {
 		RTPWriter(&buf),
 		RTCPWriter(&buf),
 		Log(logging.NewDefaultLoggerFactory().NewLogger("test")),
-		RTPFilter(func(pkt *rtp.Packet) bool {
+		RTPFilter(func(*rtp.Packet) bool {
 			return false
 		}),
-		RTCPFilter(func(pkt []rtcp.Packet) bool {
+		RTCPFilter(func([]rtcp.Packet) bool {
 			return false
 		}),
 	)
@@ -70,10 +70,10 @@ func TestReceiverFilterNothing(t *testing.T) {
 		RTPWriter(&buf),
 		RTCPWriter(&buf),
 		Log(logging.NewDefaultLoggerFactory().NewLogger("test")),
-		RTPFilter(func(pkt *rtp.Packet) bool {
+		RTPFilter(func(*rtp.Packet) bool {
 			return true
 		}),
-		RTCPFilter(func(pkt []rtcp.Packet) bool {
+		RTCPFilter(func([]rtcp.Packet) bool {
 			return true
 		}),
 	)

@@ -55,7 +55,7 @@ func NewMockStream(info *interceptor.StreamInfo, i interceptor.Interceptor) *Moc
 		rtcpInModified:  make(chan RTCPWithError, 1000),
 		rtpInModified:   make(chan RTPWithError, 1000),
 	}
-	s.rtcpWriter = i.BindRTCPWriter(interceptor.RTCPWriterFunc(func(pkts []rtcp.Packet, attributes interceptor.Attributes) (int, error) {
+	s.rtcpWriter = i.BindRTCPWriter(interceptor.RTCPWriterFunc(func(pkts []rtcp.Packet, _ interceptor.Attributes) (int, error) {
 		select {
 		case s.rtcpOutModified <- pkts:
 		default:
@@ -79,7 +79,7 @@ func NewMockStream(info *interceptor.StreamInfo, i interceptor.Interceptor) *Moc
 		copy(b, marshaled)
 		return len(marshaled), a, err
 	}))
-	s.rtpWriter = i.BindLocalStream(info, interceptor.RTPWriterFunc(func(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
+	s.rtpWriter = i.BindLocalStream(info, interceptor.RTPWriterFunc(func(header *rtp.Header, payload []byte, _ interceptor.Attributes) (int, error) {
 		select {
 		case s.rtpOutModified <- &rtp.Packet{Header: *header, Payload: payload}:
 		default:

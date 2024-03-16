@@ -100,7 +100,7 @@ func (r *ReceiverInterceptor) loop(rtcpWriter interceptor.RTCPWriter) {
 		select {
 		case <-ticker.C:
 			now := r.now()
-			r.streams.Range(func(key, value interface{}) bool {
+			r.streams.Range(func(_, value interface{}) bool {
 				if stream, ok := value.(*receiverStream); !ok {
 					r.log.Warnf("failed to cast ReceiverInterceptor stream")
 				} else if _, err := rtcpWriter.Write([]rtcp.Packet{stream.generateReport(now)}, interceptor.Attributes{}); err != nil {

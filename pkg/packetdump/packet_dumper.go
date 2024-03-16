@@ -47,10 +47,10 @@ func NewPacketDumper(opts ...PacketDumperOption) (*PacketDumper, error) {
 		rtcpStream: os.Stdout,
 		rtpFormat:  DefaultRTPFormatter,
 		rtcpFormat: DefaultRTCPFormatter,
-		rtpFilter: func(pkt *rtp.Packet) bool {
+		rtpFilter: func(*rtp.Packet) bool {
 			return true
 		},
-		rtcpFilter: func(pkt []rtcp.Packet) bool {
+		rtcpFilter: func([]rtcp.Packet) bool {
 			return true
 		},
 	}

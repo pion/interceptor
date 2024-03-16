@@ -57,18 +57,18 @@ func TestInterceptor(t *testing.T) {
 				atomic.AddUint32(&cntBindRTCPWriter, 1)
 				return writer
 			},
-			BindLocalStreamFn: func(i *interceptor.StreamInfo, writer interceptor.RTPWriter) interceptor.RTPWriter {
+			BindLocalStreamFn: func(_ *interceptor.StreamInfo, writer interceptor.RTPWriter) interceptor.RTPWriter {
 				atomic.AddUint32(&cntBindLocalStream, 1)
 				return writer
 			},
-			UnbindLocalStreamFn: func(i *interceptor.StreamInfo) {
+			UnbindLocalStreamFn: func(*interceptor.StreamInfo) {
 				atomic.AddUint32(&cntUnbindLocalStream, 1)
 			},
-			BindRemoteStreamFn: func(i *interceptor.StreamInfo, reader interceptor.RTPReader) interceptor.RTPReader {
+			BindRemoteStreamFn: func(_ *interceptor.StreamInfo, reader interceptor.RTPReader) interceptor.RTPReader {
 				atomic.AddUint32(&cntBindRemoteStream, 1)
 				return reader
 			},
-			UnbindRemoteStreamFn: func(i *interceptor.StreamInfo) {
+			UnbindRemoteStreamFn: func(*interceptor.StreamInfo) {
 				atomic.AddUint32(&cntUnbindRemoteStream, 1)
 			},
 			CloseFn: func() error {

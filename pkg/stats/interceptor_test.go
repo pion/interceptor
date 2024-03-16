@@ -47,7 +47,7 @@ func TestInterceptor(t *testing.T) {
 		mockRecorder := newMockRecorder()
 		now := time.Now()
 		f, err := NewInterceptor(
-			SetRecorderFactory(func(ssrc uint32, clockRate float64) Recorder {
+			SetRecorderFactory(func(uint32, float64) Recorder {
 				return mockRecorder
 			}),
 			SetNowFunc(func() time.Time {

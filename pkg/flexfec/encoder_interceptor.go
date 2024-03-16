@@ -63,8 +63,8 @@ func (r *FecInterceptor) BindLocalStream(info *interceptor.StreamInfo, writer in
 		if len(r.packetBuffer) == int(r.minNumMediaPackets) {
 			fecPackets = r.flexFecEncoder.EncodeFec(r.packetBuffer, 2)
 
-			for _, fecPacket := range fecPackets {
-				fecResult, fecErr := writer.Write(&fecPacket.Header, fecPacket.Payload, attributes)
+			for i := range fecPackets {
+				fecResult, fecErr := writer.Write(&(fecPackets[i].Header), fecPackets[i].Payload, attributes)
 
 				if fecErr != nil && fecResult == 0 {
 					break

@@ -125,7 +125,7 @@ func sendRoutine() {
 	streamWriter := chain.BindLocalStream(&interceptor.StreamInfo{
 		SSRC:         ssrc,
 		RTCPFeedback: []interceptor.RTCPFeedback{{Type: "nack", Parameter: ""}},
-	}, interceptor.RTPWriterFunc(func(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
+	}, interceptor.RTPWriterFunc(func(header *rtp.Header, payload []byte, _ interceptor.Attributes) (int, error) {
 		headerBuf, err := header.Marshal()
 		if err != nil {
 			panic(err)
