@@ -8,13 +8,13 @@ import (
 )
 
 type estimator interface {
-	updateEstimate(measurement time.Duration) time.Duration
+	updateEstimate(measurement, lastReceiveDelta time.Duration) time.Duration
 }
 
-type estimatorFunc func(time.Duration) time.Duration
+type estimatorFunc func(time.Duration, time.Duration) time.Duration
 
-func (f estimatorFunc) updateEstimate(d time.Duration) time.Duration {
-	return f(d)
+func (f estimatorFunc) updateEstimate(d, c time.Duration) time.Duration {
+	return f(d, c)
 }
 
 type slopeEstimator struct {
@@ -42,7 +42,7 @@ func (e *slopeEstimator) onArrivalGroup(ag arrivalGroup) {
 	e.group = ag
 	e.delayStatsWriter(DelayStats{
 		Measurement:      measurement,
-		Estimate:         e.updateEstimate(measurement),
+		Estimate:         e.updateEstimate(measurement, delta),
 		Threshold:        0,
 		LastReceiveDelta: delta,
 		Usage:            0,

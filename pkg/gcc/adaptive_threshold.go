@@ -8,10 +8,6 @@ import (
 	"time"
 )
 
-const (
-	maxDeltas = 60
-)
-
 type adaptiveThresholdOption func(*adaptiveThreshold)
 
 func setInitialThreshold(t time.Duration) adaptiveThresholdOption {
@@ -65,16 +61,16 @@ func (a *adaptiveThreshold) compare(estimate, _ time.Duration) (usage, time.Dura
 	if a.numDeltas < 2 {
 		return usageNormal, estimate, a.max
 	}
-	t := time.Duration(minInt(a.numDeltas, maxDeltas)) * estimate
+
 	use := usageNormal
-	if t > a.thresh {
+	if estimate > a.thresh {
 		use = usageOver
-	} else if t < -a.thresh {
+	} else if estimate < -a.thresh {
 		use = usageUnder
 	}
 	thresh := a.thresh
-	a.update(t)
-	return use, t, thresh
+	a.update(estimate)
+	return use, estimate, thresh
 }
 
 func (a *adaptiveThreshold) update(estimate time.Duration) {

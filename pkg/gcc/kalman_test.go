@@ -63,7 +63,7 @@ func TestKalman(t *testing.T) {
 			k := newKalman(append(tc.opts, setDisableMeasurementUncertaintyUpdates(true))...)
 			estimates := []time.Duration{}
 			for _, m := range tc.measurements {
-				estimates = append(estimates, k.updateEstimate(m))
+				estimates = append(estimates, k.updateEstimate(m, 5*time.Millisecond))
 			}
 			assert.Equal(t, tc.expected, estimates, "%v != %v", tc.expected, estimates)
 		})
