@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func identity(d time.Duration) time.Duration {
+func identity(d, _ time.Duration) time.Duration {
 	return d
 }
 
