@@ -91,10 +91,18 @@ type Stats struct {
 
 // New will initialize a jitter buffer and its associated statistics
 func New(opts ...Option) *JitterBuffer {
-	jb := &JitterBuffer{state: Buffering, stats: Stats{0, 0, 0}, minStartCount: 50, packets: NewQueue(), listeners: make(map[Event][]EventListener)}
+	jb := &JitterBuffer{
+		state:         Buffering,
+		stats:         Stats{0, 0, 0},
+		minStartCount: 50,
+		packets:       NewQueue(),
+		listeners:     make(map[Event][]EventListener),
+	}
+
 	for _, o := range opts {
 		o(jb)
 	}
+
 	return jb
 }
 
@@ -111,6 +119,23 @@ func WithMinimumPacketCount(count uint16) Option {
 // look at Event for available events
 func (jb *JitterBuffer) Listen(event Event, cb EventListener) {
 	jb.listeners[event] = append(jb.listeners[event], cb)
+}
+
+// PlayoutHead returns the SequenceNumber that will be attempted to Pop next
+func (jb *JitterBuffer) PlayoutHead() uint16 {
+	jb.mutex.Lock()
+	defer jb.mutex.Unlock()
+
+	return jb.playoutHead
+}
+
+// SetPlayoutHead allows you to manually specify the packet you wish to pop next
+// If you have encountered a packet that hasn't resolved you can skip it
+func (jb *JitterBuffer) SetPlayoutHead(playoutHead uint16) {
+	jb.mutex.Lock()
+	defer jb.mutex.Unlock()
+
+	jb.playoutHead = playoutHead
 }
 
 func (jb *JitterBuffer) updateStats(lastPktSeqNo uint16) {
