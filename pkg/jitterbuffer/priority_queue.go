@@ -173,3 +173,13 @@ func (q *PriorityQueue) PopAtTimestamp(timestamp uint32) (*rtp.Packet, error) {
 	}
 	return nil, ErrNotFound
 }
+
+// Clear will empty a PriorityQueue
+func (q *PriorityQueue) Clear() {
+	next := q.next
+	q.length = 0
+	for next != nil {
+		next.prev = nil
+		next = next.next
+	}
+}

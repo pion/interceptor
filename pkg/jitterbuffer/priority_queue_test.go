@@ -101,3 +101,18 @@ func TestPriorityQueue_Find(t *testing.T) {
 	_, err = packets.Find(1001)
 	assert.Error(t, err)
 }
+
+func TestPriorityQueue_Clean(t *testing.T) {
+	packets := NewQueue()
+	packets.Clear()
+	packets.Push(&rtp.Packet{
+		Header: rtp.Header{
+			SequenceNumber: 1000,
+			Timestamp:      5,
+			SSRC:           5,
+		},
+		Payload: []uint8{0xA},
+	}, 1000)
+	assert.EqualValues(t, 1, packets.Length())
+	packets.Clear()
+}

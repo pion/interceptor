@@ -129,6 +129,9 @@ func NewMockStream(info *interceptor.StreamInfo, i interceptor.Interceptor) *Moc
 		for {
 			i, _, err := s.rtpReader.Read(buf, interceptor.Attributes{})
 			if err != nil {
+				if err.Error() == "attempt to pop while buffering" {
+					continue
+				}
 				if errors.Is(err, io.EOF) {
 					s.rtpInModified <- RTPWithError{Err: err}
 				}
@@ -160,12 +163,12 @@ func (s *MockStream) WriteRTP(p *rtp.Packet) error {
 	return err
 }
 
-// ReceiveRTCP schedules a new rtcp batch, so it can be read be the stream
+// ReceiveRTCP schedules a new rtcp batch, so it can be read by the stream
 func (s *MockStream) ReceiveRTCP(pkts []rtcp.Packet) {
 	s.rtcpIn <- pkts
 }
 
-// ReceiveRTP schedules a rtp packet, so it can be read be the stream
+// ReceiveRTP schedules a rtp packet, so it can be read by the stream
 func (s *MockStream) ReceiveRTP(packet *rtp.Packet) {
 	s.rtpIn <- packet
 }
