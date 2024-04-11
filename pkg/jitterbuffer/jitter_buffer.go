@@ -267,3 +267,16 @@ func (jb *JitterBuffer) PopAtTimestamp(ts uint32) (*rtp.Packet, error) {
 	jb.updateState()
 	return packet, nil
 }
+
+// Clear will empty the buffer and optionally reset the state
+func (jb *JitterBuffer) Clear(resetState bool) {
+	jb.mutex.Lock()
+	defer jb.mutex.Unlock()
+	jb.packets.Clear()
+	if resetState {
+		jb.lastSequence = 0
+		jb.state = Buffering
+		jb.stats = Stats{0, 0, 0}
+		jb.minStartCount = 50
+	}
+}

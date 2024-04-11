@@ -25,7 +25,6 @@ func TestJitterBuffer(t *testing.T) {
 
 		jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: 5012, Timestamp: 512}, Payload: []byte{0x02}})
 
-		assert.Equal(jb.lastSequence, uint16(5012))
 		assert.Equal(jb.stats.outOfOrderCount, uint32(1))
 		assert.Equal(jb.packets.Length(), uint16(4))
 		assert.Equal(jb.lastSequence, uint16(5012))
@@ -219,5 +218,21 @@ func TestJitterBuffer(t *testing.T) {
 			assert.NoError(err)
 			assert.NotNil(pkt)
 		}
+	})
+
+	t.Run("Allows clearing the buffer", func(*testing.T) {
+		jb := New()
+		jb.Clear(false)
+
+		assert.Equal(jb.lastSequence, uint16(0))
+		jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: 5000, Timestamp: 500}, Payload: []byte{0x02}})
+		jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: 5001, Timestamp: 501}, Payload: []byte{0x02}})
+		jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: 5002, Timestamp: 502}, Payload: []byte{0x02}})
+
+		assert.Equal(jb.lastSequence, uint16(5002))
+		jb.Clear(true)
+		assert.Equal(jb.lastSequence, uint16(0))
+		assert.Equal(jb.stats.outOfOrderCount, uint32(0))
+		assert.Equal(jb.packets.Length(), uint16(0))
 	})
 }
