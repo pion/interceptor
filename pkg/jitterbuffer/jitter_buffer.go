@@ -213,7 +213,7 @@ func (jb *JitterBuffer) Pop() (*rtp.Packet, error) {
 	if err != nil {
 		jb.stats.underflowCount++
 		jb.emit(BufferUnderflow)
-		return (*rtp.Packet)(nil), err
+		return nil, err
 	}
 	jb.playoutHead = (jb.playoutHead + 1) % math.MaxUint16
 	jb.updateState()
@@ -231,7 +231,7 @@ func (jb *JitterBuffer) PopAtSequence(sq uint16) (*rtp.Packet, error) {
 	if err != nil {
 		jb.stats.underflowCount++
 		jb.emit(BufferUnderflow)
-		return (*rtp.Packet)(nil), err
+		return nil, err
 	}
 	jb.playoutHead = (jb.playoutHead + 1) % math.MaxUint16
 	jb.updateState()
@@ -245,7 +245,7 @@ func (jb *JitterBuffer) PeekAtSequence(sq uint16) (*rtp.Packet, error) {
 	defer jb.mutex.Unlock()
 	packet, err := jb.packets.Find(sq)
 	if err != nil {
-		return (*rtp.Packet)(nil), err
+		return nil, err
 	}
 	return packet, nil
 }
@@ -262,7 +262,7 @@ func (jb *JitterBuffer) PopAtTimestamp(ts uint32) (*rtp.Packet, error) {
 	if err != nil {
 		jb.stats.underflowCount++
 		jb.emit(BufferUnderflow)
-		return (*rtp.Packet)(nil), err
+		return nil, err
 	}
 	jb.updateState()
 	return packet, nil
