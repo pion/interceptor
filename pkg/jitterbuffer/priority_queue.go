@@ -51,14 +51,6 @@ func newNode(val *rtp.Packet, priority uint16) *node {
 // Find a packet in the queue with the provided sequence number,
 // regardless of position (the packet is retained in the queue)
 func (q *PriorityQueue) Find(sqNum uint16) (*rtp.Packet, error) {
-	if q.next.priority == sqNum {
-		return q.next.val, nil
-	}
-
-	if sqNum < q.next.priority {
-		return nil, ErrInvalidOperation
-	}
-
 	next := q.next
 	for next != nil {
 		if next.priority == sqNum {
