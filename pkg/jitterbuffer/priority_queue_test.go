@@ -19,8 +19,8 @@ func TestPriorityQueue(t *testing.T) {
 		pkt2 := &rtp.Packet{Header: rtp.Header{SequenceNumber: 5004, Timestamp: 500}, Payload: []byte{0x02}}
 		q.Push(pkt2, pkt2.SequenceNumber)
 		assert.Equal(q.next.next.val, pkt2)
-		assert.Equal(q.next.prio, uint16(5000))
-		assert.Equal(q.next.next.prio, uint16(5004))
+		assert.Equal(q.next.priority, uint16(5000))
+		assert.Equal(q.next.next.priority, uint16(5004))
 	})
 	t.Run("Appends many in order", func(*testing.T) {
 		q := NewQueue()
@@ -34,11 +34,11 @@ func TestPriorityQueue(t *testing.T) {
 			last = cur
 			cur = cur.next
 			if cur != nil {
-				assert.Equal(cur.prio, last.prio+1)
+				assert.Equal(cur.priority, last.priority+1)
 			}
 		}
-		assert.Equal(q.next.prio, uint16(5012))
-		assert.Equal(last.prio, uint16(5012+99))
+		assert.Equal(q.next.priority, uint16(5012))
+		assert.Equal(last.priority, uint16(5012+99))
 	})
 	t.Run("Can remove an element", func(*testing.T) {
 		pkt := &rtp.Packet{Header: rtp.Header{SequenceNumber: 5000, Timestamp: 500}, Payload: []byte{0x02}}
@@ -65,7 +65,7 @@ func TestPriorityQueue(t *testing.T) {
 		q.Push(pkt, pkt.SequenceNumber)
 		assert.Equal(pkt, q.next.val)
 		assert.Equal(uint16(101), q.Length())
-		assert.Equal(q.next.prio, uint16(5000))
+		assert.Equal(q.next.priority, uint16(5000))
 	})
 	t.Run("Can find", func(*testing.T) {
 		q := NewQueue()

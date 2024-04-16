@@ -16,10 +16,10 @@ type PriorityQueue struct {
 }
 
 type node struct {
-	val  *rtp.Packet
-	next *node
-	prev *node
-	prio uint16
+	val      *rtp.Packet
+	next     *node
+	prev     *node
+	priority uint16
 }
 
 var (
@@ -39,44 +39,46 @@ func NewQueue() *PriorityQueue {
 	}
 }
 
-func newNode(val *rtp.Packet, prio uint16) *node {
+func newNode(val *rtp.Packet, priority uint16) *node {
 	return &node{
-		val:  val,
-		prev: nil,
-		next: nil,
-		prio: prio,
+		val:      val,
+		prev:     nil,
+		next:     nil,
+		priority: priority,
 	}
 }
 
 // Find a packet in the queue with the provided sequence number,
 // regardless of position (the packet is retained in the queue)
 func (q *PriorityQueue) Find(sqNum uint16) (*rtp.Packet, error) {
-	if q.next.prio == sqNum {
+	if q.next.priority == sqNum {
 		return q.next.val, nil
 	}
 
-	if sqNum < q.next.prio {
+	if sqNum < q.next.priority {
 		return nil, ErrInvalidOperation
 	}
+
 	next := q.next
 	for next != nil {
-		if next.prio == sqNum {
+		if next.priority == sqNum {
 			return next.val, nil
 		}
 		next = next.next
 	}
+
 	return nil, ErrNotFound
 }
 
 // Push will insert a packet in to the queue in order of sequence number
-func (q *PriorityQueue) Push(val *rtp.Packet, prio uint16) {
-	newPq := newNode(val, prio)
+func (q *PriorityQueue) Push(val *rtp.Packet, priority uint16) {
+	newPq := newNode(val, priority)
 	if q.next == nil {
 		q.next = newPq
 		q.length++
 		return
 	}
-	if prio < q.next.prio {
+	if priority < q.next.priority {
 		newPq.next = q.next
 		q.next.prev = newPq
 		q.next = newPq
@@ -86,7 +88,7 @@ func (q *PriorityQueue) Push(val *rtp.Packet, prio uint16) {
 	head := q.next
 	prev := q.next
 	for head != nil {
-		if prio <= head.prio {
+		if priority <= head.priority {
 			break
 		}
 		prev = head
@@ -130,7 +132,7 @@ func (q *PriorityQueue) PopAt(sqNum uint16) (*rtp.Packet, error) {
 	if q.next == nil {
 		return nil, ErrInvalidOperation
 	}
-	if q.next.prio == sqNum {
+	if q.next.priority == sqNum {
 		val := q.next.val
 		q.next = q.next.next
 		return val, nil
@@ -138,7 +140,7 @@ func (q *PriorityQueue) PopAt(sqNum uint16) (*rtp.Packet, error) {
 	pos := q.next
 	prev := q.next.prev
 	for pos != nil {
-		if pos.prio == sqNum {
+		if pos.priority == sqNum {
 			val := pos.val
 			prev.next = pos.next
 			if prev.next != nil {
