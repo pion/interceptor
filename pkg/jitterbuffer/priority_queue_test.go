@@ -81,6 +81,26 @@ func TestPriorityQueue(t *testing.T) {
 		assert.Equal(pkt.SequenceNumber, uint16(5012))
 		assert.Equal(err, nil)
 	})
+
+	t.Run("Updates the length when PopAt* are called", func(*testing.T) {
+		pkt := &rtp.Packet{Header: rtp.Header{SequenceNumber: 5000, Timestamp: 500}, Payload: []byte{0x02}}
+		q := NewQueue()
+		q.Push(pkt, pkt.SequenceNumber)
+		pkt2 := &rtp.Packet{Header: rtp.Header{SequenceNumber: 5004, Timestamp: 500}, Payload: []byte{0x02}}
+		q.Push(pkt2, pkt2.SequenceNumber)
+		for i := 0; i < 100; i++ {
+			q.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: uint16(5012 + i), Timestamp: uint32(512 + i)}, Payload: []byte{0x02}}, uint16(5012+i))
+		}
+		assert.Equal(uint16(102), q.Length())
+		popped, _ := q.PopAt(uint16(5012))
+		assert.Equal(popped.SequenceNumber, uint16(5012))
+		assert.Equal(uint16(101), q.Length())
+
+		popped, err := q.PopAtTimestamp(uint32(500))
+		assert.Equal(popped.SequenceNumber, uint16(5000))
+		assert.Equal(uint16(100), q.Length())
+		assert.Equal(err, nil)
+	})
 }
 
 func TestPriorityQueue_Find(t *testing.T) {
