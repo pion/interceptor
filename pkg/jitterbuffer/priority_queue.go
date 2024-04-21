@@ -127,6 +127,7 @@ func (q *PriorityQueue) PopAt(sqNum uint16) (*rtp.Packet, error) {
 	if q.next.priority == sqNum {
 		val := q.next.val
 		q.next = q.next.next
+		q.length--
 		return val, nil
 	}
 	pos := q.next
@@ -138,6 +139,7 @@ func (q *PriorityQueue) PopAt(sqNum uint16) (*rtp.Packet, error) {
 			if prev.next != nil {
 				prev.next.prev = prev
 			}
+			q.length--
 			return val, nil
 		}
 		prev = pos
@@ -155,6 +157,7 @@ func (q *PriorityQueue) PopAtTimestamp(timestamp uint32) (*rtp.Packet, error) {
 	if q.next.val.Timestamp == timestamp {
 		val := q.next.val
 		q.next = q.next.next
+		q.length--
 		return val, nil
 	}
 	pos := q.next
@@ -166,6 +169,7 @@ func (q *PriorityQueue) PopAtTimestamp(timestamp uint32) (*rtp.Packet, error) {
 			if prev.next != nil {
 				prev.next.prev = prev
 			}
+			q.length--
 			return val, nil
 		}
 		prev = pos

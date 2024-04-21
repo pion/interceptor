@@ -45,6 +45,10 @@ func TestJitterBuffer(t *testing.T) {
 	})
 	t.Run("Appends packets and begins playout", func(*testing.T) {
 		jb := New(WithMinimumPacketCount(1))
+		events := make([]Event, 0)
+		jb.Listen(BeginPlayback, func(event Event, _ *JitterBuffer) {
+			events = append(events, event)
+		})
 		for i := 0; i < 2; i++ {
 			jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: uint16(5012 + i), Timestamp: uint32(512 + i)}, Payload: []byte{0x02}})
 		}
@@ -54,6 +58,8 @@ func TestJitterBuffer(t *testing.T) {
 		head, err := jb.Pop()
 		assert.Equal(head.SequenceNumber, uint16(5012))
 		assert.Equal(err, nil)
+		assert.Equal(1, len(events))
+		assert.Equal(Event(BeginPlayback), events[0])
 	})
 
 	t.Run("Wraps playout correctly", func(*testing.T) {
