@@ -7,7 +7,6 @@ package jitterbuffer
 
 import (
 	"errors"
-	"math"
 	"sync"
 
 	"github.com/pion/rtp"
@@ -141,7 +140,7 @@ func (jb *JitterBuffer) SetPlayoutHead(playoutHead uint16) {
 func (jb *JitterBuffer) updateStats(lastPktSeqNo uint16) {
 	// If we have at least one packet, and the next packet being pushed in is not
 	// at the expected sequence number increment the out of order count
-	if jb.packets.Length() > 0 && lastPktSeqNo != ((jb.lastSequence+1)%math.MaxUint16) {
+	if jb.packets.Length() > 0 && lastPktSeqNo != (jb.lastSequence+1) {
 		jb.stats.outOfOrderCount++
 	}
 	jb.lastSequence = lastPktSeqNo
@@ -215,7 +214,7 @@ func (jb *JitterBuffer) Pop() (*rtp.Packet, error) {
 		jb.emit(BufferUnderflow)
 		return nil, err
 	}
-	jb.playoutHead = (jb.playoutHead + 1) % math.MaxUint16
+	jb.playoutHead = (jb.playoutHead + 1)
 	jb.updateState()
 	return packet, nil
 }
@@ -233,7 +232,7 @@ func (jb *JitterBuffer) PopAtSequence(sq uint16) (*rtp.Packet, error) {
 		jb.emit(BufferUnderflow)
 		return nil, err
 	}
-	jb.playoutHead = (jb.playoutHead + 1) % math.MaxUint16
+	jb.playoutHead = (jb.playoutHead + 1)
 	jb.updateState()
 	return packet, nil
 }

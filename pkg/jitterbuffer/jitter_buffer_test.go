@@ -29,6 +29,25 @@ func TestJitterBuffer(t *testing.T) {
 		assert.Equal(jb.packets.Length(), uint16(4))
 		assert.Equal(jb.lastSequence, uint16(5012))
 	})
+	t.Run("Appends packets and wraps", func(*testing.T) {
+		jb := New(WithMinimumPacketCount(1))
+		assert.Equal(jb.lastSequence, uint16(0))
+		jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: 65535, Timestamp: 500}, Payload: []byte{0x02}})
+
+		assert.Equal(jb.lastSequence, uint16(65535))
+
+		jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: 0, Timestamp: 512}, Payload: []byte{0x02}})
+
+		assert.Equal(jb.packets.Length(), uint16(2))
+		assert.Equal(jb.lastSequence, uint16(0))
+
+		head, err := jb.Pop()
+		assert.Equal(head.SequenceNumber, uint16(65535))
+		assert.Equal(err, nil)
+		head, err = jb.Pop()
+		assert.Equal(head.SequenceNumber, uint16(0))
+		assert.Equal(err, nil)
+	})
 
 	t.Run("Appends packets and begins playout", func(*testing.T) {
 		jb := New()
@@ -64,7 +83,7 @@ func TestJitterBuffer(t *testing.T) {
 	t.Run("Wraps playout correctly", func(*testing.T) {
 		jb := New()
 		for i := 0; i < 100; i++ {
-			sqnum := uint16((math.MaxUint16 - 32 + i) % math.MaxUint16)
+			sqnum := uint16(math.MaxUint16 - 32 + i)
 			jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: sqnum, Timestamp: uint32(512 + i)}, Payload: []byte{0x02}})
 		}
 		assert.Equal(jb.packets.Length(), uint16(100))
@@ -76,7 +95,7 @@ func TestJitterBuffer(t *testing.T) {
 		for i := 0; i < 100; i++ {
 			head, err := jb.Pop()
 			if i < 99 {
-				assert.Equal(head.SequenceNumber, uint16((math.MaxUint16-31+i)%math.MaxUint16))
+				assert.Equal(head.SequenceNumber, uint16((math.MaxUint16 - 31 + i)))
 				assert.Equal(err, nil)
 			} else {
 				assert.Equal(head, (*rtp.Packet)(nil))
@@ -87,7 +106,7 @@ func TestJitterBuffer(t *testing.T) {
 	t.Run("Pops at timestamp correctly", func(*testing.T) {
 		jb := New()
 		for i := 0; i < 100; i++ {
-			sqnum := uint16((math.MaxUint16 - 32 + i) % math.MaxUint16)
+			sqnum := uint16((math.MaxUint16 - 32 + i))
 			jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: sqnum, Timestamp: uint32(512 + i)}, Payload: []byte{0x02}})
 		}
 		assert.Equal(jb.packets.Length(), uint16(100))
@@ -113,7 +132,7 @@ func TestJitterBuffer(t *testing.T) {
 		assert.Equal(pkt.SequenceNumber, uint16(5002))
 		assert.Equal(err, nil)
 		for i := 0; i < 100; i++ {
-			sqnum := uint16((math.MaxUint16 - 32 + i) % math.MaxUint16)
+			sqnum := uint16((math.MaxUint16 - 32 + i))
 			jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: sqnum, Timestamp: uint32(512 + i)}, Payload: []byte{0x02}})
 		}
 		pkt, err = jb.Peek(true)
@@ -124,7 +143,7 @@ func TestJitterBuffer(t *testing.T) {
 	t.Run("Pops at sequence with an invalid sequence number", func(*testing.T) {
 		jb := New()
 		for i := 0; i < 50; i++ {
-			sqnum := uint16((math.MaxUint16 - 32 + i) % math.MaxUint16)
+			sqnum := uint16((math.MaxUint16 - 32 + i))
 			jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: sqnum, Timestamp: uint32(512 + i)}, Payload: []byte{0x02}})
 		}
 		jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: 1019, Timestamp: uint32(9000)}, Payload: []byte{0x02}})
@@ -139,7 +158,7 @@ func TestJitterBuffer(t *testing.T) {
 	t.Run("Pops at timestamp with multiple packets", func(*testing.T) {
 		jb := New()
 		for i := 0; i < 50; i++ {
-			sqnum := uint16((math.MaxUint16 - 32 + i) % math.MaxUint16)
+			sqnum := uint16((math.MaxUint16 - 32 + i))
 			jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: sqnum, Timestamp: uint32(512 + i)}, Payload: []byte{0x02}})
 		}
 		jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: 1019, Timestamp: uint32(9000)}, Payload: []byte{0x02}})
@@ -161,7 +180,7 @@ func TestJitterBuffer(t *testing.T) {
 	t.Run("Peeks at timestamp with multiple packets", func(*testing.T) {
 		jb := New()
 		for i := 0; i < 50; i++ {
-			sqnum := uint16((math.MaxUint16 - 32 + i) % math.MaxUint16)
+			sqnum := uint16((math.MaxUint16 - 32 + i))
 			jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: sqnum, Timestamp: uint32(512 + i)}, Payload: []byte{0x02}})
 		}
 		jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: 1019, Timestamp: uint32(9000)}, Payload: []byte{0x02}})
