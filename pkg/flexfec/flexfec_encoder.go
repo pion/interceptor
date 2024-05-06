@@ -13,8 +13,6 @@ import (
 )
 
 const (
-	// BaseRTPHeaderSize represents the minium RTP packet header size in bytes.
-	BaseRTPHeaderSize = 12
 	// BaseFecHeaderSize represents the minium FEC payload's header size including the
 	// required first mask.
 	BaseFecHeaderSize = 12
@@ -34,7 +32,7 @@ type FlexEncoder20 struct {
 }
 
 // NewFlexEncoder returns a new FlexFecEncer.
-func NewFlexEncoder(payloadType uint8, ssrc uint32) *FlexEncoder20 {
+func NewFlexEncoder20(payloadType uint8, ssrc uint32) *FlexEncoder20 {
 	return &FlexEncoder20{
 		payloadType: payloadType,
 		ssrc:        ssrc,
@@ -180,7 +178,7 @@ func (flex *FlexEncoder20) encodeFlexFecRepairPayload(mediaPackets *util.MediaPa
 		mediaPacketPayload := mediaPackets.Next().Payload
 
 		if len(flexFecPayload) < len(mediaPacketPayload) {
-			// Expected FEC packet payload is bigger that what we can currently store,
+			// Expected FEC packet payload is bigger than what we can currently store,
 			// we need to resize.
 			flexFecPayloadTmp := make([]byte, len(mediaPacketPayload))
 			copy(flexFecPayloadTmp, flexFecPayload)

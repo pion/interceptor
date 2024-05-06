@@ -8,12 +8,16 @@ import (
 	"github.com/pion/rtp"
 )
 
+const BaseRTPHeaderSize = 12
+
 // FecInterceptor implements FlexFec.
 type FecInterceptor struct {
 	interceptor.NoOp
 	flexFecEncoder     FlexEncoder
 	packetBuffer       []rtp.Packet
 	minNumMediaPackets uint32
+
+	sentPacketCount uint32
 }
 
 // FecOption can be used to set initial options on Fec encoder interceptors.
@@ -42,21 +46,45 @@ func (r *FecInterceptorFactory) NewInterceptor(_ string) (interceptor.Intercepto
 	return interceptor, nil
 }
 
+func streamSupportsFec(info *interceptor.StreamInfo) bool {
+	specialLog("HERE IS THE MIMETYPE = ", info.MimeType)
+	return info.MimeType == "video/VP8"
+}
+
 // BindLocalStream lets you modify any outgoing RTP packets. It is called once for per LocalStream. The returned method
 // will be called once per rtp packet.
 func (r *FecInterceptor) BindLocalStream(info *interceptor.StreamInfo, writer interceptor.RTPWriter) interceptor.RTPWriter {
+	if !streamSupportsFec(info) {
+		return writer
+	}
+
 	// Chromium supports version flexfec-03 of existing draft, this is the one we will configure by default
 	// although we should support configuring the latest (flexfec-20) as well.
 	r.flexFecEncoder = NewFlexEncoder03(info.PayloadType, info.SSRC)
 
 	return interceptor.RTPWriterFunc(func(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
+
+		specialLog("INTERCEPTOR: Writing to packet buffer...")
+		specialLog("INTERCEPTOR: header.sequenceNumber = ", header.SequenceNumber)
+		specialLog("INTERCEPTOR: payload length = ", len(payload))
+
 		r.packetBuffer = append(r.packetBuffer, rtp.Packet{
 			Header:  *header,
 			Payload: payload,
 		})
 
-		// Send the media RTP packet
-		result, err := writer.Write(header, payload, attributes)
+		var result int
+		var err error
+		if r.sentPacketCount%20 != 0 && r.sentPacketCount > 1000 {
+			// Send the media RTP packet
+			result, err = writer.Write(header, payload, attributes)
+		} else {
+			specialLog("DROPPING PACKET ID - ", header.SequenceNumber)
+			//result, err = writer.Write(header, payload, attributes)
+		}
+		r.sentPacketCount++
+
+		//result, err := writer.Write(header, payload, attributes)
 
 		// Send the FEC packets
 		var fecPackets []rtp.Packet

@@ -7,6 +7,7 @@ package flexfec
 
 import (
 	"encoding/binary"
+	"fmt"
 
 	"github.com/pion/interceptor/pkg/flexfec/util"
 	"github.com/pion/rtp"
@@ -89,6 +90,14 @@ func (flex *FlexEncoder03) encodeFlexFecPacket(fecPacketIndex uint32, mediaBaseS
 }
 
 func (flex *FlexEncoder03) encodeFlexFecHeader(mediaPackets *util.MediaPacketIterator, mask1 uint16, optionalMask2 uint32, optionalMask3 uint64, mediaBaseSn uint16) []byte {
+	specialLog()
+	specialLog("----------ENCODING A HEADER----------")
+	specialLog("media packet SSRC = ", mediaPackets.First().SSRC)
+	specialLog()
+	specialLog("Base SN for batch of media packets = ", mediaBaseSn, " = %b", mediaBaseSn)
+	specialLog()
+	fmt.Printf("mask = %b", mask1)
+	specialLog()
 	/*
 	    0                   1                   2                   3
 	    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -131,13 +140,27 @@ func (flex *FlexEncoder03) encodeFlexFecHeader(mediaPackets *util.MediaPacketIte
 	for mediaPackets.HasNext() {
 		mediaPacket := mediaPackets.Next()
 
+		specialLog("Xoring a media packet's header...")
+		specialLog("	SN SN SN SN SN sequence number => ", mediaPacket.SequenceNumber)
+		specialLog("	timestamp => ", mediaPacket.Timestamp, " = %b", mediaPacket.Timestamp)
+
+		resized := false
+
 		if mediaPacket.MarshalSize() > len(tmpMediaPacketBuf) {
 			// The temporary buffer is too small, we need to resize.
+			specialLog("	Resizing tmpMediaPacketBuf... it's too small. Prev size => ", len(tmpMediaPacketBuf), " mediaPacket size => ", mediaPacket.MarshalSize())
 			tmpMediaPacketBuf = make([]byte, mediaPacket.MarshalSize())
+			resized = true
+		}
+
+		if resized {
+			specialLog("	We resized, here's the media packet size now before the marshalTo()... ", mediaPacket.MarshalSize())
+			specialLog("	mediaPacket info", mediaPacket.String())
 		}
 		n, err := mediaPacket.MarshalTo(tmpMediaPacketBuf)
 
 		if n == 0 || err != nil {
+			specialLog("	Something went wrong... ", err)
 			return nil
 		}
 
@@ -154,6 +177,9 @@ func (flex *FlexEncoder03) encodeFlexFecHeader(mediaPackets *util.MediaPacketIte
 		flexFecHeader[3] ^= uint8(lengthRecoveryVal)
 
 		// XOR the 5th to 8th bytes of the header: the timestamp field
+		fmt.Printf("	Xoring timestamp field, first byte -> tmpMedia[4] = %08b", tmpMediaPacketBuf[4])
+		specialLog()
+
 		flexFecHeader[4] ^= tmpMediaPacketBuf[4]
 		flexFecHeader[5] ^= tmpMediaPacketBuf[5]
 		flexFecHeader[6] ^= tmpMediaPacketBuf[6]
@@ -179,6 +205,9 @@ func (flex *FlexEncoder03) encodeFlexFecHeader(mediaPackets *util.MediaPacketIte
 
 	if optionalMask2 == 0 {
 		flexFecHeader[18] |= 0b10000000
+		printFecHeader(flexFecHeader)
+		specialLog()
+		specialLog("----------DONE ENCODING A HEADER----------")
 		return flexFecHeader
 	}
 	binary.BigEndian.PutUint32(flexFecHeader[20:24], optionalMask2)
@@ -189,25 +218,48 @@ func (flex *FlexEncoder03) encodeFlexFecHeader(mediaPackets *util.MediaPacketIte
 		binary.BigEndian.PutUint64(flexFecHeader[24:32], optionalMask3)
 	}
 
+	printFecHeader(flexFecHeader)
+	specialLog()
+	specialLog("----------DONE ENCODING A HEADER----------")
 	return flexFecHeader
 }
 
 func (flex *FlexEncoder03) encodeFlexFecRepairPayload(mediaPackets *util.MediaPacketIterator) []byte {
-	flexFecPayload := make([]byte, len(mediaPackets.First().Payload))
+	// FlexFec payload is the result of xoring bytes from the RTP packet after the min RTP header size.
+	flexFecPayload := make([]byte, mediaPackets.First().MarshalSize()-BaseRTPHeaderSize)
 
 	for mediaPackets.HasNext() {
-		mediaPacketPayload := mediaPackets.Next().Payload
+		// We marshal the mediaPacket payload data to the predefined tmpRtpPayload. This helps avoid
+		// unecessary allocations.
+		data, err := mediaPackets.Next().Marshal()
+		data = data[BaseRTPHeaderSize:]
+		if err != nil {
+			return nil
+		}
 
-		if len(flexFecPayload) < len(mediaPacketPayload) {
-			// Expected FEC packet payload is bigger that what we can currently store,
+		if len(flexFecPayload) < len(data) {
+			// Expected FEC packet payload is bigger than what we can currently store,
 			// we need to resize.
-			flexFecPayloadTmp := make([]byte, len(mediaPacketPayload))
+			flexFecPayloadTmp := make([]byte, len(data))
 			copy(flexFecPayloadTmp, flexFecPayload)
 			flexFecPayload = flexFecPayloadTmp
 		}
-		for byteIndex := 0; byteIndex < len(mediaPacketPayload); byteIndex++ {
-			flexFecPayload[byteIndex] ^= mediaPacketPayload[byteIndex]
+		for byteIndex := 0; byteIndex < len(data); byteIndex++ {
+			flexFecPayload[byteIndex] ^= data[byteIndex]
 		}
 	}
 	return flexFecPayload
+}
+
+func printFecHeader(flexFecHeader []byte) {
+	specialLog("===========FEC HEADER===========")
+	// Iterate through each row and print the bytes
+	for i := 0; i < len(flexFecHeader); i += 4 {
+		row := flexFecHeader[i : i+4]
+		for _, b := range row {
+			fmt.Printf("%08b ", b)
+		}
+		specialLog()
+	}
+	specialLog("===========FEC HEADER===========")
 }
