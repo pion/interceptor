@@ -199,7 +199,7 @@ func TestJitterBuffer(t *testing.T) {
 		assert.Equal(err, nil)
 	})
 
-	t.Run("SetPlayoutHead", func(*testing.T) {
+	t.Run("Increment PlayoutHead in case of lost packet", func(*testing.T) {
 		jb := New(WithMinimumPacketCount(1))
 
 		// Push packets 0-9, but no packet 4
@@ -211,31 +211,27 @@ func TestJitterBuffer(t *testing.T) {
 		}
 
 		// The first 3 packets will be able to popped
-		for i := 0; i < 4; i++ {
+		for i := uint16(0); i < 4; i++ {
 			pkt, err := jb.Pop()
 			assert.NoError(err)
 			assert.NotNil(pkt)
+			assert.Equal(i, pkt.SequenceNumber)
 		}
 
 		// The next pop will fail because of gap
 		pkt, err := jb.Pop()
 		assert.ErrorIs(err, ErrNotFound)
 		assert.Nil(pkt)
-		assert.Equal(jb.PlayoutHead(), uint16(4))
 
-		// Assert that PlayoutHead isn't modified with pushing/popping again
-		jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: 10, Timestamp: uint32(522)}, Payload: []byte{0x00}})
-		pkt, err = jb.Pop()
-		assert.ErrorIs(err, ErrNotFound)
-		assert.Nil(pkt)
-		assert.Equal(jb.PlayoutHead(), uint16(4))
+		// But PlayoutHead was incremented
+		assert.Equal(jb.PlayoutHead(), uint16(5))
 
-		// Increment the PlayoutHead and popping will work again
-		jb.SetPlayoutHead(jb.PlayoutHead() + 1)
-		for i := 0; i < 6; i++ {
-			pkt, err := jb.Pop()
+		// And popping will work again
+		for i := uint16(5); i < 10; i++ {
+			pkt, err = jb.Pop()
 			assert.NoError(err)
 			assert.NotNil(pkt)
+			assert.Equal(i, pkt.SequenceNumber)
 		}
 	})
 

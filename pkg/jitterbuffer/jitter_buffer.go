@@ -212,9 +212,10 @@ func (jb *JitterBuffer) Pop() (*rtp.Packet, error) {
 	if err != nil {
 		jb.stats.underflowCount++
 		jb.emit(BufferUnderflow)
+		jb.playoutHead++
 		return nil, err
 	}
-	jb.playoutHead = (jb.playoutHead + 1)
+	jb.playoutHead++
 	jb.updateState()
 	return packet, nil
 }
