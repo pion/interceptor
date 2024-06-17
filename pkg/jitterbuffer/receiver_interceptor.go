@@ -74,7 +74,7 @@ func (i *ReceiverInterceptor) BindRemoteStream(_ *interceptor.StreamInfo, reader
 			return n, attr, err
 		}
 		packet := &rtp.Packet{}
-		if err := packet.Unmarshal(buf); err != nil {
+		if err := packet.Unmarshal(buf[:n]); err != nil {
 			return 0, nil, err
 		}
 		i.m.Lock()
