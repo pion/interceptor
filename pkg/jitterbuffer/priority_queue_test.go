@@ -4,7 +4,10 @@
 package jitterbuffer
 
 import (
+	"runtime"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/pion/rtp"
 	"github.com/stretchr/testify/assert"
@@ -135,4 +138,47 @@ func TestPriorityQueue_Clean(t *testing.T) {
 	}, 1000)
 	assert.EqualValues(t, 1, packets.Length())
 	packets.Clear()
+}
+
+func TestPriorityQueue_Unreference(t *testing.T) {
+	packets := NewQueue()
+
+	var refs int64
+	finalizer := func(*rtp.Packet) {
+		atomic.AddInt64(&refs, -1)
+	}
+
+	numPkts := 100
+	for i := 0; i < numPkts; i++ {
+		atomic.AddInt64(&refs, 1)
+		seq := uint16(i)
+		p := rtp.Packet{
+			Header: rtp.Header{
+				SequenceNumber: seq,
+				Timestamp:      uint32(i + 42),
+			},
+			Payload: []byte{byte(i)},
+		}
+		runtime.SetFinalizer(&p, finalizer)
+		packets.Push(&p, seq)
+	}
+	for i := 0; i < numPkts-1; i++ {
+		switch i % 3 {
+		case 0:
+			packets.Pop() //nolint
+		case 1:
+			packets.PopAt(uint16(i)) //nolint
+		case 2:
+			packets.PopAtTimestamp(uint32(i + 42)) //nolint
+		}
+	}
+
+	runtime.GC()
+	time.Sleep(10 * time.Millisecond)
+
+	remainedRefs := atomic.LoadInt64(&refs)
+	runtime.KeepAlive(packets)
+
+	// only the last packet should be still referenced
+	assert.Equal(t, int64(1), remainedRefs)
 }
