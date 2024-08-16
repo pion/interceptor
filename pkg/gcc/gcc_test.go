@@ -114,10 +114,10 @@ func TestClamp(t *testing.T) {
 		})
 		t.Run(fmt.Sprintf("duration/%v", i), func(t *testing.T) {
 			x := time.Duration(tt.x)
-			min := time.Duration(tt.min)
-			max := time.Duration(tt.max)
+			minVal := time.Duration(tt.min)
+			maxVal := time.Duration(tt.max)
 			expected := time.Duration(tt.expected)
-			assert.Equal(t, expected, clampDuration(x, min, max))
+			assert.Equal(t, expected, clampDuration(x, minVal, maxVal))
 		})
 	}
 }

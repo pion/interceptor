@@ -227,7 +227,7 @@ func (r *recorder) recordIncomingRR(latestStats internalStats, pkt *rtcp.Receive
 		latestStats.RemoteInboundRTPStreamStats.Jitter = float64(report.Jitter) / r.clockRate
 
 		if report.Delay != 0 && report.LastSenderReport != 0 {
-			for i := min(r.maxLastSenderReports, len(latestStats.lastSenderReports)) - 1; i >= 0; i-- {
+			for i := minInt(r.maxLastSenderReports, len(latestStats.lastSenderReports)) - 1; i >= 0; i-- {
 				lastReport := latestStats.lastSenderReports[i]
 				if (lastReport&0x0000FFFFFFFF0000)>>16 == uint64(report.LastSenderReport) {
 					dlsr := time.Duration(float64(report.Delay) / 65536.0 * float64(time.Second))
@@ -248,7 +248,7 @@ func (r *recorder) recordIncomingXR(latestStats internalStats, pkt *rtcp.Extende
 		if xr, ok := report.(*rtcp.DLRRReportBlock); ok {
 			for _, xrReport := range xr.Reports {
 				if xrReport.LastRR != 0 && xrReport.DLRR != 0 {
-					for i := min(r.maxLastReceiverReferenceTimes, len(latestStats.lastReceiverReferenceTimes)) - 1; i >= 0; i-- {
+					for i := minInt(r.maxLastReceiverReferenceTimes, len(latestStats.lastReceiverReferenceTimes)) - 1; i >= 0; i-- {
 						lastRR := latestStats.lastReceiverReferenceTimes[i]
 						if (lastRR&0x0000FFFFFFFF0000)>>16 == uint64(xrReport.LastRR) {
 							dlrr := time.Duration(float64(xrReport.DLRR) / 65536.0 * float64(time.Second))
@@ -377,7 +377,7 @@ func (r *recorder) QueueOutgoingRTCP(ts time.Time, pkts []rtcp.Packet, attr inte
 	r.ms.Unlock()
 }
 
-func min(a, b int) int {
+func minInt(a, b int) int {
 	if a < b {
 		return a
 	}
