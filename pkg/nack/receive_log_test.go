@@ -19,9 +19,9 @@ func TestReceivedBuffer(t *testing.T) {
 				t.Fatalf("%+v", err)
 			}
 
-			all := func(min uint16, max uint16) []uint16 {
+			all := func(minVal uint16, maxVal uint16) []uint16 {
 				result := make([]uint16, 0)
-				for i := min; i != max+1; i++ {
+				for i := minVal; i != maxVal+1; i++ {
 					result = append(result, i)
 				}
 				return result

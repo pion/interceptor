@@ -20,10 +20,10 @@ func maxInt(a, b int) int {
 	return b
 }
 
-func clampInt(b, min, max int) int {
-	return maxInt(min, minInt(max, b))
+func clampInt(b, minVal, maxVal int) int {
+	return maxInt(minVal, minInt(maxVal, b))
 }
 
-func clampDuration(d, min, max time.Duration) time.Duration {
-	return time.Duration(clampInt(int(d), int(min), int(max)))
+func clampDuration(d, minVal, maxVal time.Duration) time.Duration {
+	return time.Duration(clampInt(int(d), int(minVal), int(maxVal)))
 }
