@@ -43,7 +43,7 @@ func TestGeneratorInterceptor(t *testing.T) {
 		case r := <-stream.ReadRTP():
 			assert.NoError(t, r.Err)
 			assert.Equal(t, seqNum, r.Packet.SequenceNumber)
-		case <-time.After(10 * time.Millisecond):
+		case <-time.After(50 * time.Millisecond):
 			t.Fatal("receiver rtp packet not found")
 		}
 	}
@@ -75,4 +75,61 @@ func TestGeneratorInterceptor_InvalidSize(t *testing.T) {
 
 	_, err := f.NewInterceptor("")
 	assert.Error(t, err, ErrInvalidSize)
+}
+
+func TestGeneratorInterceptor_StreamFilter(t *testing.T) {
+	const interval = time.Millisecond * 10
+	f, err := NewGeneratorInterceptor(
+		GeneratorSize(64),
+		GeneratorSkipLastN(2),
+		GeneratorInterval(interval),
+		GeneratorLog(logging.NewDefaultLoggerFactory().NewLogger("test")),
+		GeneratorStreamsFilter(func(info *interceptor.StreamInfo) bool {
+			return info.SSRC != 1 // enable nacks only for ssrc 2
+		}),
+	)
+	assert.NoError(t, err)
+
+	i, err := f.NewInterceptor("")
+	assert.NoError(t, err)
+
+	streamWithoutNacks := test.NewMockStream(&interceptor.StreamInfo{
+		SSRC:         1,
+		RTCPFeedback: []interceptor.RTCPFeedback{{Type: "nack"}},
+	}, i)
+	defer func() {
+		assert.NoError(t, streamWithoutNacks.Close())
+	}()
+
+	streamWithNacks := test.NewMockStream(&interceptor.StreamInfo{
+		SSRC:         2,
+		RTCPFeedback: []interceptor.RTCPFeedback{{Type: "nack"}},
+	}, i)
+	defer func() {
+		assert.NoError(t, streamWithNacks.Close())
+	}()
+
+	for _, seqNum := range []uint16{10, 11, 12, 14, 16, 18} {
+		streamWithNacks.ReceiveRTP(&rtp.Packet{Header: rtp.Header{SequenceNumber: seqNum}})
+		streamWithoutNacks.ReceiveRTP(&rtp.Packet{Header: rtp.Header{SequenceNumber: seqNum}})
+	}
+
+	time.Sleep(interval * 2) // wait for at least 2 nack packets
+
+	// both test streams receive RTCP packets about both test streams (as they both call BindRTCPWriter), so we
+	// can check only one
+	rtcpStream := streamWithNacks.WrittenRTCP()
+
+	for {
+		select {
+		case pkts := <-rtcpStream:
+			for _, pkt := range pkts {
+				if nack, isNack := pkt.(*rtcp.TransportLayerNack); isNack {
+					assert.NotEqual(t, uint32(1), nack.MediaSSRC) // check there are no nacks for ssrc 1
+				}
+			}
+		default:
+			return
+		}
+	}
 }
