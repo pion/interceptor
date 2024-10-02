@@ -24,9 +24,10 @@ type packetFactory interface {
 // NewInterceptor constructs a new ResponderInterceptor
 func (r *ResponderInterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, error) {
 	i := &ResponderInterceptor{
-		size:    1024,
-		log:     logging.NewDefaultLoggerFactory().NewLogger("nack_responder"),
-		streams: map[uint32]*localStream{},
+		streamsFilter: streamSupportNack,
+		size:          1024,
+		log:           logging.NewDefaultLoggerFactory().NewLogger("nack_responder"),
+		streams:       map[uint32]*localStream{},
 	}
 
 	for _, opt := range r.opts {
@@ -49,6 +50,7 @@ func (r *ResponderInterceptorFactory) NewInterceptor(_ string) (interceptor.Inte
 // ResponderInterceptor responds to nack feedback messages
 type ResponderInterceptor struct {
 	interceptor.NoOp
+	streamsFilter func(info *interceptor.StreamInfo) bool
 	size          uint16
 	log           logging.LeveledLogger
 	packetFactory packetFactory
@@ -99,7 +101,7 @@ func (n *ResponderInterceptor) BindRTCPReader(reader interceptor.RTCPReader) int
 // BindLocalStream lets you modify any outgoing RTP packets. It is called once for per LocalStream. The returned method
 // will be called once per rtp packet.
 func (n *ResponderInterceptor) BindLocalStream(info *interceptor.StreamInfo, writer interceptor.RTPWriter) interceptor.RTPWriter {
-	if !streamSupportNack(info) {
+	if !n.streamsFilter(info) {
 		return writer
 	}
 
