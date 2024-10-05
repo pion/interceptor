@@ -21,7 +21,7 @@ func TestSendBuffer(t *testing.T) {
 		add := func(nums ...uint16) {
 			for _, n := range nums {
 				seq := start + n
-				pkt, err := pm.NewPacket(&rtp.Header{SequenceNumber: seq}, nil)
+				pkt, err := pm.NewPacket(&rtp.Header{SequenceNumber: seq}, nil, 0, 0)
 				require.NoError(t, err)
 				sb.add(pkt)
 			}
@@ -78,7 +78,7 @@ func TestSendBuffer_Overridden(t *testing.T) {
 	require.Equal(t, uint16(1), sb.size)
 
 	originalBytes := []byte("originalContent")
-	pkt, err := pm.NewPacket(&rtp.Header{SequenceNumber: 1}, originalBytes)
+	pkt, err := pm.NewPacket(&rtp.Header{SequenceNumber: 1}, originalBytes, 0, 0)
 	require.NoError(t, err)
 	sb.add(pkt)
 
@@ -91,7 +91,7 @@ func TestSendBuffer_Overridden(t *testing.T) {
 	require.Equal(t, 1, retrieved.count)
 
 	// ensure original packet is released
-	pkt, err = pm.NewPacket(&rtp.Header{SequenceNumber: 2}, originalBytes)
+	pkt, err = pm.NewPacket(&rtp.Header{SequenceNumber: 2}, originalBytes, 0, 0)
 	require.NoError(t, err)
 	sb.add(pkt)
 	require.Equal(t, 0, retrieved.count)
@@ -113,7 +113,7 @@ func TestSendBuffer_Race(t *testing.T) {
 		add := func(nums ...uint16) {
 			for _, n := range nums {
 				seq := start + n
-				pkt, err := pm.NewPacket(&rtp.Header{SequenceNumber: seq}, nil)
+				pkt, err := pm.NewPacket(&rtp.Header{SequenceNumber: seq}, nil, 0, 0)
 				require.NoError(t, err)
 				sb.add(pkt)
 			}
