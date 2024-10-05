@@ -18,7 +18,7 @@ type StreamInfo struct {
 	SSRCForwardErrorCorrection        uint32
 	PayloadType                       uint8
 	PayloadTypeRetransmission         uint8
-	PayloadTypeForwardErrorCorrection uint32
+	PayloadTypeForwardErrorCorrection uint8
 	RTPHeaderExtensions               []RTPHeaderExtension
 	MimeType                          string
 	ClockRate                         uint32
