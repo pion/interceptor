@@ -4,6 +4,7 @@
 package nack
 
 import (
+	"encoding/binary"
 	"testing"
 	"time"
 
@@ -228,6 +229,63 @@ func TestResponderInterceptor_StreamFilter(t *testing.T) {
 	select {
 	case <-streamWithoutNacks.WrittenRTP():
 		t.Fatal("no nack response expected")
+	case <-time.After(10 * time.Millisecond):
+	}
+}
+
+func TestResponderInterceptor_RFC4588(t *testing.T) {
+	f, err := NewResponderInterceptor()
+	require.NoError(t, err)
+
+	i, err := f.NewInterceptor("")
+	require.NoError(t, err)
+
+	stream := test.NewMockStream(&interceptor.StreamInfo{
+		SSRC:                      1,
+		SSRCRetransmission:        2,
+		PayloadTypeRetransmission: 2,
+		RTCPFeedback:              []interceptor.RTCPFeedback{{Type: "nack"}},
+	}, i)
+	defer func() {
+		require.NoError(t, stream.Close())
+	}()
+
+	for _, seqNum := range []uint16{10, 11, 12, 14, 15} {
+		require.NoError(t, stream.WriteRTP(&rtp.Packet{Header: rtp.Header{SequenceNumber: seqNum}}))
+
+		select {
+		case p := <-stream.WrittenRTP():
+			require.Equal(t, seqNum, p.SequenceNumber)
+		case <-time.After(10 * time.Millisecond):
+			t.Fatal("written rtp packet not found")
+		}
+	}
+
+	stream.ReceiveRTCP([]rtcp.Packet{
+		&rtcp.TransportLayerNack{
+			MediaSSRC:  1,
+			SenderSSRC: 2,
+			Nacks: []rtcp.NackPair{
+				{PacketID: 11, LostPackets: 0b1011}, // sequence numbers: 11, 12, 13, 15
+			},
+		},
+	})
+
+	// seq number 13 was never sent, so it can't be resent
+	for _, seqNum := range []uint16{11, 12, 15} {
+		select {
+		case p := <-stream.WrittenRTP():
+			require.Equal(t, uint32(2), p.SSRC)
+			require.Equal(t, uint8(2), p.PayloadType)
+			require.Equal(t, binary.BigEndian.Uint16(p.Payload), seqNum)
+		case <-time.After(10 * time.Millisecond):
+			t.Fatal("written rtp packet not found")
+		}
+	}
+
+	select {
+	case p := <-stream.WrittenRTP():
+		t.Errorf("no more rtp packets expected, found sequence number: %v", p.SequenceNumber)
 	case <-time.After(10 * time.Millisecond):
 	}
 }
