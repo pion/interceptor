@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
-package nack
+package rtpbuffer
 
 import (
 	"encoding/binary"
@@ -11,16 +11,22 @@ import (
 	"github.com/pion/rtp"
 )
 
-const maxPayloadLen = 1460
+// PacketFactory allows custom logic around the handle of RTP Packets before they added to the RTPBuffer.
+// The NoOpPacketFactory doesn't copy packets, while the RetainablePacket will take a copy before adding
+type PacketFactory interface {
+	NewPacket(header *rtp.Header, payload []byte, rtxSsrc uint32, rtxPayloadType uint8) (*RetainablePacket, error)
+}
 
-type packetManager struct {
+// PacketFactoryCopy is PacketFactory that takes a copy of packets when added to the RTPBuffer
+type PacketFactoryCopy struct {
 	headerPool   *sync.Pool
 	payloadPool  *sync.Pool
 	rtxSequencer rtp.Sequencer
 }
 
-func newPacketManager() *packetManager {
-	return &packetManager{
+// NewPacketFactoryCopy constructs a PacketFactory that takes a copy of packets when added to the RTPBuffer
+func NewPacketFactoryCopy() *PacketFactoryCopy {
+	return &PacketFactoryCopy{
 		headerPool: &sync.Pool{
 			New: func() interface{} {
 				return &rtp.Header{}
@@ -36,12 +42,13 @@ func newPacketManager() *packetManager {
 	}
 }
 
-func (m *packetManager) NewPacket(header *rtp.Header, payload []byte, rtxSsrc uint32, rtxPayloadType uint8) (*retainablePacket, error) {
+// NewPacket constructs a new RetainablePacket that can be added to the RTPBuffer
+func (m *PacketFactoryCopy) NewPacket(header *rtp.Header, payload []byte, rtxSsrc uint32, rtxPayloadType uint8) (*RetainablePacket, error) {
 	if len(payload) > maxPayloadLen {
 		return nil, io.ErrShortBuffer
 	}
 
-	p := &retainablePacket{
+	p := &RetainablePacket{
 		onRelease:      m.releasePacket,
 		sequenceNumber: header.SequenceNumber,
 		// new packets have retain count of 1
@@ -92,17 +99,19 @@ func (m *packetManager) NewPacket(header *rtp.Header, payload []byte, rtxSsrc ui
 	return p, nil
 }
 
-func (m *packetManager) releasePacket(header *rtp.Header, payload *[]byte) {
+func (m *PacketFactoryCopy) releasePacket(header *rtp.Header, payload *[]byte) {
 	m.headerPool.Put(header)
 	if payload != nil {
 		m.payloadPool.Put(payload)
 	}
 }
 
-type noOpPacketFactory struct{}
+// PacketFactoryNoOp is a PacketFactory implementation that doesn't copy packets
+type PacketFactoryNoOp struct{}
 
-func (f *noOpPacketFactory) NewPacket(header *rtp.Header, payload []byte, _ uint32, _ uint8) (*retainablePacket, error) {
-	return &retainablePacket{
+// NewPacket constructs a new RetainablePacket that can be added to the RTPBuffer
+func (f *PacketFactoryNoOp) NewPacket(header *rtp.Header, payload []byte, _ uint32, _ uint8) (*RetainablePacket, error) {
+	return &RetainablePacket{
 		onRelease:      f.releasePacket,
 		count:          1,
 		header:         header,
@@ -111,52 +120,6 @@ func (f *noOpPacketFactory) NewPacket(header *rtp.Header, payload []byte, _ uint
 	}, nil
 }
 
-func (f *noOpPacketFactory) releasePacket(_ *rtp.Header, _ *[]byte) {
+func (f *PacketFactoryNoOp) releasePacket(_ *rtp.Header, _ *[]byte) {
 	// no-op
-}
-
-type retainablePacket struct {
-	onRelease func(*rtp.Header, *[]byte)
-
-	countMu sync.Mutex
-	count   int
-
-	header  *rtp.Header
-	buffer  *[]byte
-	payload []byte
-
-	sequenceNumber uint16
-}
-
-func (p *retainablePacket) Header() *rtp.Header {
-	return p.header
-}
-
-func (p *retainablePacket) Payload() []byte {
-	return p.payload
-}
-
-func (p *retainablePacket) Retain() error {
-	p.countMu.Lock()
-	defer p.countMu.Unlock()
-	if p.count == 0 {
-		// already released
-		return errPacketReleased
-	}
-	p.count++
-	return nil
-}
-
-func (p *retainablePacket) Release() {
-	p.countMu.Lock()
-	defer p.countMu.Unlock()
-	p.count--
-
-	if p.count == 0 {
-		// release back to pool
-		p.onRelease(p.header, p.buffer)
-		p.header = nil
-		p.buffer = nil
-		p.payload = nil
-	}
 }
