@@ -7,7 +7,6 @@ package jitterbuffer
 
 import (
 	"errors"
-	"sync"
 
 	"github.com/pion/rtp"
 )
@@ -72,7 +71,6 @@ type JitterBuffer struct {
 	state         State
 	stats         Stats
 	listeners     map[Event][]EventListener
-	mutex         sync.Mutex
 }
 
 // Stats Track interesting statistics for the life of this JitterBuffer
@@ -122,18 +120,12 @@ func (jb *JitterBuffer) Listen(event Event, cb EventListener) {
 
 // PlayoutHead returns the SequenceNumber that will be attempted to Pop next
 func (jb *JitterBuffer) PlayoutHead() uint16 {
-	jb.mutex.Lock()
-	defer jb.mutex.Unlock()
-
 	return jb.playoutHead
 }
 
 // SetPlayoutHead allows you to manually specify the packet you wish to pop next
 // If you have encountered a packet that hasn't resolved you can skip it
 func (jb *JitterBuffer) SetPlayoutHead(playoutHead uint16) {
-	jb.mutex.Lock()
-	defer jb.mutex.Unlock()
-
 	jb.playoutHead = playoutHead
 }
 
@@ -150,8 +142,6 @@ func (jb *JitterBuffer) updateStats(lastPktSeqNo uint16) {
 // the data so if the memory is expected to be reused, the caller should
 // take this in to account and pass a copy of the packet they wish to buffer
 func (jb *JitterBuffer) Push(packet *rtp.Packet) {
-	jb.mutex.Lock()
-	defer jb.mutex.Unlock()
 	if jb.packets.Length() == 0 {
 		jb.emit(StartBuffering)
 	}
@@ -190,8 +180,6 @@ func (jb *JitterBuffer) updateState() {
 //
 //	At the last sequence received
 func (jb *JitterBuffer) Peek(playoutHead bool) (*rtp.Packet, error) {
-	jb.mutex.Lock()
-	defer jb.mutex.Unlock()
 	if jb.packets.Length() < 1 {
 		return nil, ErrBufferUnderrun
 	}
@@ -203,8 +191,6 @@ func (jb *JitterBuffer) Peek(playoutHead bool) (*rtp.Packet, error) {
 
 // Pop an RTP packet from the jitter buffer at the current playout head
 func (jb *JitterBuffer) Pop() (*rtp.Packet, error) {
-	jb.mutex.Lock()
-	defer jb.mutex.Unlock()
 	if jb.state != Emitting {
 		return nil, ErrPopWhileBuffering
 	}
@@ -221,8 +207,6 @@ func (jb *JitterBuffer) Pop() (*rtp.Packet, error) {
 
 // PopAtSequence will pop an RTP packet from the jitter buffer at the specified Sequence
 func (jb *JitterBuffer) PopAtSequence(sq uint16) (*rtp.Packet, error) {
-	jb.mutex.Lock()
-	defer jb.mutex.Unlock()
 	if jb.state != Emitting {
 		return nil, ErrPopWhileBuffering
 	}
@@ -240,8 +224,6 @@ func (jb *JitterBuffer) PopAtSequence(sq uint16) (*rtp.Packet, error) {
 // PeekAtSequence will return an RTP packet from the jitter buffer at the specified Sequence
 // without removing it from the buffer
 func (jb *JitterBuffer) PeekAtSequence(sq uint16) (*rtp.Packet, error) {
-	jb.mutex.Lock()
-	defer jb.mutex.Unlock()
 	packet, err := jb.packets.Find(sq)
 	if err != nil {
 		return nil, err
@@ -252,8 +234,6 @@ func (jb *JitterBuffer) PeekAtSequence(sq uint16) (*rtp.Packet, error) {
 // PopAtTimestamp pops an RTP packet from the jitter buffer with the provided timestamp
 // Call this method repeatedly to drain the buffer at the timestamp
 func (jb *JitterBuffer) PopAtTimestamp(ts uint32) (*rtp.Packet, error) {
-	jb.mutex.Lock()
-	defer jb.mutex.Unlock()
 	if jb.state != Emitting {
 		return nil, ErrPopWhileBuffering
 	}
@@ -269,8 +249,6 @@ func (jb *JitterBuffer) PopAtTimestamp(ts uint32) (*rtp.Packet, error) {
 
 // Clear will empty the buffer and optionally reset the state
 func (jb *JitterBuffer) Clear(resetState bool) {
-	jb.mutex.Lock()
-	defer jb.mutex.Unlock()
 	jb.packets.Clear()
 	if resetState {
 		jb.lastSequence = 0
