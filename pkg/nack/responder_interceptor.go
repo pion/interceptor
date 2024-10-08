@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/pion/interceptor"
+	"github.com/pion/interceptor/internal/rtpbuffer"
 	"github.com/pion/logging"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
@@ -15,10 +16,6 @@ import (
 // ResponderInterceptorFactory is a interceptor.Factory for a ResponderInterceptor
 type ResponderInterceptorFactory struct {
 	opts []ResponderOption
-}
-
-type packetFactory interface {
-	NewPacket(header *rtp.Header, payload []byte, rtxSsrc uint32, rtxPayloadType uint8) (*retainablePacket, error)
 }
 
 // NewInterceptor constructs a new ResponderInterceptor
@@ -37,10 +34,10 @@ func (r *ResponderInterceptorFactory) NewInterceptor(_ string) (interceptor.Inte
 	}
 
 	if i.packetFactory == nil {
-		i.packetFactory = newPacketManager()
+		i.packetFactory = rtpbuffer.NewPacketFactoryCopy()
 	}
 
-	if _, err := newSendBuffer(i.size); err != nil {
+	if _, err := rtpbuffer.NewRTPBuffer(i.size); err != nil {
 		return nil, err
 	}
 
@@ -53,15 +50,16 @@ type ResponderInterceptor struct {
 	streamsFilter func(info *interceptor.StreamInfo) bool
 	size          uint16
 	log           logging.LeveledLogger
-	packetFactory packetFactory
+	packetFactory rtpbuffer.PacketFactory
 
 	streams   map[uint32]*localStream
 	streamsMu sync.Mutex
 }
 
 type localStream struct {
-	sendBuffer *sendBuffer
-	rtpWriter  interceptor.RTPWriter
+	rtpBuffer      *rtpbuffer.RTPBuffer
+	rtpBufferMutex sync.RWMutex
+	rtpWriter      interceptor.RTPWriter
 }
 
 // NewResponderInterceptor returns a new ResponderInterceptorFactor
@@ -106,11 +104,11 @@ func (n *ResponderInterceptor) BindLocalStream(info *interceptor.StreamInfo, wri
 	}
 
 	// error is already checked in NewGeneratorInterceptor
-	sendBuffer, _ := newSendBuffer(n.size)
+	rtpBuffer, _ := rtpbuffer.NewRTPBuffer(n.size)
 	n.streamsMu.Lock()
 	n.streams[info.SSRC] = &localStream{
-		sendBuffer: sendBuffer,
-		rtpWriter:  writer,
+		rtpBuffer: rtpBuffer,
+		rtpWriter: writer,
 	}
 	n.streamsMu.Unlock()
 
@@ -119,7 +117,11 @@ func (n *ResponderInterceptor) BindLocalStream(info *interceptor.StreamInfo, wri
 		if err != nil {
 			return 0, err
 		}
-		sendBuffer.add(pkt)
+		n.streams[info.SSRC].rtpBufferMutex.Lock()
+		defer n.streams[info.SSRC].rtpBufferMutex.Unlock()
+
+		rtpBuffer.Add(pkt)
+
 		return writer.Write(header, payload, attributes)
 	})
 }
@@ -141,7 +143,10 @@ func (n *ResponderInterceptor) resendPackets(nack *rtcp.TransportLayerNack) {
 
 	for i := range nack.Nacks {
 		nack.Nacks[i].Range(func(seq uint16) bool {
-			if p := stream.sendBuffer.get(seq); p != nil {
+			stream.rtpBufferMutex.Lock()
+			defer stream.rtpBufferMutex.Unlock()
+
+			if p := stream.rtpBuffer.Get(seq); p != nil {
 				if _, err := stream.rtpWriter.Write(p.Header(), p.Payload(), interceptor.Attributes{}); err != nil {
 					n.log.Warnf("failed resending nacked packet: %+v", err)
 				}
