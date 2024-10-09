@@ -8,6 +8,7 @@ package jitterbuffer
 import (
 	"errors"
 
+	"github.com/pion/interceptor/internal/rtpbuffer"
 	"github.com/pion/rtp"
 )
 
@@ -20,8 +21,12 @@ type Event string
 var (
 	// ErrBufferUnderrun is returned when the buffer has no items
 	ErrBufferUnderrun = errors.New("invalid Peek: Empty jitter buffer")
+
 	// ErrPopWhileBuffering is returned if a jitter buffer is not in a playback state
 	ErrPopWhileBuffering = errors.New("attempt to pop while buffering")
+
+	// ErrNotFound is returned when a packet does not exist for a SequenceNumber
+	ErrNotFound = errors.New("packet with sequence number was not found")
 )
 
 const (
@@ -63,7 +68,8 @@ type (
 // order, and allows removing in either sequence number order or via a
 // provided timestamp
 type JitterBuffer struct {
-	packets       *PriorityQueue
+	packets       *rtpbuffer.RTPBuffer
+	packetFactory rtpbuffer.PacketFactoryNoOp
 	minStartCount uint16
 	lastSequence  uint16
 	playoutHead   uint16
@@ -88,11 +94,16 @@ type Stats struct {
 
 // New will initialize a jitter buffer and its associated statistics
 func New(opts ...Option) *JitterBuffer {
+	rtpBuffer, err := rtpbuffer.NewRTPBuffer(rtpbuffer.Uint16SizeHalf)
+	if err != nil || rtpBuffer == nil {
+		return nil
+	}
+
 	jb := &JitterBuffer{
 		state:         Buffering,
 		stats:         Stats{0, 0, 0},
 		minStartCount: 50,
-		packets:       NewQueue(),
+		packets:       rtpBuffer,
 		listeners:     make(map[Event][]EventListener),
 	}
 
@@ -142,18 +153,20 @@ func (jb *JitterBuffer) updateStats(lastPktSeqNo uint16) {
 // the data so if the memory is expected to be reused, the caller should
 // take this in to account and pass a copy of the packet they wish to buffer
 func (jb *JitterBuffer) Push(packet *rtp.Packet) {
-	if jb.packets.Length() == 0 {
+	if packetsLen := jb.packets.Length(); packetsLen == 0 {
+		if !jb.playoutReady {
+			jb.playoutHead = packet.SequenceNumber
+		}
+
 		jb.emit(StartBuffering)
-	}
-	if jb.packets.Length() > 100 {
+	} else if packetsLen > 100 {
 		jb.stats.overflowCount++
 		jb.emit(BufferOverflow)
 	}
-	if !jb.playoutReady && jb.packets.Length() == 0 {
-		jb.playoutHead = packet.SequenceNumber
-	}
+
 	jb.updateStats(packet.SequenceNumber)
-	jb.packets.Push(packet, packet.SequenceNumber)
+	retainablePkt, _ := jb.packetFactory.NewPacket(&packet.Header, packet.Payload, 0, 0)
+	jb.packets.Add(retainablePkt)
 	jb.updateState()
 }
 
@@ -184,25 +197,14 @@ func (jb *JitterBuffer) Peek(playoutHead bool) (*rtp.Packet, error) {
 		return nil, ErrBufferUnderrun
 	}
 	if playoutHead && jb.state == Emitting {
-		return jb.packets.Find(jb.playoutHead)
+		return jb.PeekAtSequence(jb.playoutHead)
 	}
-	return jb.packets.Find(jb.lastSequence)
+	return jb.PeekAtSequence(jb.lastSequence)
 }
 
 // Pop an RTP packet from the jitter buffer at the current playout head
 func (jb *JitterBuffer) Pop() (*rtp.Packet, error) {
-	if jb.state != Emitting {
-		return nil, ErrPopWhileBuffering
-	}
-	packet, err := jb.packets.PopAt(jb.playoutHead)
-	if err != nil {
-		jb.stats.underflowCount++
-		jb.emit(BufferUnderflow)
-		return nil, err
-	}
-	jb.playoutHead = (jb.playoutHead + 1)
-	jb.updateState()
-	return packet, nil
+	return jb.PopAtSequence(jb.playoutHead)
 }
 
 // PopAtSequence will pop an RTP packet from the jitter buffer at the specified Sequence
@@ -210,41 +212,45 @@ func (jb *JitterBuffer) PopAtSequence(sq uint16) (*rtp.Packet, error) {
 	if jb.state != Emitting {
 		return nil, ErrPopWhileBuffering
 	}
-	packet, err := jb.packets.PopAt(sq)
-	if err != nil {
+	retainablePacket := jb.packets.Get(sq)
+	if retainablePacket == nil {
 		jb.stats.underflowCount++
 		jb.emit(BufferUnderflow)
-		return nil, err
+		return nil, ErrNotFound
 	}
+
+	defer retainablePacket.Release(true)
 	jb.playoutHead = (jb.playoutHead + 1)
 	jb.updateState()
-	return packet, nil
+	return retainablePacket.Packet(), nil
 }
 
 // PeekAtSequence will return an RTP packet from the jitter buffer at the specified Sequence
 // without removing it from the buffer
 func (jb *JitterBuffer) PeekAtSequence(sq uint16) (*rtp.Packet, error) {
-	packet, err := jb.packets.Find(sq)
-	if err != nil {
-		return nil, err
+	retainablePacket := jb.packets.Get(sq)
+	if retainablePacket == nil {
+		return nil, ErrNotFound
 	}
-	return packet, nil
+	return retainablePacket.Packet(), nil
 }
 
 // PopAtTimestamp pops an RTP packet from the jitter buffer with the provided timestamp
 // Call this method repeatedly to drain the buffer at the timestamp
-func (jb *JitterBuffer) PopAtTimestamp(ts uint32) (*rtp.Packet, error) {
+func (jb *JitterBuffer) PopAtTimestamp(ts uint32) (*rtp.Packet, error) { //nolint: revive
 	if jb.state != Emitting {
 		return nil, ErrPopWhileBuffering
 	}
-	packet, err := jb.packets.PopAtTimestamp(ts)
-	if err != nil {
+	retainablePacket := jb.packets.GetTimestamp(ts)
+	if retainablePacket == nil {
 		jb.stats.underflowCount++
 		jb.emit(BufferUnderflow)
-		return nil, err
+		return nil, ErrNotFound
 	}
+
+	defer retainablePacket.Release(true)
 	jb.updateState()
-	return packet, nil
+	return retainablePacket.Packet(), nil
 }
 
 // Clear will empty the buffer and optionally reset the state

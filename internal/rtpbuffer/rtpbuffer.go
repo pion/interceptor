@@ -63,7 +63,7 @@ func (r *RTPBuffer) Add(packet *RetainablePacket) {
 			idx := i % r.size
 			prevPacket := r.packets[idx]
 			if prevPacket != nil {
-				prevPacket.Release()
+				prevPacket.Release(false)
 			}
 			r.packets[idx] = nil
 		}
@@ -72,7 +72,7 @@ func (r *RTPBuffer) Add(packet *RetainablePacket) {
 	idx := seq % r.size
 	prevPacket := r.packets[idx]
 	if prevPacket != nil {
-		prevPacket.Release()
+		prevPacket.Release(false)
 	}
 	r.packets[idx] = packet
 	r.lastAdded = seq
@@ -100,4 +100,37 @@ func (r *RTPBuffer) Get(seq uint16) *RetainablePacket {
 		}
 	}
 	return pkt
+}
+
+// GetTimestamp returns a RetainablePacket for the requested timestamp
+func (r *RTPBuffer) GetTimestamp(timestamp uint32) *RetainablePacket {
+	for i := range r.packets {
+		pkt := r.packets[i]
+		if pkt != nil && pkt.Header() != nil && pkt.Header().Timestamp == timestamp {
+			if err := pkt.Retain(); err != nil {
+				return nil
+			}
+
+			return pkt
+		}
+	}
+	return nil
+}
+
+// Length returns the count of valid RetainablePackets in the RTPBuffer
+func (r *RTPBuffer) Length() (length uint16) {
+	for i := range r.packets {
+		if r.packets[i] != nil && r.packets[i].getCount() != 0 {
+			length++
+		}
+	}
+
+	return
+}
+
+// Clear erases all the packets in the RTPBuffer
+func (r *RTPBuffer) Clear() {
+	r.lastAdded = 0
+	r.started = false
+	r.packets = make([]*RetainablePacket, r.size)
 }

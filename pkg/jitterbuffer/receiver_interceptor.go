@@ -52,10 +52,11 @@ func (g *InterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, 
 //	arriving) quickly enough.
 type ReceiverInterceptor struct {
 	interceptor.NoOp
-	buffer *JitterBuffer
-	wg     sync.WaitGroup
-	close  chan struct{}
-	log    logging.LeveledLogger
+	buffer   *JitterBuffer
+	bufferMu sync.Mutex
+	wg       sync.WaitGroup
+	close    chan struct{}
+	log      logging.LeveledLogger
 }
 
 // NewInterceptor returns a new InterceptorFactory
@@ -77,6 +78,9 @@ func (i *ReceiverInterceptor) BindRemoteStream(_ *interceptor.StreamInfo, reader
 			return 0, nil, err
 		}
 
+		i.bufferMu.Lock()
+		defer i.bufferMu.Unlock()
+
 		i.buffer.Push(packet)
 		if i.buffer.state == Emitting {
 			newPkt, err := i.buffer.Pop()
@@ -92,7 +96,10 @@ func (i *ReceiverInterceptor) BindRemoteStream(_ *interceptor.StreamInfo, reader
 
 // UnbindRemoteStream is called when the Stream is removed. It can be used to clean up any data related to that track.
 func (i *ReceiverInterceptor) UnbindRemoteStream(_ *interceptor.StreamInfo) {
+	i.bufferMu.Lock()
 	defer i.wg.Wait()
+	defer i.bufferMu.Unlock()
+
 	i.buffer.Clear(true)
 }
 

@@ -39,7 +39,7 @@ func TestRTPBuffer(t *testing.T) {
 				if packet.Header().SequenceNumber != seq {
 					t.Errorf("packet for %d returned with incorrect SequenceNumber: %d", seq, packet.Header().SequenceNumber)
 				}
-				packet.Release()
+				packet.Release(false)
 			}
 		}
 		assertNOTGet := func(nums ...uint16) {
@@ -87,7 +87,7 @@ func TestRTPBuffer_Overridden(t *testing.T) {
 	retrieved := sb.Get(1)
 	require.NotNil(t, retrieved)
 	require.Equal(t, "originalContent", string(retrieved.Payload()))
-	retrieved.Release()
+	retrieved.Release(false)
 	require.Equal(t, 1, retrieved.count)
 
 	// ensure original packet is released

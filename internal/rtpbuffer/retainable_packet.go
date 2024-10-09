@@ -33,6 +33,14 @@ func (p *RetainablePacket) Payload() []byte {
 	return p.payload
 }
 
+// Packet returns a RTP Packet for a RetainablePacket
+func (p *RetainablePacket) Packet() *rtp.Packet {
+	return &rtp.Packet{
+		Header:  *p.Header(),
+		Payload: p.Payload(),
+	}
+}
+
 // Retain increases the reference count of the RetainablePacket
 func (p *RetainablePacket) Retain() error {
 	p.countMu.Lock()
@@ -46,10 +54,15 @@ func (p *RetainablePacket) Retain() error {
 }
 
 // Release decreases the reference count of the RetainablePacket and frees if needed
-func (p *RetainablePacket) Release() {
+func (p *RetainablePacket) Release(force bool) {
 	p.countMu.Lock()
 	defer p.countMu.Unlock()
-	p.count--
+
+	if !force {
+		p.count--
+	} else {
+		p.count = 0
+	}
 
 	if p.count == 0 {
 		// release back to pool
@@ -58,4 +71,11 @@ func (p *RetainablePacket) Release() {
 		p.buffer = nil
 		p.payload = nil
 	}
+}
+
+func (p *RetainablePacket) getCount() int {
+	p.countMu.Lock()
+	defer p.countMu.Unlock()
+
+	return p.count
 }

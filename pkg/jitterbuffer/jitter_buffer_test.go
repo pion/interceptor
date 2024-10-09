@@ -132,7 +132,7 @@ func TestJitterBuffer(t *testing.T) {
 		assert.Equal(pkt.SequenceNumber, uint16(5002))
 		assert.Equal(err, nil)
 		for i := 0; i < 100; i++ {
-			sqnum := uint16((math.MaxUint16 - 32 + i))
+			sqnum := uint16((6000 + i))
 			jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: sqnum, Timestamp: uint32(512 + i)}, Payload: []byte{0x02}})
 		}
 		pkt, err = jb.Peek(true)
