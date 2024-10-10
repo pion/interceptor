@@ -5,6 +5,7 @@ package nack
 
 import (
 	"github.com/pion/interceptor"
+	"github.com/pion/interceptor/internal/rtpbuffer"
 	"github.com/pion/logging"
 )
 
@@ -32,7 +33,7 @@ func ResponderLog(log logging.LeveledLogger) ResponderOption {
 // you are not re-using underlying buffers of packets that have been written
 func DisableCopy() ResponderOption {
 	return func(s *ResponderInterceptor) error {
-		s.packetFactory = &noOpPacketFactory{}
+		s.packetFactory = &rtpbuffer.PacketFactoryNoOp{}
 		return nil
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/pion/interceptor"
+	"github.com/pion/interceptor/internal/rtpbuffer"
 	"github.com/pion/interceptor/internal/test"
 	"github.com/pion/logging"
 	"github.com/pion/rtcp"
@@ -111,7 +112,7 @@ func TestResponderInterceptor_DisableCopy(t *testing.T) {
 	require.NoError(t, err)
 	i, err := f.NewInterceptor("id")
 	require.NoError(t, err)
-	_, ok := i.(*ResponderInterceptor).packetFactory.(*noOpPacketFactory)
+	_, ok := i.(*ResponderInterceptor).packetFactory.(*rtpbuffer.PacketFactoryNoOp)
 	require.True(t, ok)
 }
 
