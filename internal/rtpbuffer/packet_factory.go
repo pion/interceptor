@@ -42,6 +42,8 @@ func NewPacketFactoryCopy() *PacketFactoryCopy {
 	}
 }
 
+const maxPayloadLen = 1460
+
 // NewPacket constructs a new RetainablePacket that can be added to the RTPBuffer
 func (m *PacketFactoryCopy) NewPacket(header *rtp.Header, payload []byte, rtxSsrc uint32, rtxPayloadType uint8) (*RetainablePacket, error) {
 	if len(payload) > maxPayloadLen {
@@ -122,4 +124,15 @@ func (f *PacketFactoryNoOp) NewPacket(header *rtp.Header, payload []byte, _ uint
 
 func (f *PacketFactoryNoOp) releasePacket(_ *rtp.Header, _ *[]byte) {
 	// no-op
+}
+
+// NewRetainablePacketFromRTPPacket creates a RetainablePacket that embeds a RTP Packet directly
+func NewRetainablePacketFromRTPPacket(pkt *rtp.Packet) *RetainablePacket {
+	return &RetainablePacket{
+		onRelease:      func(*rtp.Header, *[]byte) {},
+		count:          1,
+		packet:         pkt,
+		header:         &pkt.Header,
+		sequenceNumber: pkt.Header.SequenceNumber,
+	}
 }

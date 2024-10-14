@@ -69,7 +69,6 @@ type (
 // provided timestamp
 type JitterBuffer struct {
 	packets       *rtpbuffer.RTPBuffer
-	packetFactory rtpbuffer.PacketFactoryNoOp
 	minStartCount uint16
 	lastSequence  uint16
 	playoutHead   uint16
@@ -94,7 +93,7 @@ type Stats struct {
 
 // New will initialize a jitter buffer and its associated statistics
 func New(opts ...Option) *JitterBuffer {
-	rtpBuffer, err := rtpbuffer.NewRTPBuffer(rtpbuffer.Uint16SizeHalf)
+	rtpBuffer, err := rtpbuffer.NewRTPBuffer(65535)
 	if err != nil || rtpBuffer == nil {
 		return nil
 	}
@@ -153,21 +152,20 @@ func (jb *JitterBuffer) updateStats(lastPktSeqNo uint16) {
 // the data so if the memory is expected to be reused, the caller should
 // take this in to account and pass a copy of the packet they wish to buffer
 func (jb *JitterBuffer) Push(packet *rtp.Packet) {
-	if packetsLen := jb.packets.Length(); packetsLen == 0 {
-		if !jb.playoutReady {
-			jb.playoutHead = packet.SequenceNumber
-		}
+	// if packetsLen := jb.packets.Length(); packetsLen == 0 {
+	// 	if !jb.playoutReady {
+	// 		jb.playoutHead = packet.SequenceNumber
+	// 	}
 
-		jb.emit(StartBuffering)
-	} else if packetsLen > 100 {
-		jb.stats.overflowCount++
-		jb.emit(BufferOverflow)
-	}
+	// 	jb.emit(StartBuffering)
+	// } else if packetsLen > 100 {
+	// 	jb.stats.overflowCount++
+	// 	jb.emit(BufferOverflow)
+	// }
 
-	jb.updateStats(packet.SequenceNumber)
-	retainablePkt, _ := jb.packetFactory.NewPacket(&packet.Header, packet.Payload, 0, 0)
-	jb.packets.Add(retainablePkt)
-	jb.updateState()
+	//jb.updateStats(packet.SequenceNumber)
+	jb.packets.Add(rtpbuffer.NewRetainablePacketFromRTPPacket(packet))
+	//jb.updateState()
 }
 
 func (jb *JitterBuffer) emit(event Event) {
@@ -209,19 +207,19 @@ func (jb *JitterBuffer) Pop() (*rtp.Packet, error) {
 
 // PopAtSequence will pop an RTP packet from the jitter buffer at the specified Sequence
 func (jb *JitterBuffer) PopAtSequence(sq uint16) (*rtp.Packet, error) {
-	if jb.state != Emitting {
-		return nil, ErrPopWhileBuffering
-	}
+	// if jb.state != Emitting {
+	// 	return nil, ErrPopWhileBuffering
+	// }
 	retainablePacket := jb.packets.Get(sq)
 	if retainablePacket == nil {
-		jb.stats.underflowCount++
-		jb.emit(BufferUnderflow)
+		// jb.stats.underflowCount++
+		//jb.emit(BufferUnderflow)
 		return nil, ErrNotFound
 	}
 
 	defer retainablePacket.Release(true)
-	jb.playoutHead = (jb.playoutHead + 1)
-	jb.updateState()
+	// jb.playoutHead = (jb.playoutHead + 1)
+	// jb.updateState()
 	return retainablePacket.Packet(), nil
 }
 

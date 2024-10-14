@@ -6,9 +6,9 @@ package nack
 import (
 	"fmt"
 	"sync"
-
-	"github.com/pion/interceptor/internal/rtpbuffer"
 )
+
+const uint16SizeHalf = 1 << 15
 
 type receiveLog struct {
 	packets         []uint64
@@ -56,7 +56,7 @@ func (s *receiveLog) add(seq uint16) {
 	switch {
 	case diff == 0:
 		return
-	case diff < rtpbuffer.Uint16SizeHalf:
+	case diff < uint16SizeHalf:
 		// this means a positive diff, in other words seq > end (with counting for rollovers)
 		for i := s.end + 1; i != seq; i++ {
 			// clear packets between end and seq (these may contain packets from a "size" ago)
@@ -84,7 +84,7 @@ func (s *receiveLog) get(seq uint16) bool {
 	defer s.m.RUnlock()
 
 	diff := s.end - seq
-	if diff >= rtpbuffer.Uint16SizeHalf {
+	if diff >= uint16SizeHalf {
 		return false
 	}
 
@@ -100,7 +100,7 @@ func (s *receiveLog) missingSeqNumbers(skipLastN uint16) []uint16 {
 	defer s.m.RUnlock()
 
 	until := s.end - skipLastN
-	if until-s.lastConsecutive >= rtpbuffer.Uint16SizeHalf {
+	if until-s.lastConsecutive >= uint16SizeHalf {
 		// until < s.lastConsecutive (counting for rollover)
 		return nil
 	}

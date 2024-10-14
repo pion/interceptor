@@ -16,6 +16,7 @@ type RetainablePacket struct {
 	countMu sync.Mutex
 	count   int
 
+	packet  *rtp.Packet
 	header  *rtp.Header
 	buffer  *[]byte
 	payload []byte
@@ -35,10 +36,7 @@ func (p *RetainablePacket) Payload() []byte {
 
 // Packet returns a RTP Packet for a RetainablePacket
 func (p *RetainablePacket) Packet() *rtp.Packet {
-	return &rtp.Packet{
-		Header:  *p.Header(),
-		Payload: p.Payload(),
-	}
+	return p.packet
 }
 
 // Retain increases the reference count of the RetainablePacket
