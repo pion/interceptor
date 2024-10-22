@@ -132,6 +132,12 @@ func (jb *JitterBuffer) PlayoutHead() uint16 {
 	return jb.playoutHead
 }
 
+func (jb *JitterBuffer) Length() uint16 {
+	jb.mutex.Lock()
+	defer jb.mutex.Unlock()
+	return jb.packets.Length()
+}
+
 // SetPlayoutHead allows you to manually specify the packet you wish to pop next
 // If you have encountered a packet that hasn't resolved you can skip it.
 func (jb *JitterBuffer) SetPlayoutHead(playoutHead uint16) {
