@@ -69,8 +69,9 @@ func (m *PacketFactoryCopy) NewPacket(header *rtp.Header, payload []byte, rtxSsr
 			return nil, errFailedToCastPayloadPool
 		}
 
-		size := copy(*p.buffer, payload)
-		p.payload = (*p.buffer)[:size]
+		buf := (*p.buffer)[:0]
+		size := copy(buf, payload)
+		p.payload = buf[:size]
 	}
 
 	if rtxSsrc != 0 && rtxPayloadType != 0 {
@@ -91,9 +92,11 @@ func (m *PacketFactoryCopy) NewPacket(header *rtp.Header, payload []byte, rtxSsr
 		}
 
 		// Write the original sequence number at the beginning of the payload.
-		payload := make([]byte, 2)
-		binary.BigEndian.PutUint16(payload, originalSequenceNumber)
-		p.payload = append(payload, p.payload[:len(p.payload)-paddingLength]...)
+		payloadLen := 2 + len(p.payload) - paddingLength
+		newPayload := make([]byte, payloadLen)
+		binary.BigEndian.PutUint16(newPayload[:2], originalSequenceNumber)
+		copy(newPayload[2:], p.payload[:len(p.payload)-paddingLength])
+		p.payload = newPayload
 	}
 
 	return p, nil
