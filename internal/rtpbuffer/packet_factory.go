@@ -131,6 +131,9 @@ func (f *PacketFactoryNoOp) NewPacket(header *rtp.Header, payload []byte, _ uint
 	}, nil
 }
 
+func (m *PacketFactoryNoOp) FillSequenceNumber(packet *RetainablePacket) {
+}
+
 func (f *PacketFactoryNoOp) releasePacket(_ *rtp.Header, _ *[]byte) {
 	// no-op
 }
