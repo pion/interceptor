@@ -80,8 +80,9 @@ func (k *kalman) updateEstimate(measurement time.Duration) time.Duration {
 		root3 := 3 * root
 		if zms > root3 {
 			k.measurementUncertainty = math.Max(alpha*k.measurementUncertainty+(1-alpha)*root3*root3, 1)
+		} else {
+			k.measurementUncertainty = math.Max(alpha*k.measurementUncertainty+(1-alpha)*zms*zms, 1)
 		}
-		k.measurementUncertainty = math.Max(alpha*k.measurementUncertainty+(1-alpha)*zms*zms, 1)
 	}
 
 	estimateUncertainty := k.estimateError + k.processUncertainty
