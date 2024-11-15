@@ -161,25 +161,25 @@ func (r *recorder) recordOutgoingRTCP(latestStats internalStats, v *outgoingRTCP
 		switch rtcpPkt := pkt.(type) {
 		case *rtcp.FullIntraRequest:
 			if !contains(pkt.DestinationSSRC(), r.ssrc) {
-				r.logger.Debugf("skipping outgoing RTCP pkt: %v\n", pkt)
+				r.logger.Debugf("skipping outgoing RTCP pkt: %v", pkt)
 				continue
 			}
 			latestStats.InboundRTPStreamStats.FIRCount++
 		case *rtcp.PictureLossIndication:
 			if !contains(pkt.DestinationSSRC(), r.ssrc) {
-				r.logger.Debugf("skipping outgoing RTCP pkt: %v\n", pkt)
+				r.logger.Debugf("skipping outgoing RTCP pkt: %v", pkt)
 				continue
 			}
 			latestStats.InboundRTPStreamStats.PLICount++
 		case *rtcp.TransportLayerNack:
 			if !contains(pkt.DestinationSSRC(), r.ssrc) {
-				r.logger.Debugf("skipping outgoing RTCP pkt: %v\n", pkt)
+				r.logger.Debugf("skipping outgoing RTCP pkt: %v", pkt)
 				continue
 			}
 			latestStats.InboundRTPStreamStats.NACKCount++
 		case *rtcp.SenderReport:
 			if !contains(pkt.DestinationSSRC(), r.ssrc) {
-				r.logger.Debugf("skipping outgoing RTCP pkt: %v\n", pkt)
+				r.logger.Debugf("skipping outgoing RTCP pkt: %v", pkt)
 				continue
 			}
 			latestStats.lastSenderReports = append(latestStats.lastSenderReports, rtcpPkt.NTPTime)
@@ -276,7 +276,7 @@ func contains(ls []uint32, e uint32) bool {
 func (r *recorder) recordIncomingRTCP(latestStats internalStats, v *incomingRTCP) internalStats {
 	for _, pkt := range v.pkts {
 		if !contains(pkt.DestinationSSRC(), r.ssrc) {
-			r.logger.Debugf("skipping incoming RTCP pkt: %v\n", pkt)
+			r.logger.Debugf("skipping incoming RTCP pkt: %v", pkt)
 			continue
 		}
 		switch pkt := pkt.(type) {
