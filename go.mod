@@ -7,7 +7,7 @@ require (
 	github.com/pion/rtcp v1.2.14
 	github.com/pion/rtp v1.8.9
 	github.com/pion/transport/v3 v3.0.7
-	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/testify v1.10.0
 )
 
 require (
