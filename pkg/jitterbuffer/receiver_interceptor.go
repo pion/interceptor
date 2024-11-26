@@ -106,9 +106,6 @@ func (i *ReceiverInterceptor) BindRemoteStream(
 					break
 				}
 			}
-			nlen, err := newPkt.MarshalTo(b)
-
-			return nlen, attr, err
 		}
 
 		return n, attr, ErrPopWhileBuffering
