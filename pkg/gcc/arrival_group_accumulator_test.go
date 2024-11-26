@@ -70,7 +70,7 @@ func TestArrivalGroupAccumulator(t *testing.T) {
 					},
 				},
 				arrival:   time.Time{}.Add(20 * time.Millisecond),
-				departure: time.Time{}.Add(3 * time.Millisecond),
+				departure: time.Time{},
 			}},
 		},
 		{
@@ -102,7 +102,7 @@ func TestArrivalGroupAccumulator(t *testing.T) {
 						},
 					},
 					arrival:   time.Time{}.Add(20 * time.Millisecond),
-					departure: time.Time{}.Add(3 * time.Millisecond),
+					departure: time.Time{}.Add(0 * time.Millisecond),
 				},
 				{
 					packets: []cc.Acknowledgment{
@@ -153,6 +153,66 @@ func TestArrivalGroupAccumulator(t *testing.T) {
 					},
 					arrival:   time.Time{}.Add(34 * time.Millisecond),
 					departure: time.Time{}.Add(6 * time.Millisecond),
+				},
+			},
+		},
+		{
+			name: "newGroupBecauseOfInterDepartureTime",
+			log: []cc.Acknowledgment{
+				{
+					SequenceNumber: 0,
+					Departure:      time.Time{},
+					Arrival:        time.Time{}.Add(4 * time.Millisecond),
+				},
+				{
+					SequenceNumber: 1,
+					Departure:      time.Time{}.Add(3 * time.Millisecond),
+					Arrival:        time.Time{}.Add(4 * time.Millisecond),
+				},
+				{
+					SequenceNumber: 2,
+					Departure:      time.Time{}.Add(6 * time.Millisecond),
+					Arrival:        time.Time{}.Add(10 * time.Millisecond),
+				},
+				{
+					SequenceNumber: 3,
+					Departure:      time.Time{}.Add(9 * time.Millisecond),
+					Arrival:        time.Time{}.Add(10 * time.Millisecond),
+				},
+				triggerNewGroupElement,
+			},
+			exp: []arrivalGroup{
+				{
+					packets: []cc.Acknowledgment{
+						{
+							SequenceNumber: 0,
+							Departure:      time.Time{},
+							Arrival:        time.Time{}.Add(4 * time.Millisecond),
+						},
+						{
+							SequenceNumber: 1,
+							Departure:      time.Time{}.Add(3 * time.Millisecond),
+							Arrival:        time.Time{}.Add(4 * time.Millisecond),
+						},
+					},
+					departure: time.Time{},
+					arrival:   time.Time{}.Add(4 * time.Millisecond),
+				},
+				{
+					packets: []cc.Acknowledgment{
+						{
+							SequenceNumber: 2,
+							Departure:      time.Time{}.Add(6 * time.Millisecond),
+							Arrival:        time.Time{}.Add(10 * time.Millisecond),
+						},
+						{
+							SequenceNumber: 3,
+							Departure:      time.Time{}.Add(9 * time.Millisecond),
+							Arrival:        time.Time{}.Add(10 * time.Millisecond),
+						},
+					},
+					departure: time.Time{}.Add(6 * time.Millisecond),
+					arrival:   time.Time{}.Add(10 * time.Millisecond),
 				},
 			},
 		},
