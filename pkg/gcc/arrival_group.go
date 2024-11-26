@@ -16,10 +16,17 @@ type arrivalGroup struct {
 	arrival   time.Time
 }
 
+func newArrivalGroup(a cc.Acknowledgment) arrivalGroup {
+	return arrivalGroup{
+		packets:   []cc.Acknowledgment{a},
+		departure: a.Departure,
+		arrival:   a.Arrival,
+	}
+}
+
 func (g *arrivalGroup) add(a cc.Acknowledgment) {
 	g.packets = append(g.packets, a)
 	g.arrival = a.Arrival
-	g.departure = a.Departure
 }
 
 func (g arrivalGroup) String() string {
