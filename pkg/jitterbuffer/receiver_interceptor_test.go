@@ -118,8 +118,8 @@ func TestReceiverBuffersAndPlaysoutSkippingMissingPackets(t *testing.T) {
 		SSRC:      123456,
 		ClockRate: 90000,
 	}, i)
-
-	for s := 0; s < 420; s++ {
+	var s int16
+	for s = 0; s < 420; s++ {
 		if s == 6 {
 			s++
 		}

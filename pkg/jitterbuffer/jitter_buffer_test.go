@@ -132,6 +132,7 @@ func TestJitterBuffer(t *testing.T) {
 		assert.Equal(jb.packets.Length(), uint16(100))
 		assert.Equal(jb.state, Emitting)
 		head, err := jb.PopAtTimestamp(uint32(513))
+		assert.NotNil(head)
 		assert.Equal(head.SequenceNumber, uint16(math.MaxUint16-32+1))
 		assert.Equal(err, nil)
 		head, err = jb.PopAtTimestamp(uint32(513))

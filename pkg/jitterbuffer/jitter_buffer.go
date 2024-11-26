@@ -66,7 +66,7 @@ type (
 // order, and allows removing in either sequence number order or via a
 // provided timestamp.
 type JitterBuffer struct {
-	packets       *PriorityQueue
+	packets       *RBTree
 	minStartCount uint16
 	overflowLen   uint16
 	lastSequence  uint16
@@ -132,6 +132,7 @@ func (jb *JitterBuffer) PlayoutHead() uint16 {
 	return jb.playoutHead
 }
 
+// Length returns the current number of packets in the buffer
 func (jb *JitterBuffer) Length() uint16 {
 	jb.mutex.Lock()
 	defer jb.mutex.Unlock()
@@ -177,7 +178,7 @@ func (jb *JitterBuffer) Push(packet *rtp.Packet) {
 	}
 
 	jb.updateStats(packet.SequenceNumber)
-	jb.packets.Push(packet, packet.SequenceNumber)
+	jb.packets.Push(packet)
 	jb.updateState()
 }
 
@@ -259,8 +260,6 @@ func (jb *JitterBuffer) PopAtSequence(sq uint16) (*rtp.Packet, error) {
 // PeekAtSequence will return an RTP packet from the jitter buffer at the specified Sequence
 // without removing it from the buffer.
 func (jb *JitterBuffer) PeekAtSequence(sq uint16) (*rtp.Packet, error) {
-	jb.mutex.Lock()
-	defer jb.mutex.Unlock()
 	packet, err := jb.packets.Find(sq)
 	if err != nil {
 		return nil, err

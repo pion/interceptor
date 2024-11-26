@@ -85,34 +85,36 @@ func (i *ReceiverInterceptor) BindRemoteStream(
 		}
 		i.buffer.Push(packet)
 		if i.buffer.state == Emitting {
-			for {
-				newPkt, err := i.buffer.Pop()
-				if err != nil {
-					if errors.Is(err, ErrNotFound) {
-						if i.skipMissingPackets {
-							i.log.Warn("Skipping missing packet")
-							i.buffer.SetPlayoutHead(i.buffer.PlayoutHead() + 1)
-							continue
-						}
-					}
-					return 0, nil, err
-				}
-				if newPkt != nil {
-					nlen, err := newPkt.MarshalTo(b)
-					return nlen, attr, err
-
-				}
-				if i.buffer.Length() == 0 {
-					break
-				}
-			}
-			nlen, err := newPkt.MarshalTo(b)
-
-			return nlen, attr, err
+			return i.playout(b, n, attr)
 		}
 
 		return n, attr, ErrPopWhileBuffering
 	})
+}
+
+func (i *ReceiverInterceptor) playout(b []byte, n int, attr interceptor.Attributes) (int, interceptor.Attributes, error) {
+	for {
+		newPkt, err := i.buffer.Pop()
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				if i.skipMissingPackets {
+					i.log.Warn("Skipping missing packet")
+					i.buffer.SetPlayoutHead(i.buffer.PlayoutHead() + 1)
+					continue
+				}
+			}
+			return 0, nil, err
+		}
+		if newPkt != nil {
+			nlen, err := newPkt.MarshalTo(b)
+			return nlen, attr, err
+
+		}
+		if i.buffer.Length() == 0 {
+			break
+		}
+	}
+	return n, attr, ErrPopWhileBuffering
 }
 
 // UnbindRemoteStream is called when the Stream is removed. It can be used to clean up any data related to that track.
