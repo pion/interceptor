@@ -4,6 +4,7 @@
 package jitterbuffer
 
 import (
+	"errors"
 	"sync"
 
 	"github.com/pion/interceptor"
@@ -17,10 +18,13 @@ type InterceptorFactory struct {
 }
 
 // NewInterceptor constructs a new ReceiverInterceptor
-func (g *InterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, error) {
+func (g *InterceptorFactory) NewInterceptor(logName string) (interceptor.Interceptor, error) {
+	if logName == "" {
+		logName = "jitterbuffer"
+	}
 	i := &ReceiverInterceptor{
 		close:  make(chan struct{}),
-		log:    logging.NewDefaultLoggerFactory().NewLogger("jitterbuffer"),
+		log:    logging.NewDefaultLoggerFactory().NewLogger(logName),
 		buffer: New(),
 	}
 
@@ -52,11 +56,11 @@ func (g *InterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, 
 //	arriving) quickly enough.
 type ReceiverInterceptor struct {
 	interceptor.NoOp
-	buffer *JitterBuffer
-	m      sync.Mutex
-	wg     sync.WaitGroup
-	close  chan struct{}
-	log    logging.LeveledLogger
+	buffer             *JitterBuffer
+	wg                 sync.WaitGroup
+	close              chan struct{}
+	log                logging.LeveledLogger
+	skipMissingPackets bool
 }
 
 // NewInterceptor returns a new InterceptorFactory
@@ -74,19 +78,32 @@ func (i *ReceiverInterceptor) BindRemoteStream(_ *interceptor.StreamInfo, reader
 			return n, attr, err
 		}
 		packet := &rtp.Packet{}
-		if err := packet.Unmarshal(buf); err != nil {
+		if err := packet.Unmarshal(buf[:n]); err != nil {
 			return 0, nil, err
 		}
-		i.m.Lock()
-		defer i.m.Unlock()
 		i.buffer.Push(packet)
 		if i.buffer.state == Emitting {
-			newPkt, err := i.buffer.Pop()
-			if err != nil {
-				return 0, nil, err
+			for {
+				newPkt, err := i.buffer.Pop()
+				if err != nil {
+					if errors.Is(err, ErrNotFound) {
+						if i.skipMissingPackets {
+							i.log.Warn("Skipping missing packet")
+							i.buffer.SetPlayoutHead(i.buffer.PlayoutHead() + 1)
+							continue
+						}
+					}
+					return 0, nil, err
+				}
+				if newPkt != nil {
+					nlen, err := newPkt.MarshalTo(b)
+					return nlen, attr, err
+
+				}
+				if i.buffer.Length() == 0 {
+					break
+				}
 			}
-			nlen, err := newPkt.MarshalTo(b)
-			return nlen, attr, err
 		}
 		return n, attr, ErrPopWhileBuffering
 	})
@@ -95,16 +112,12 @@ func (i *ReceiverInterceptor) BindRemoteStream(_ *interceptor.StreamInfo, reader
 // UnbindRemoteStream is called when the Stream is removed. It can be used to clean up any data related to that track.
 func (i *ReceiverInterceptor) UnbindRemoteStream(_ *interceptor.StreamInfo) {
 	defer i.wg.Wait()
-	i.m.Lock()
-	defer i.m.Unlock()
 	i.buffer.Clear(true)
 }
 
 // Close closes the interceptor
 func (i *ReceiverInterceptor) Close() error {
 	defer i.wg.Wait()
-	i.m.Lock()
-	defer i.m.Unlock()
 	i.buffer.Clear(true)
 	return nil
 }

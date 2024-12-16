@@ -80,16 +80,69 @@ func TestReceiverBuffersAndPlaysout(t *testing.T) {
 		SenderSSRC: 123,
 		MediaSSRC:  456,
 	}})
-	for s := 0; s < 61; s++ {
+	for s := 0; s < 910; s++ {
 		stream.ReceiveRTP(&rtp.Packet{Header: rtp.Header{
 			SequenceNumber: uint16(s),
 		}})
 	}
 	// Give time for packets to be handled and stream written to.
 	time.Sleep(50 * time.Millisecond)
-	for s := 0; s < 10; s++ {
+	for s := 0; s < 50; s++ {
 		read := <-stream.ReadRTP()
+		if read.Err != nil {
+			t.Fatal(read.Err)
+		}
 		seq := read.Packet.Header.SequenceNumber
+		assert.EqualValues(t, uint16(s), seq)
+	}
+	assert.NoError(t, stream.Close())
+	err = i.Close()
+	assert.NoError(t, err)
+}
+
+func TestReceiverBuffersAndPlaysoutSkippingMissingPackets(t *testing.T) {
+	buf := bytes.Buffer{}
+
+	factory, err := NewInterceptor(
+		Log(logging.NewDefaultLoggerFactory().NewLogger("test")),
+		WithSkipMissingPackets(),
+	)
+	assert.NoError(t, err)
+
+	i, err := factory.NewInterceptor("jitterbuffer")
+	assert.NoError(t, err)
+
+	assert.EqualValues(t, 0, buf.Len())
+
+	stream := test.NewMockStream(&interceptor.StreamInfo{
+		SSRC:      123456,
+		ClockRate: 90000,
+	}, i)
+
+	for s := 0; s < 420; s++ {
+		if s == 6 {
+			s++
+		}
+		if s == 40 {
+			s = s + 20
+		}
+		stream.ReceiveRTP(&rtp.Packet{Header: rtp.Header{
+			SequenceNumber: uint16(s),
+		}})
+	}
+
+	for s := 0; s < 100; s++ {
+		read := <-stream.ReadRTP()
+		if read.Err != nil {
+			continue
+		}
+		seq := read.Packet.Header.SequenceNumber
+		if s == 6 {
+			s++
+		}
+		if s == 40 {
+			s = s + 20
+		}
 		assert.EqualValues(t, uint16(s), seq)
 	}
 	assert.NoError(t, stream.Close())
