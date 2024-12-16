@@ -17,10 +17,10 @@ const (
 
 // RTPBuffer stores RTP packets and allows custom logic around the lifetime of them via the PacketFactory
 type RTPBuffer struct {
-	packets   []*RetainablePacket
-	size      uint16
-	lastAdded uint16
-	started   bool
+	packets      []*RetainablePacket
+	size         uint16
+	highestAdded uint16
+	started      bool
 }
 
 // NewRTPBuffer constructs a new RTPBuffer
@@ -50,16 +50,16 @@ func (r *RTPBuffer) Add(packet *RetainablePacket) {
 	seq := packet.sequenceNumber
 	if !r.started {
 		r.packets[seq%r.size] = packet
-		r.lastAdded = seq
+		r.highestAdded = seq
 		r.started = true
 		return
 	}
 
-	diff := seq - r.lastAdded
+	diff := seq - r.highestAdded
 	if diff == 0 {
 		return
 	} else if diff < Uint16SizeHalf {
-		for i := r.lastAdded + 1; i != seq; i++ {
+		for i := r.highestAdded + 1; i != seq; i++ {
 			idx := i % r.size
 			prevPacket := r.packets[idx]
 			if prevPacket != nil {
@@ -67,6 +67,7 @@ func (r *RTPBuffer) Add(packet *RetainablePacket) {
 			}
 			r.packets[idx] = nil
 		}
+		r.highestAdded = seq
 	}
 
 	idx := seq % r.size
@@ -75,12 +76,11 @@ func (r *RTPBuffer) Add(packet *RetainablePacket) {
 		prevPacket.Release()
 	}
 	r.packets[idx] = packet
-	r.lastAdded = seq
 }
 
 // Get returns the RetainablePacket for the requested sequence number
 func (r *RTPBuffer) Get(seq uint16) *RetainablePacket {
-	diff := r.lastAdded - seq
+	diff := r.highestAdded - seq
 	if diff >= Uint16SizeHalf {
 		return nil
 	}

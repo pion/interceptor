@@ -124,6 +124,10 @@ func TestRTPBuffer_WithRTX(t *testing.T) {
 		assertGet(10)
 		assertNOTGet(1, 2, 9)
 
+		// A late packet coming in (such as due to RTX) shouldn't invalidate other packets.
+		add(9)
+		assertGet(3, 4, 5, 6, 7, 8, 9, 10)
+
 		add(22)
 		assertGet(22)
 		assertNOTGet(3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21)
