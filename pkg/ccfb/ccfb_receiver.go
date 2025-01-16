@@ -20,23 +20,35 @@ type acknowledgementList struct {
 }
 
 func convertCCFB(ts time.Time, feedback *rtcp.CCFeedbackReport) map[uint32]acknowledgementList {
+	if feedback == nil {
+		return nil
+	}
 	result := map[uint32]acknowledgementList{}
-	referenceTime := ntp.ToTime(uint64(feedback.ReportTimestamp) << 16)
+	referenceTime := ntp.ToTime32(feedback.ReportTimestamp, ts)
 	for _, rb := range feedback.ReportBlocks {
 		result[rb.MediaSSRC] = convertMetricBlock(ts, referenceTime, rb.BeginSequence, rb.MetricBlocks)
 	}
 	return result
 }
 
-func convertMetricBlock(ts time.Time, referenceTime time.Time, seqNrOffset uint16, blocks []rtcp.CCFeedbackMetricBlock) acknowledgementList {
+func convertMetricBlock(ts time.Time, reference time.Time, seqNrOffset uint16, blocks []rtcp.CCFeedbackMetricBlock) acknowledgementList {
 	reports := make([]acknowledgement, len(blocks))
 	for i, mb := range blocks {
 		if mb.Received {
-			delta := time.Duration((float64(mb.ArrivalTimeOffset) / 1024.0) * float64(time.Second))
+			arrival := time.Time{}
+
+			/// RFC 8888 states: If the measurement is unavailable or if the
+			//arrival time of the RTP packet is after the time represented by
+			//the RTS field, then an ATO value of 0x1FFF MUST be reported for
+			//the packet. In that case, we set a zero time.Time value.
+			if mb.ArrivalTimeOffset != 0x1FFF {
+				delta := time.Duration((float64(mb.ArrivalTimeOffset) / 1024.0) * float64(time.Second))
+				arrival = reference.Add(-delta)
+			}
 			reports[i] = acknowledgement{
 				seqNr:   seqNrOffset + uint16(i),
 				arrived: true,
-				arrival: referenceTime.Add(-delta),
+				arrival: arrival,
 				ecn:     mb.ECN,
 			}
 		} else {

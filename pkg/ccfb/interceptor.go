@@ -50,7 +50,7 @@ type Interceptor struct {
 func (i *Interceptor) BindLocalStream(info *interceptor.StreamInfo, writer interceptor.RTPWriter) interceptor.RTPWriter {
 	i.lock.Lock()
 	defer i.lock.Unlock()
-	i.ssrcToHistory[info.SSRC] = newHistory()
+	i.ssrcToHistory[info.SSRC] = newHistory(200)
 
 	return interceptor.RTPWriterFunc(func(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
 		i.lock.Lock()

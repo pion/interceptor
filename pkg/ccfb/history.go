@@ -1,8 +1,8 @@
 package ccfb
 
 import (
+	"container/list"
 	"errors"
-	"log"
 	"time"
 
 	"github.com/pion/interceptor/internal/sequencenumber"
@@ -30,63 +30,77 @@ type sentPacket struct {
 }
 
 type history struct {
-	inflight   []sentPacket
-	sentSeqNr  *sequencenumber.Unwrapper
-	ackedSeqNr *sequencenumber.Unwrapper
+	size          int
+	evictList     *list.List
+	seqNrToPacket map[int64]*list.Element
+	sentSeqNr     *sequencenumber.Unwrapper
+	ackedSeqNr    *sequencenumber.Unwrapper
 }
 
-func newHistory() *history {
+func newHistory(size int) *history {
 	return &history{
-		inflight:   []sentPacket{},
-		sentSeqNr:  &sequencenumber.Unwrapper{},
-		ackedSeqNr: &sequencenumber.Unwrapper{},
+		size:          size,
+		evictList:     list.New(),
+		seqNrToPacket: make(map[int64]*list.Element),
+		sentSeqNr:     &sequencenumber.Unwrapper{},
+		ackedSeqNr:    &sequencenumber.Unwrapper{},
 	}
 }
 
 func (h *history) add(seqNr uint16, size uint16, departure time.Time) error {
 	sn := h.sentSeqNr.Unwrap(seqNr)
-	if len(h.inflight) > 0 && sn < h.inflight[len(h.inflight)-1].seqNr {
-		return errors.New("sequence number went backwards")
+	last := h.evictList.Back()
+	if last != nil {
+		if p, ok := last.Value.(sentPacket); ok && sn < p.seqNr {
+			return errors.New("sequence number went backwards")
+		}
 	}
-	h.inflight = append(h.inflight, sentPacket{
+	ent := h.evictList.PushBack(sentPacket{
 		seqNr:     sn,
 		size:      size,
 		departure: departure,
 	})
+	h.seqNrToPacket[sn] = ent
+
+	if h.evictList.Len() > h.size {
+		h.removeOldest()
+	}
+
 	return nil
 }
 
 func (h *history) getReportForAck(al acknowledgementList) PacketReportList {
-	reports := []PacketReport{}
-	log.Printf("highest sent: %v", h.inflight[len(h.inflight)-1].seqNr)
+	var reports []PacketReport
 	for _, pr := range al.acks {
 		sn := h.ackedSeqNr.Unwrap(pr.seqNr)
-		i := h.index(sn)
-		if i > -1 {
-			reports = append(reports, PacketReport{
-				SeqNr:     sn,
-				Size:      h.inflight[i].size,
-				Departure: h.inflight[i].departure,
-				Arrived:   pr.arrived,
-				Arrival:   pr.arrival,
-				ECN:       pr.ecn,
-			})
-		} else {
-			panic("got feedback for unknown packet")
+		ent, ok := h.seqNrToPacket[sn]
+		// Ignore report for unknown packets (migth have been dropped from
+		// history)
+		if ok {
+			if ack, ok := ent.Value.(sentPacket); ok {
+				reports = append(reports, PacketReport{
+					SeqNr:     sn,
+					Size:      ack.size,
+					Departure: ack.departure,
+					Arrived:   pr.arrived,
+					Arrival:   pr.arrival,
+					ECN:       pr.ecn,
+				})
+			}
 		}
-		log.Printf("processed ack for seq nr %v, arrived: %v", sn, pr.arrived)
 	}
+
 	return PacketReportList{
 		Timestamp: al.ts,
 		Reports:   reports,
 	}
 }
 
-func (h *history) index(seqNr int64) int {
-	for i := range h.inflight {
-		if h.inflight[i].seqNr == seqNr {
-			return i
+func (h *history) removeOldest() {
+	if ent := h.evictList.Front(); ent != nil {
+		v := h.evictList.Remove(ent)
+		if sp, ok := v.(sentPacket); ok {
+			delete(h.seqNrToPacket, sp.seqNr)
 		}
 	}
-	return -1
 }
