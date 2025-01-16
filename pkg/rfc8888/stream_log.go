@@ -6,6 +6,7 @@ package rfc8888
 import (
 	"time"
 
+	"github.com/pion/interceptor/internal/sequencenumber"
 	"github.com/pion/rtcp"
 )
 
@@ -13,7 +14,7 @@ const maxReportsPerReportBlock = 16384
 
 type streamLog struct {
 	ssrc                       uint32
-	sequence                   unwrapper
+	sequence                   sequencenumber.Unwrapper
 	init                       bool
 	nextSequenceNumberToReport int64 // next to report
 	lastSequenceNumberReceived int64 // highest received
@@ -23,7 +24,7 @@ type streamLog struct {
 func newStreamLog(ssrc uint32) *streamLog {
 	return &streamLog{
 		ssrc:                       ssrc,
-		sequence:                   unwrapper{},
+		sequence:                   sequencenumber.Unwrapper{},
 		init:                       false,
 		nextSequenceNumberToReport: 0,
 		lastSequenceNumberReceived: 0,
@@ -32,7 +33,7 @@ func newStreamLog(ssrc uint32) *streamLog {
 }
 
 func (l *streamLog) add(ts time.Time, sequenceNumber uint16, ecn uint8) {
-	unwrappedSequenceNumber := l.sequence.unwrap(sequenceNumber)
+	unwrappedSequenceNumber := l.sequence.Unwrap(sequenceNumber)
 	if !l.init {
 		l.init = true
 		l.nextSequenceNumberToReport = unwrappedSequenceNumber
