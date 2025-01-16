@@ -3,6 +3,7 @@ package ccfb
 import (
 	"container/list"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/pion/interceptor/internal/sequencenumber"
@@ -30,6 +31,7 @@ type sentPacket struct {
 }
 
 type history struct {
+	lock          sync.Mutex
 	size          int
 	evictList     *list.List
 	seqNrToPacket map[int64]*list.Element
@@ -39,6 +41,7 @@ type history struct {
 
 func newHistory(size int) *history {
 	return &history{
+		lock:          sync.Mutex{},
 		size:          size,
 		evictList:     list.New(),
 		seqNrToPacket: make(map[int64]*list.Element),
@@ -48,6 +51,9 @@ func newHistory(size int) *history {
 }
 
 func (h *history) add(seqNr uint16, size uint16, departure time.Time) error {
+	h.lock.Lock()
+	defer h.lock.Unlock()
+
 	sn := h.sentSeqNr.Unwrap(seqNr)
 	last := h.evictList.Back()
 	if last != nil {
@@ -65,11 +71,23 @@ func (h *history) add(seqNr uint16, size uint16, departure time.Time) error {
 	if h.evictList.Len() > h.size {
 		h.removeOldest()
 	}
-
 	return nil
 }
 
+// Must be called while holding the lock
+func (h *history) removeOldest() {
+	if ent := h.evictList.Front(); ent != nil {
+		v := h.evictList.Remove(ent)
+		if sp, ok := v.(sentPacket); ok {
+			delete(h.seqNrToPacket, sp.seqNr)
+		}
+	}
+}
+
 func (h *history) getReportForAck(al acknowledgementList) PacketReportList {
+	h.lock.Lock()
+	defer h.lock.Unlock()
+
 	var reports []PacketReport
 	for _, pr := range al.acks {
 		sn := h.ackedSeqNr.Unwrap(pr.seqNr)
@@ -93,14 +111,5 @@ func (h *history) getReportForAck(al acknowledgementList) PacketReportList {
 	return PacketReportList{
 		Timestamp: al.ts,
 		Reports:   reports,
-	}
-}
-
-func (h *history) removeOldest() {
-	if ent := h.evictList.Front(); ent != nil {
-		v := h.evictList.Remove(ent)
-		if sp, ok := v.(sentPacket); ok {
-			delete(h.seqNrToPacket, sp.seqNr)
-		}
 	}
 }

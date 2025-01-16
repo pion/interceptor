@@ -9,6 +9,8 @@ import (
 	"github.com/pion/rtp"
 )
 
+const transportCCURI = "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"
+
 type ccfbAttributesKeyType uint32
 
 const CCFBAttributesKey ccfbAttributesKeyType = iota
@@ -48,14 +50,42 @@ type Interceptor struct {
 
 // BindLocalStream implements interceptor.Interceptor.
 func (i *Interceptor) BindLocalStream(info *interceptor.StreamInfo, writer interceptor.RTPWriter) interceptor.RTPWriter {
+	var twccHdrExtID uint8
+	var useTWCC bool
+	for _, e := range info.RTPHeaderExtensions {
+		if e.URI == transportCCURI {
+			twccHdrExtID = uint8(e.ID)
+			useTWCC = true
+			break
+		}
+	}
+
 	i.lock.Lock()
 	defer i.lock.Unlock()
-	i.ssrcToHistory[info.SSRC] = newHistory(200)
+
+	ssrc := info.SSRC
+	if useTWCC {
+		ssrc = 0
+	}
+	i.ssrcToHistory[ssrc] = newHistory(200)
 
 	return interceptor.RTPWriterFunc(func(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
 		i.lock.Lock()
 		defer i.lock.Unlock()
-		i.ssrcToHistory[header.SSRC].add(header.SequenceNumber, uint16(header.MarshalSize()+len(payload)), i.timestamp())
+
+		// If we are using TWCC, we use the sequence number from the TWCC header
+		// extension and save all TWCC sequence numbers with the same SSRC (0).
+		// If we are not using TWCC, we save a history per SSRC and use the
+		// normal RTP sequence numbers.
+		ssrc := header.SSRC
+		seqNr := header.SequenceNumber
+		if useTWCC {
+			ssrc = 0
+			var twccHdrExt rtp.TransportCCExtension
+			twccHdrExt.Unmarshal(header.GetExtension(twccHdrExtID))
+			seqNr = twccHdrExt.TransportSequence
+		}
+		i.ssrcToHistory[ssrc].add(seqNr, uint16(header.MarshalSize()+len(payload)), i.timestamp())
 		return writer.Write(header, payload, attributes)
 	})
 }
@@ -80,16 +110,19 @@ func (i *Interceptor) BindRTCPReader(reader interceptor.RTCPReader) interceptor.
 
 		pkts, err := attr.GetRTCPPackets(buf)
 		for _, pkt := range pkts {
+			var reportLists map[uint32]acknowledgementList
 			switch fb := pkt.(type) {
 			case *rtcp.CCFeedbackReport:
-				reportLists := convertCCFB(now, fb)
-				for ssrc, reportList := range reportLists {
-					prl := i.ssrcToHistory[ssrc].getReportForAck(reportList)
-					if l, ok := pktReportLists[ssrc]; !ok {
-						pktReportLists[ssrc] = &prl
-					} else {
-						l.Reports = append(l.Reports, prl.Reports...)
-					}
+				reportLists = convertCCFB(now, fb)
+			case *rtcp.TransportLayerCC:
+				reportLists = convertTWCC(now, fb)
+			}
+			for ssrc, reportList := range reportLists {
+				prl := i.ssrcToHistory[ssrc].getReportForAck(reportList)
+				if l, ok := pktReportLists[ssrc]; !ok {
+					pktReportLists[ssrc] = &prl
+				} else {
+					l.Reports = append(l.Reports, prl.Reports...)
 				}
 			}
 		}
