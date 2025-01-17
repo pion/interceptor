@@ -114,3 +114,62 @@ func TestSenderFilterNothing(t *testing.T) {
 
 	assert.NotZero(t, buf.Len())
 }
+
+func TestSenderCustomBinaryFormatter(t *testing.T) {
+	rtpBuf := bytes.Buffer{}
+	rtcpBuf := bytes.Buffer{}
+
+	factory, err := NewSenderInterceptor(
+		RTPWriter(&rtpBuf),
+		RTCPWriter(&rtcpBuf),
+		Log(logging.NewDefaultLoggerFactory().NewLogger("test")),
+		// custom binary formatter to dump only seqno mod 256
+		RTPBinaryFormatter(func(p *rtp.Packet, _ interceptor.Attributes) ([]byte, error) {
+			return []byte{byte(p.SequenceNumber)}, nil
+		}),
+		// custom binary formatter to dump only DestinationSSRCs mod 256
+		RTCPBinaryFormatter(func(p rtcp.Packet, _ interceptor.Attributes) ([]byte, error) {
+			b := make([]byte, 0)
+			for _, ssrc := range p.DestinationSSRC() {
+				b = append(b, byte(ssrc))
+			}
+			return b, nil
+		}),
+	)
+	assert.NoError(t, err)
+
+	i, err := factory.NewInterceptor("")
+	assert.NoError(t, err)
+
+	assert.EqualValues(t, 0, rtpBuf.Len())
+	assert.EqualValues(t, 0, rtcpBuf.Len())
+
+	stream := test.NewMockStream(&interceptor.StreamInfo{
+		SSRC:      123456,
+		ClockRate: 90000,
+	}, i)
+	defer func() {
+		assert.NoError(t, stream.Close())
+	}()
+
+	err = stream.WriteRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{
+		SenderSSRC: 123,
+		MediaSSRC:  45,
+	}})
+	assert.NoError(t, err)
+
+	err = stream.WriteRTP(&rtp.Packet{Header: rtp.Header{
+		SequenceNumber: uint16(123),
+	}})
+	assert.NoError(t, err)
+
+	// Give time for packets to be handled and stream written to.
+	time.Sleep(50 * time.Millisecond)
+
+	err = i.Close()
+	assert.NoError(t, err)
+
+	// check that there is custom formatter results in buffer
+	assert.Equal(t, []byte{123}, rtpBuf.Bytes())
+	assert.Equal(t, []byte{45}, rtcpBuf.Bytes())
+}

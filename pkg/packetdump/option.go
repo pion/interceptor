@@ -37,6 +37,7 @@ func RTCPWriter(w io.Writer) PacketDumperOption {
 }
 
 // RTPFormatter sets the RTP format
+// Deprecated: prefer RTPBinaryFormatter
 func RTPFormatter(f RTPFormatCallback) PacketDumperOption {
 	return func(d *PacketDumper) error {
 		d.rtpFormat = f
@@ -45,9 +46,26 @@ func RTPFormatter(f RTPFormatCallback) PacketDumperOption {
 }
 
 // RTCPFormatter sets the RTCP format
+// Deprecated: prefer RTCPBinaryFormatter
 func RTCPFormatter(f RTCPFormatCallback) PacketDumperOption {
 	return func(d *PacketDumper) error {
 		d.rtcpFormat = f
+		return nil
+	}
+}
+
+// RTPBinaryFormatter sets the RTP binary formatter
+func RTPBinaryFormatter(f RTPBinaryFormatCallback) PacketDumperOption {
+	return func(d *PacketDumper) error {
+		d.rtpFormatBinary = f
+		return nil
+	}
+}
+
+// RTCPBinaryFormatter sets the RTCP binary formatter
+func RTCPBinaryFormatter(f RTCPBinaryFormatCallback) PacketDumperOption {
+	return func(d *PacketDumper) error {
+		d.rtcpFormatBinary = f
 		return nil
 	}
 }
@@ -61,9 +79,18 @@ func RTPFilter(callback RTPFilterCallback) PacketDumperOption {
 }
 
 // RTCPFilter sets the RTCP filter.
+// Deprecated: prefer RTCPFilterPerPacket
 func RTCPFilter(callback RTCPFilterCallback) PacketDumperOption {
 	return func(d *PacketDumper) error {
 		d.rtcpFilter = callback
+		return nil
+	}
+}
+
+// RTCPFilterPerPacket sets the RTCP per-packet filter.
+func RTCPFilterPerPacket(callback RTCPFilterPerPacketCallback) PacketDumperOption {
+	return func(d *PacketDumper) error {
+		d.rtcpFilterPerPacket = callback
 		return nil
 	}
 }
