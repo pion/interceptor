@@ -11,7 +11,8 @@ import (
 )
 
 type PacketReportList struct {
-	Timestamp time.Time
+	Arrival   time.Time
+	Departure time.Time
 	Reports   []PacketReport
 }
 
@@ -109,7 +110,7 @@ func (h *history) getReportForAck(al acknowledgementList) PacketReportList {
 	}
 
 	return PacketReportList{
-		Timestamp: al.ts,
-		Reports:   reports,
+		Arrival: al.ts,
+		Reports: reports,
 	}
 }

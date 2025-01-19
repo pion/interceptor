@@ -93,12 +93,12 @@ func (i *Interceptor) BindLocalStream(info *interceptor.StreamInfo, writer inter
 // BindRTCPReader implements interceptor.Interceptor.
 func (i *Interceptor) BindRTCPReader(reader interceptor.RTCPReader) interceptor.RTCPReader {
 	return interceptor.RTCPReaderFunc(func(b []byte, a interceptor.Attributes) (int, interceptor.Attributes, error) {
-		now := i.timestamp()
-
 		n, attr, err := reader.Read(b, a)
 		if err != nil {
 			return n, attr, err
 		}
+		now := i.timestamp()
+
 		buf := make([]byte, n)
 		copy(buf, b[:n])
 
@@ -111,14 +111,16 @@ func (i *Interceptor) BindRTCPReader(reader interceptor.RTCPReader) interceptor.
 		pkts, err := attr.GetRTCPPackets(buf)
 		for _, pkt := range pkts {
 			var reportLists map[uint32]acknowledgementList
+			var reportDeparture time.Time
 			switch fb := pkt.(type) {
 			case *rtcp.CCFeedbackReport:
-				reportLists = convertCCFB(now, fb)
+				reportDeparture, reportLists = convertCCFB(now, fb)
 			case *rtcp.TransportLayerCC:
-				reportLists = convertTWCC(now, fb)
+				reportDeparture, reportLists = convertTWCC(now, fb)
 			}
 			for ssrc, reportList := range reportLists {
 				prl := i.ssrcToHistory[ssrc].getReportForAck(reportList)
+				prl.Departure = reportDeparture
 				if l, ok := pktReportLists[ssrc]; !ok {
 					pktReportLists[ssrc] = &prl
 				} else {

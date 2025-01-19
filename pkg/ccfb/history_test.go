@@ -72,7 +72,7 @@ func TestHistory(t *testing.T) {
 					},
 				},
 				expectedReport: PacketReportList{
-					Timestamp: time.Time{}.Add(time.Second),
+					Arrival: time.Time{}.Add(time.Second),
 					Reports: []PacketReport{
 						{1, 1200, time.Time{}.Add(2 * time.Millisecond), true, time.Time{}.Add(3 * time.Millisecond), 0},
 						{2, 1200, time.Time{}.Add(3 * time.Millisecond), false, time.Time{}, 0},

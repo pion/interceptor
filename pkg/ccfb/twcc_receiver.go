@@ -7,14 +7,15 @@ import (
 	"github.com/pion/rtcp"
 )
 
-func convertTWCC(ts time.Time, feedback *rtcp.TransportLayerCC) map[uint32]acknowledgementList {
+func convertTWCC(ts time.Time, feedback *rtcp.TransportLayerCC) (time.Time, map[uint32]acknowledgementList) {
 	log.Printf("got twcc report: %v", feedback)
 	if feedback == nil {
-		return nil
+		return time.Time{}, nil
 	}
 	var acks []acknowledgement
 
 	nextTimestamp := time.Time{}.Add(time.Duration(feedback.ReferenceTime) * 64 * time.Millisecond)
+	reportDeparture := nextTimestamp
 	recvDeltaIndex := 0
 
 	offset := 0
@@ -85,7 +86,7 @@ func convertTWCC(ts time.Time, feedback *rtcp.TransportLayerCC) map[uint32]ackno
 		}
 	}
 
-	return map[uint32]acknowledgementList{
+	return reportDeparture, map[uint32]acknowledgementList{
 		0: {
 			ts:   ts,
 			acks: acks,

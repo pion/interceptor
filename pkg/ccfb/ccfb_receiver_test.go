@@ -16,6 +16,7 @@ func TestConvertCCFB(t *testing.T) {
 		ts       time.Time
 		feedback *rtcp.CCFeedbackReport
 		expect   map[uint32]acknowledgementList
+		expectTS time.Time
 	}{
 		{},
 		{
@@ -50,11 +51,14 @@ func TestConvertCCFB(t *testing.T) {
 					},
 				},
 			},
+			expectTS: timeZero.Add(time.Second),
 		},
 	}
 	for i, tc := range cases {
 		t.Run(fmt.Sprintf("%v", i), func(t *testing.T) {
-			res := convertCCFB(tc.ts, tc.feedback)
+			resTS, res := convertCCFB(tc.ts, tc.feedback)
+
+			assert.InDelta(t, tc.expectTS.UnixNano(), resTS.UnixNano(), float64(time.Millisecond.Nanoseconds()))
 
 			// Can't directly check equality since arrival timestamp conversions
 			// may be slightly off due to ntp conversions.

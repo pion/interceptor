@@ -15,6 +15,7 @@ func TestConvertTWCC(t *testing.T) {
 		ts       time.Time
 		feedback *rtcp.TransportLayerCC
 		expect   map[uint32]acknowledgementList
+		expectTS time.Time
 	}{
 		{},
 		{
@@ -24,17 +25,18 @@ func TestConvertTWCC(t *testing.T) {
 				MediaSSRC:          2,
 				BaseSequenceNumber: 178,
 				PacketStatusCount:  0,
-				ReferenceTime:      0,
+				ReferenceTime:      3,
 				FbPktCount:         0,
 				PacketChunks:       []rtcp.PacketStatusChunk{},
 				RecvDeltas:         []*rtcp.RecvDelta{},
 			},
 			expect: map[uint32]acknowledgementList{
-				2: {
+				0: {
 					ts:   timeZero.Add(2 * time.Second),
-					acks: []acknowledgement{},
+					acks: nil,
 				},
 			},
+			expectTS: time.Time{}.Add(3 * 64 * time.Millisecond),
 		},
 		{
 			ts: timeZero.Add(2 * time.Second),
@@ -42,8 +44,8 @@ func TestConvertTWCC(t *testing.T) {
 				SenderSSRC:         1,
 				MediaSSRC:          2,
 				BaseSequenceNumber: 178,
-				PacketStatusCount:  3,
-				ReferenceTime:      0,
+				PacketStatusCount:  18,
+				ReferenceTime:      3,
 				FbPktCount:         0,
 				PacketChunks: []rtcp.PacketStatusChunk{
 					&rtcp.RunLengthChunk{
@@ -77,29 +79,29 @@ func TestConvertTWCC(t *testing.T) {
 					},
 				},
 				RecvDeltas: []*rtcp.RecvDelta{
-					{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
-					{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
-					{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
-					{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
-					{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
-					{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
-					{Type: rtcp.TypeTCCPacketReceivedLargeDelta, Delta: 0},
-					{Type: rtcp.TypeTCCPacketReceivedLargeDelta, Delta: 0},
+					{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 1000},
+					{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 1000},
+					{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 1000},
+					{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 1000},
+					{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 1000},
+					{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 1000},
+					{Type: rtcp.TypeTCCPacketReceivedLargeDelta, Delta: 1000},
+					{Type: rtcp.TypeTCCPacketReceivedLargeDelta, Delta: 1000},
 				},
 			},
 			expect: map[uint32]acknowledgementList{
-				2: {
+				0: {
 					ts: timeZero.Add(2 * time.Second),
 					acks: []acknowledgement{
 						// first run length chunk
-						{seqNr: 178, arrived: true, arrival: time.Time{}, ecn: 0},
-						{seqNr: 179, arrived: true, arrival: time.Time{}, ecn: 0},
-						{seqNr: 180, arrived: true, arrival: time.Time{}, ecn: 0},
+						{seqNr: 178, arrived: true, arrival: time.Time{}.Add(3*64*time.Millisecond + 1*time.Millisecond), ecn: 0},
+						{seqNr: 179, arrived: true, arrival: time.Time{}.Add(3*64*time.Millisecond + 2*time.Millisecond), ecn: 0},
+						{seqNr: 180, arrived: true, arrival: time.Time{}.Add(3*64*time.Millisecond + 3*time.Millisecond), ecn: 0},
 
 						// first status vector chunk
-						{seqNr: 181, arrived: true, arrival: time.Time{}, ecn: 0},
-						{seqNr: 182, arrived: true, arrival: time.Time{}, ecn: 0},
-						{seqNr: 183, arrived: true, arrival: time.Time{}, ecn: 0},
+						{seqNr: 181, arrived: true, arrival: time.Time{}.Add(3*64*time.Millisecond + 4*time.Millisecond), ecn: 0},
+						{seqNr: 182, arrived: true, arrival: time.Time{}.Add(3*64*time.Millisecond + 5*time.Millisecond), ecn: 0},
+						{seqNr: 183, arrived: true, arrival: time.Time{}.Add(3*64*time.Millisecond + 6*time.Millisecond), ecn: 0},
 						{seqNr: 184, arrived: false, arrival: time.Time{}, ecn: 0},
 						{seqNr: 185, arrived: false, arrival: time.Time{}, ecn: 0},
 						{seqNr: 186, arrived: false, arrival: time.Time{}, ecn: 0},
@@ -107,8 +109,8 @@ func TestConvertTWCC(t *testing.T) {
 						{seqNr: 188, arrived: false, arrival: time.Time{}, ecn: 0},
 
 						// second status vector chunk
-						{seqNr: 189, arrived: true, arrival: time.Time{}, ecn: 0},
-						{seqNr: 190, arrived: true, arrival: time.Time{}, ecn: 0},
+						{seqNr: 189, arrived: true, arrival: time.Time{}.Add(3*64*time.Millisecond + 7*time.Millisecond), ecn: 0},
+						{seqNr: 190, arrived: true, arrival: time.Time{}.Add(3*64*time.Millisecond + 8*time.Millisecond), ecn: 0},
 						{seqNr: 191, arrived: false, arrival: time.Time{}, ecn: 0},
 						{seqNr: 192, arrived: false, arrival: time.Time{}, ecn: 0},
 						{seqNr: 193, arrived: false, arrival: time.Time{}, ecn: 0},
@@ -117,24 +119,14 @@ func TestConvertTWCC(t *testing.T) {
 					},
 				},
 			},
+			expectTS: time.Time{}.Add(3 * 64 * time.Millisecond),
 		},
 	}
 	for i, tc := range cases {
 		t.Run(fmt.Sprintf("%v", i), func(t *testing.T) {
-			res := convertTWCC(tc.ts, tc.feedback)
-
-			// Can't directly check equality since arrival timestamp conversions
-			// may be slightly off due to ntp conversions.
-			assert.Equal(t, len(tc.expect), len(res))
-			for i, ee := range tc.expect {
-				assert.Equal(t, ee.ts, res[i].ts)
-				for j, ack := range ee.acks {
-					assert.Equal(t, ack.seqNr, res[i].acks[j].seqNr)
-					assert.Equal(t, ack.arrived, res[i].acks[j].arrived)
-					assert.Equal(t, ack.ecn, res[i].acks[j].ecn)
-					assert.InDelta(t, ack.arrival.UnixNano(), res[i].acks[j].arrival.UnixNano(), float64(time.Millisecond.Nanoseconds()))
-				}
-			}
+			resTS, res := convertTWCC(tc.ts, tc.feedback)
+			assert.Equal(t, tc.expect, res)
+			assert.Equal(t, tc.expectTS, resTS)
 		})
 	}
 

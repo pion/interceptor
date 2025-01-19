@@ -19,16 +19,16 @@ type acknowledgementList struct {
 	acks []acknowledgement
 }
 
-func convertCCFB(ts time.Time, feedback *rtcp.CCFeedbackReport) map[uint32]acknowledgementList {
+func convertCCFB(ts time.Time, feedback *rtcp.CCFeedbackReport) (time.Time, map[uint32]acknowledgementList) {
 	if feedback == nil {
-		return nil
+		return time.Time{}, nil
 	}
 	result := map[uint32]acknowledgementList{}
 	referenceTime := ntp.ToTime32(feedback.ReportTimestamp, ts)
 	for _, rb := range feedback.ReportBlocks {
 		result[rb.MediaSSRC] = convertMetricBlock(ts, referenceTime, rb.BeginSequence, rb.MetricBlocks)
 	}
-	return result
+	return referenceTime, result
 }
 
 func convertMetricBlock(ts time.Time, reference time.Time, seqNrOffset uint16, blocks []rtcp.CCFeedbackMetricBlock) acknowledgementList {
