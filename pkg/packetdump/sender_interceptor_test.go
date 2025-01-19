@@ -173,3 +173,54 @@ func TestSenderCustomBinaryFormatter(t *testing.T) {
 	assert.Equal(t, []byte{123}, rtpBuf.Bytes())
 	assert.Equal(t, []byte{45}, rtcpBuf.Bytes())
 }
+
+func TestSenderRTCPPerPacketFilter(t *testing.T) {
+	buf := bytes.Buffer{}
+
+	factory, err := NewSenderInterceptor(
+		RTCPWriter(&buf),
+		Log(logging.NewDefaultLoggerFactory().NewLogger("test")),
+		RTCPPerPacketFilter(func(packet rtcp.Packet) bool {
+			_, isPli := packet.(*rtcp.PictureLossIndication)
+			return isPli
+		}),
+		RTCPBinaryFormatter(func(p rtcp.Packet, _ interceptor.Attributes) ([]byte, error) {
+			assert.IsType(t, &rtcp.PictureLossIndication{}, p)
+			return []byte{123}, nil
+		}),
+	)
+	assert.NoError(t, err)
+
+	i, err := factory.NewInterceptor("")
+	assert.NoError(t, err)
+
+	assert.EqualValues(t, 0, buf.Len())
+
+	stream := test.NewMockStream(&interceptor.StreamInfo{
+		SSRC:      123456,
+		ClockRate: 90000,
+	}, i)
+	defer func() {
+		assert.NoError(t, stream.Close())
+	}()
+
+	err = stream.WriteRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{
+		SenderSSRC: 123,
+		MediaSSRC:  456,
+	}})
+	assert.NoError(t, err)
+
+	err = stream.WriteRTCP([]rtcp.Packet{&rtcp.ReceiverReport{
+		SSRC: 789,
+	}})
+	assert.NoError(t, err)
+
+	// Give time for packets to be handled and stream written to.
+	time.Sleep(50 * time.Millisecond)
+
+	err = i.Close()
+	assert.NoError(t, err)
+
+	// Only single PictureLossIndication should have been written.
+	assert.Equal(t, []byte{123}, buf.Bytes())
+}

@@ -79,7 +79,7 @@ func RTPFilter(callback RTPFilterCallback) PacketDumperOption {
 }
 
 // RTCPFilter sets the RTCP filter.
-// Deprecated: prefer RTCPFilterPerPacket
+// Deprecated: prefer RTCPPerPacketFilter
 func RTCPFilter(callback RTCPFilterCallback) PacketDumperOption {
 	return func(d *PacketDumper) error {
 		d.rtcpFilter = callback
@@ -87,10 +87,10 @@ func RTCPFilter(callback RTCPFilterCallback) PacketDumperOption {
 	}
 }
 
-// RTCPFilterPerPacket sets the RTCP per-packet filter.
-func RTCPFilterPerPacket(callback RTCPFilterPerPacketCallback) PacketDumperOption {
+// RTCPPerPacketFilter sets the RTCP per-packet filter.
+func RTCPPerPacketFilter(callback RTCPPerPacketFilterCallback) PacketDumperOption {
 	return func(d *PacketDumper) error {
-		d.rtcpFilterPerPacket = callback
+		d.rtcpPerPacketFilter = callback
 		return nil
 	}
 }

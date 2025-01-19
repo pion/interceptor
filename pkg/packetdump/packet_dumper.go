@@ -15,6 +15,9 @@ import (
 	"github.com/pion/rtp"
 )
 
+// ErrBothBinaryAndDeprecatedFormat is returned when both binary and deprecated format callbacks are set
+var ErrBothBinaryAndDeprecatedFormat = fmt.Errorf("both binary and deprecated format callbacks are set")
+
 // PacketDumper dumps packet to a io.Writer
 type PacketDumper struct {
 	log logging.LeveledLogger
@@ -36,7 +39,7 @@ type PacketDumper struct {
 
 	rtpFilter           RTPFilterCallback
 	rtcpFilter          RTCPFilterCallback
-	rtcpFilterPerPacket RTCPFilterPerPacketCallback
+	rtcpPerPacketFilter RTCPPerPacketFilterCallback
 }
 
 // NewPacketDumper creates a new PacketDumper
@@ -59,9 +62,13 @@ func NewPacketDumper(opts ...PacketDumperOption) (*PacketDumper, error) {
 		rtcpFilter: func([]rtcp.Packet) bool {
 			return true
 		},
-		rtcpFilterPerPacket: func(rtcp.Packet) bool {
+		rtcpPerPacketFilter: func(rtcp.Packet) bool {
 			return true
 		},
+	}
+
+	if d.rtpFormat != nil && d.rtpFormatBinary != nil {
+		return nil, ErrBothBinaryAndDeprecatedFormat
 	}
 
 	for _, opt := range opts {
@@ -178,7 +185,7 @@ func (d *PacketDumper) writeDumpedRTCP(dump *rtcpDump) error {
 	}
 
 	for _, pkt := range dump.packets {
-		if !d.rtcpFilterPerPacket(pkt) {
+		if !d.rtcpPerPacketFilter(pkt) {
 			continue
 		}
 
