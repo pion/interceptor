@@ -20,6 +20,11 @@ func ToNTP(t time.Time) uint64 {
 	return uint64(integerPart)<<32 | uint64(fractionalPart)
 }
 
+// ToNTP32 converts a time.Time object to a uint32 NTP timestamp
+func ToNTP32(t time.Time) uint32 {
+	return uint32(ToNTP(t) >> 16)
+}
+
 // ToTime converts a uint64 NTP timestamps to a time.Time object
 func ToTime(t uint64) time.Time {
 	seconds := (t & 0xFFFFFFFF00000000) >> 32
@@ -27,4 +32,13 @@ func ToTime(t uint64) time.Time {
 	d := time.Duration(seconds)*time.Second + time.Duration(fractional*1e9)*time.Nanosecond
 
 	return time.Unix(0, 0).Add(-2208988800 * time.Second).Add(d)
+}
+
+// ToTime32 converts a uint32 NTP timestamp to a time.Time object, using the
+// highest 16 bit of the reference to recover the lost bits. The low 16 bits are
+// not recovered.
+func ToTime32(t uint32, reference time.Time) time.Time {
+	referenceNTP := ToNTP(reference) & 0xFFFF000000000000
+	tu64 := ((uint64(t) << 16) & 0x0000FFFFFFFF0000) | referenceNTP
+	return ToTime(tu64)
 }
