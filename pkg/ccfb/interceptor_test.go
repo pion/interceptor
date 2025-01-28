@@ -137,6 +137,43 @@ func TestInterceptor(t *testing.T) {
 		}
 	})
 
+	t.Run("missingTWCCHeaderExtension", func(t *testing.T) {
+		mt := func() time.Time {
+			return mockTimestamp
+		}
+		mh := &mockHistory{
+			added: []mockHistoryAddEntry{},
+		}
+		f, err := NewInterceptor(
+			historyFactory(func(_ int) history {
+				return mh
+			}),
+			timeFactory(mt),
+		)
+		assert.NoError(t, err)
+
+		i, err := f.NewInterceptor("")
+		assert.NoError(t, err)
+
+		info := &interceptor.StreamInfo{}
+		info.RTPHeaderExtensions = append(info.RTPHeaderExtensions, interceptor.RTPHeaderExtension{
+			URI: transportCCURI,
+			ID:  2,
+		})
+		stream := test.NewMockStream(info, i)
+
+		err = stream.WriteRTP(&rtp.Packet{
+			Header:  rtp.Header{SequenceNumber: 3},
+			Payload: []byte{},
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, mh.added, []mockHistoryAddEntry{{
+			seqNr:     3,
+			size:      12,
+			departure: mockTimestamp,
+		}})
+	})
+
 	t.Run("readRTCP", func(t *testing.T) {
 		cases := []struct {
 			mh   *mockHistory

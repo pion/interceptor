@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/pion/interceptor"
+	"github.com/pion/logging"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 )
@@ -88,6 +89,7 @@ func (f *InterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, 
 	i := &Interceptor{
 		NoOp:          interceptor.NoOp{},
 		lock:          sync.Mutex{},
+		log:           logging.NewDefaultLoggerFactory().NewLogger("ccfb_interceptor"),
 		timestamp:     time.Now,
 		convertCCFB:   convertCCFB,
 		convertTWCC:   convertTWCC,
@@ -117,6 +119,7 @@ func (f *InterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, 
 type Interceptor struct {
 	interceptor.NoOp
 	lock           sync.Mutex
+	log            logging.LeveledLogger
 	timestamp      func() time.Time
 	convertCCFB    func(ts time.Time, feedback *rtcp.CCFeedbackReport) (time.Time, map[uint32][]acknowledgement)
 	convertTWCC    func(feedback *rtcp.TransportLayerCC) (time.Time, map[uint32][]acknowledgement)
@@ -157,12 +160,16 @@ func (i *Interceptor) BindLocalStream(info *interceptor.StreamInfo, writer inter
 		ssrc := header.SSRC
 		seqNr := header.SequenceNumber
 		if useTWCC {
-			ssrc = 0
 			var twccHdrExt rtp.TransportCCExtension
 			if err := twccHdrExt.Unmarshal(header.GetExtension(twccHdrExtID)); err != nil {
-				return 0, err
+				i.log.Warnf("CCFB configured for TWCC, but failed to get TWCC header extension from outgoing packet. Falling back to saving history for CCFB feedback reports. err: %v", err)
+				if _, ok := i.ssrcToHistory[ssrc]; !ok {
+					i.ssrcToHistory[ssrc] = i.historyFactory(i.historySize)
+				}
+			} else {
+				seqNr = twccHdrExt.TransportSequence
+				ssrc = 0
 			}
-			seqNr = twccHdrExt.TransportSequence
 		}
 		if err := i.ssrcToHistory[ssrc].add(seqNr, header.MarshalSize()+len(payload), i.timestamp()); err != nil {
 			return 0, err
