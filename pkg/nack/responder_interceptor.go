@@ -113,6 +113,11 @@ func (n *ResponderInterceptor) BindLocalStream(info *interceptor.StreamInfo, wri
 	n.streamsMu.Unlock()
 
 	return interceptor.RTPWriterFunc(func(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
+		// If this packet doesn't belong to the main SSRC, do not add it to rtpBuffer
+		if header.SSRC != info.SSRC {
+			return writer.Write(header, payload, attributes)
+		}
+
 		pkt, err := n.packetFactory.NewPacket(header, payload, info.SSRCRetransmission, info.PayloadTypeRetransmission)
 		if err != nil {
 			return 0, err
