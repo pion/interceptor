@@ -14,12 +14,17 @@ func (r *Registry) Add(f Factory) {
 }
 
 // Build constructs a single Interceptor from a InterceptorRegistry
-func (r *Registry) Build(id string) (Interceptor, error) {
+// The extra interceptors are added to the chain before the ones specified
+// by the registry.
+func (r *Registry) Build(id string, extra... Interceptor) (Interceptor, error) {
 	if len(r.factories) == 0 {
 		return &NoOp{}, nil
 	}
 
 	interceptors := []Interceptor{}
+
+	interceptors = append(interceptors, extra...)
+
 	for _, f := range r.factories {
 		i, err := f.NewInterceptor(id)
 		if err != nil {
