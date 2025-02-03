@@ -41,6 +41,7 @@ type RTPWithError struct {
 // RTCPWithError is used to send a batch of rtcp packets or an error on a channel
 type RTCPWithError struct {
 	Packets []rtcp.Packet
+	Attr    interceptor.Attributes
 	Err     error
 }
 
@@ -107,21 +108,21 @@ func NewMockStream(info *interceptor.StreamInfo, i interceptor.Interceptor) *Moc
 	go func() {
 		buf := make([]byte, 1500)
 		for {
-			i, _, err := s.rtcpReader.Read(buf, interceptor.Attributes{})
+			i, attr, err := s.rtcpReader.Read(buf, interceptor.Attributes{})
 			if err != nil {
 				if !errors.Is(err, io.EOF) {
-					s.rtcpInModified <- RTCPWithError{Err: err}
+					s.rtcpInModified <- RTCPWithError{Attr: attr, Err: err}
 				}
 				return
 			}
 
 			pkts, err := rtcp.Unmarshal(buf[:i])
 			if err != nil {
-				s.rtcpInModified <- RTCPWithError{Err: err}
+				s.rtcpInModified <- RTCPWithError{Attr: attr, Err: err}
 				return
 			}
 
-			s.rtcpInModified <- RTCPWithError{Packets: pkts}
+			s.rtcpInModified <- RTCPWithError{Attr: attr, Packets: pkts}
 		}
 	}()
 	go func() {
