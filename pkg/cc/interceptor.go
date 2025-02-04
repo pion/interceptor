@@ -7,6 +7,7 @@ package cc
 
 import (
 	"github.com/pion/interceptor"
+	"github.com/pion/interceptor/pkg/ccfb"
 	"github.com/pion/interceptor/pkg/gcc"
 	"github.com/pion/rtcp"
 )
@@ -38,6 +39,7 @@ type InterceptorFactory struct {
 	opts              []Option
 	bweFactory        func() (BandwidthEstimator, error)
 	addPeerConnection NewPeerConnectionCallback
+	ccfbFactory       *ccfb.InterceptorFactory
 }
 
 // NewInterceptor returns a new CC interceptor factory
@@ -47,10 +49,15 @@ func NewInterceptor(factory BandwidthEstimatorFactory, opts ...Option) (*Interce
 			return gcc.NewSendSideBWE()
 		}
 	}
+	ccfbFactory, err := ccfb.NewInterceptor()
+	if err != nil {
+		return nil, err
+	}
 	return &InterceptorFactory{
 		opts:              opts,
 		bweFactory:        factory,
 		addPeerConnection: nil,
+		ccfbFactory:       ccfbFactory,
 	}, nil
 }
 
@@ -69,12 +76,10 @@ func (f *InterceptorFactory) NewInterceptor(id string) (interceptor.Interceptor,
 	i := &Interceptor{
 		NoOp:      interceptor.NoOp{},
 		estimator: bwe,
-		feedback:  make(chan []rtcp.Packet),
-		close:     make(chan struct{}),
 	}
 
 	for _, opt := range f.opts {
-		if err := opt(i); err != nil {
+		if err = opt(i); err != nil {
 			return nil, err
 		}
 	}
@@ -82,15 +87,18 @@ func (f *InterceptorFactory) NewInterceptor(id string) (interceptor.Interceptor,
 	if f.addPeerConnection != nil {
 		f.addPeerConnection(id, i.estimator)
 	}
-	return i, nil
+
+	ccfb, err := f.ccfbFactory.NewInterceptor(id)
+	if err != nil {
+		return nil, err
+	}
+	return interceptor.NewChain([]interceptor.Interceptor{ccfb, i}), nil
 }
 
 // Interceptor implements Google Congestion Control
 type Interceptor struct {
 	interceptor.NoOp
 	estimator BandwidthEstimator
-	feedback  chan []rtcp.Packet
-	close     chan struct{}
 }
 
 // BindRTCPReader lets you modify any incoming RTCP packets. It is called once
