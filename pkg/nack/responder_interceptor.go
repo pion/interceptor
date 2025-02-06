@@ -105,11 +105,12 @@ func (n *ResponderInterceptor) BindLocalStream(info *interceptor.StreamInfo, wri
 
 	// error is already checked in NewGeneratorInterceptor
 	rtpBuffer, _ := rtpbuffer.NewRTPBuffer(n.size)
-	n.streamsMu.Lock()
-	n.streams[info.SSRC] = &localStream{
+	stream := &localStream{
 		rtpBuffer: rtpBuffer,
 		rtpWriter: writer,
 	}
+	n.streamsMu.Lock()
+	n.streams[info.SSRC] = stream
 	n.streamsMu.Unlock()
 
 	return interceptor.RTPWriterFunc(func(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
@@ -122,8 +123,8 @@ func (n *ResponderInterceptor) BindLocalStream(info *interceptor.StreamInfo, wri
 		if err != nil {
 			return 0, err
 		}
-		n.streams[info.SSRC].rtpBufferMutex.Lock()
-		defer n.streams[info.SSRC].rtpBufferMutex.Unlock()
+		stream.rtpBufferMutex.Lock()
+		defer stream.rtpBufferMutex.Unlock()
 
 		rtpBuffer.Add(pkt)
 

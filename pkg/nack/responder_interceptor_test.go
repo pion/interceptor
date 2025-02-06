@@ -5,6 +5,7 @@ package nack
 
 import (
 	"encoding/binary"
+	"sync"
 	"testing"
 	"time"
 
@@ -151,6 +152,37 @@ func TestResponderInterceptor_Race(t *testing.T) {
 			})
 		}
 	}
+}
+
+// this test is only useful when being run with the race detector, it won't fail otherwise:
+//
+// go test -race ./pkg/nack/
+func TestResponderInterceptor_RaceConcurrentStreams(t *testing.T) {
+	f, err := NewResponderInterceptor(
+		ResponderSize(32768),
+		ResponderLog(logging.NewDefaultLoggerFactory().NewLogger("test")),
+	)
+	require.NoError(t, err)
+
+	i, err := f.NewInterceptor("")
+	require.NoError(t, err)
+
+	var wg sync.WaitGroup
+	for j := 0; j < 5; j++ {
+		stream := test.NewMockStream(&interceptor.StreamInfo{
+			SSRC:         1,
+			RTCPFeedback: []interceptor.RTCPFeedback{{Type: "nack"}},
+		}, i)
+		wg.Add(1)
+		go func() {
+			for seqNum := uint16(0); seqNum < 500; seqNum++ {
+				require.NoError(t, stream.WriteRTP(&rtp.Packet{Header: rtp.Header{SequenceNumber: seqNum}}))
+			}
+			wg.Done()
+		}()
+	}
+
+	wg.Wait()
 }
 
 func TestResponderInterceptor_StreamFilter(t *testing.T) {
