@@ -153,6 +153,7 @@ func (n *ResponderInterceptor) resendPackets(nack *rtcp.TransportLayerNack) {
 			defer stream.rtpBufferMutex.Unlock()
 
 			if p := stream.rtpBuffer.Get(seq); p != nil {
+				n.packetFactory.FillSequenceNumber(p)
 				if _, err := stream.rtpWriter.Write(p.Header(), p.Payload(), interceptor.Attributes{}); err != nil {
 					n.log.Warnf("failed resending nacked packet: %+v", err)
 				}

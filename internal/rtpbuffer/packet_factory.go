@@ -17,6 +17,7 @@ const rtxSsrcByteLength = 2
 // The NoOpPacketFactory doesn't copy packets, while the RetainablePacket will take a copy before adding
 type PacketFactory interface {
 	NewPacket(header *rtp.Header, payload []byte, rtxSsrc uint32, rtxPayloadType uint8) (*RetainablePacket, error)
+	FillSequenceNumber(packet *RetainablePacket)
 }
 
 // PacketFactoryCopy is PacketFactory that takes a copy of packets when added to the RTPBuffer
@@ -94,8 +95,6 @@ func (m *PacketFactoryCopy) NewPacket(header *rtp.Header, payload []byte, rtxSsr
 		p.header.SSRC = rtxSsrc
 		// Rewrite the payload type.
 		p.header.PayloadType = rtxPayloadType
-		// Rewrite the sequence number.
-		p.header.SequenceNumber = m.rtxSequencer.NextSequenceNumber()
 		// Remove padding if present.
 		if p.header.Padding && p.payload != nil && len(p.payload) > 0 {
 			paddingLength := int(p.payload[len(p.payload)-1])
@@ -105,6 +104,10 @@ func (m *PacketFactoryCopy) NewPacket(header *rtp.Header, payload []byte, rtxSsr
 	}
 
 	return p, nil
+}
+
+func (m *PacketFactoryCopy) FillSequenceNumber(packet *RetainablePacket) {
+	packet.header.SequenceNumber = m.rtxSequencer.NextSequenceNumber()
 }
 
 func (m *PacketFactoryCopy) releasePacket(header *rtp.Header, payload *[]byte) {
@@ -126,6 +129,9 @@ func (f *PacketFactoryNoOp) NewPacket(header *rtp.Header, payload []byte, _ uint
 		payload:        payload,
 		sequenceNumber: header.SequenceNumber,
 	}, nil
+}
+
+func (m *PacketFactoryNoOp) FillSequenceNumber(packet *RetainablePacket) {
 }
 
 func (f *PacketFactoryNoOp) releasePacket(_ *rtp.Header, _ *[]byte) {
