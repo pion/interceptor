@@ -61,11 +61,25 @@ func (f *InterceptorFactory) OnNewPeerConnection(cb NewPeerConnectionCallback) {
 }
 
 // NewInterceptor returns a new CC interceptor
+// Don't call this, call [NewSingleInterceptor] instead.
 func (f *InterceptorFactory) NewInterceptor(id string) (interceptor.Interceptor, error) {
 	bwe, err := f.bweFactory()
 	if err != nil {
 		return nil, err
 	}
+	i, err := NewSingleInterceptor(bwe, f.opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	if f.addPeerConnection != nil {
+		f.addPeerConnection(id, i.estimator)
+	}
+	return i, nil
+}
+
+// NewSingleInterceptor returns a new CC interceptor
+func NewSingleInterceptor(bwe BandwidthEstimator, options ...Option) (*Interceptor, error) {
 	i := &Interceptor{
 		NoOp:      interceptor.NoOp{},
 		estimator: bwe,
@@ -73,14 +87,10 @@ func (f *InterceptorFactory) NewInterceptor(id string) (interceptor.Interceptor,
 		close:     make(chan struct{}),
 	}
 
-	for _, opt := range f.opts {
+	for _, opt := range options {
 		if err := opt(i); err != nil {
 			return nil, err
 		}
-	}
-
-	if f.addPeerConnection != nil {
-		f.addPeerConnection(id, i.estimator)
 	}
 	return i, nil
 }
