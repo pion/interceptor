@@ -40,6 +40,7 @@ func TestRateControllerRun(t *testing.T) {
 	t0 := time.Time{}
 	mockNoFn := func() time.Time {
 		t0 = t0.Add(100 * time.Millisecond)
+
 		return t0
 	}
 	for _, tc := range cases {

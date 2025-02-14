@@ -16,7 +16,7 @@ import (
 )
 
 // TwccExtensionAttributesKey identifies the TWCC value in the attribute collection
-// so we don't need to reparse
+// so we don't need to reparse.
 const TwccExtensionAttributesKey = iota
 
 var (
@@ -31,7 +31,7 @@ type FeedbackAdapter struct {
 	history *feedbackHistory
 }
 
-// NewFeedbackAdapter returns a new FeedbackAdapter
+// NewFeedbackAdapter returns a new FeedbackAdapter.
 func NewFeedbackAdapter() *FeedbackAdapter {
 	return &FeedbackAdapter{history: newFeedbackHistory(250)}
 }
@@ -48,6 +48,7 @@ func (f *FeedbackAdapter) onSentRFC8888(ts time.Time, header *rtp.Header, size i
 		Arrival:        time.Time{},
 		ECN:            0,
 	})
+
 	return nil
 }
 
@@ -69,11 +70,12 @@ func (f *FeedbackAdapter) onSentTWCC(ts time.Time, extID uint8, header *rtp.Head
 		Arrival:        time.Time{},
 		ECN:            0,
 	})
+
 	return nil
 }
 
 // OnSent records that and when an outgoing packet was sent for later mapping to
-// acknowledgments
+// acknowledgments.
 func (f *FeedbackAdapter) OnSent(ts time.Time, header *rtp.Header, size int, attributes interceptor.Attributes) error {
 	hdrExtensionID := attributes.Get(TwccExtensionAttributesKey)
 	id, ok := hdrExtensionID.(uint8)
@@ -84,7 +86,9 @@ func (f *FeedbackAdapter) OnSent(ts time.Time, header *rtp.Header, size int, att
 	return f.onSentRFC8888(ts, header, size)
 }
 
-func (f *FeedbackAdapter) unpackRunLengthChunk(start uint16, refTime time.Time, chunk *rtcp.RunLengthChunk, deltas []*rtcp.RecvDelta) (consumedDeltas int, nextRef time.Time, acks []Acknowledgment, err error) {
+func (f *FeedbackAdapter) unpackRunLengthChunk(
+	start uint16, refTime time.Time, chunk *rtcp.RunLengthChunk, deltas []*rtcp.RecvDelta,
+) (consumedDeltas int, nextRef time.Time, acks []Acknowledgment, err error) {
 	result := make([]Acknowledgment, chunk.RunLength)
 	deltaIndex := 0
 
@@ -108,17 +112,20 @@ func (f *FeedbackAdapter) unpackRunLengthChunk(start uint16, refTime time.Time, 
 		}
 		resultIndex++
 	}
+
 	return deltaIndex, refTime, result, nil
 }
 
-func (f *FeedbackAdapter) unpackStatusVectorChunk(start uint16, refTime time.Time, chunk *rtcp.StatusVectorChunk, deltas []*rtcp.RecvDelta) (consumedDeltas int, nextRef time.Time, acks []Acknowledgment, err error) {
+func (f *FeedbackAdapter) unpackStatusVectorChunk(
+	start uint16, refTime time.Time, chunk *rtcp.StatusVectorChunk, deltas []*rtcp.RecvDelta,
+) (consumedDeltas int, nextRef time.Time, acks []Acknowledgment, err error) {
 	result := make([]Acknowledgment, len(chunk.SymbolList))
 	deltaIndex := 0
 	resultIndex := 0
 	for i, symbol := range chunk.SymbolList {
 		key := feedbackHistoryKey{
 			ssrc:           0,
-			sequenceNumber: start + uint16(i),
+			sequenceNumber: start + uint16(i), //nolint:gosec // G115
 		}
 		if ack, ok := f.history.get(key); ok {
 			if symbol != rtcp.TypeTCCPacketNotReceived {
@@ -139,7 +146,9 @@ func (f *FeedbackAdapter) unpackStatusVectorChunk(start uint16, refTime time.Tim
 
 // OnTransportCCFeedback converts incoming TWCC RTCP packet feedback to
 // Acknowledgments.
-func (f *FeedbackAdapter) OnTransportCCFeedback(_ time.Time, feedback *rtcp.TransportLayerCC) ([]Acknowledgment, error) {
+func (f *FeedbackAdapter) OnTransportCCFeedback(
+	_ time.Time, feedback *rtcp.TransportLayerCC,
+) ([]Acknowledgment, error) {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 
@@ -158,7 +167,7 @@ func (f *FeedbackAdapter) OnTransportCCFeedback(_ time.Time, feedback *rtcp.Tran
 			refTime = nextRefTime
 			result = append(result, acks...)
 			recvDeltas = recvDeltas[n:]
-			index = uint16(int(index) + len(acks))
+			index = uint16(int(index) + len(acks)) //nolint:gosec // G115
 		case *rtcp.StatusVectorChunk:
 			n, nextRefTime, acks, err := f.unpackStatusVectorChunk(index, refTime, chunk, recvDeltas)
 			if err != nil {
@@ -167,7 +176,7 @@ func (f *FeedbackAdapter) OnTransportCCFeedback(_ time.Time, feedback *rtcp.Tran
 			refTime = nextRefTime
 			result = append(result, acks...)
 			recvDeltas = recvDeltas[n:]
-			index = uint16(int(index) + len(acks))
+			index = uint16(int(index) + len(acks)) //nolint:gosec // G115
 		default:
 			return nil, errInvalidFeedback
 		}
@@ -186,7 +195,7 @@ func (f *FeedbackAdapter) OnRFC8888Feedback(_ time.Time, feedback *rtcp.CCFeedba
 	referenceTime := ntp.ToTime(uint64(feedback.ReportTimestamp) << 16)
 	for _, rb := range feedback.ReportBlocks {
 		for i, mb := range rb.MetricBlocks {
-			sequenceNumber := rb.BeginSequence + uint16(i)
+			sequenceNumber := rb.BeginSequence + uint16(i) //nolint:gosec // G115
 			key := feedbackHistoryKey{
 				ssrc:           rb.MediaSSRC,
 				sequenceNumber: sequenceNumber,
@@ -201,6 +210,7 @@ func (f *FeedbackAdapter) OnRFC8888Feedback(_ time.Time, feedback *rtcp.CCFeedba
 			}
 		}
 	}
+
 	return result
 }
 
@@ -230,6 +240,7 @@ func (f *feedbackHistory) get(key feedbackHistoryKey) (Acknowledgment, bool) {
 			return ack, true
 		}
 	}
+
 	return Acknowledgment{}, false
 }
 
@@ -242,6 +253,7 @@ func (f *feedbackHistory) add(ack Acknowledgment) {
 	if ent, ok := f.items[key]; ok {
 		f.evictList.MoveToFront(ent)
 		ent.Value = ack
+
 		return
 	}
 	// Add new

@@ -85,10 +85,17 @@ func (flex *FlexEncoder03) encodeFlexFecPacket(fecPacketIndex uint32, mediaBaseS
 		Payload: append(flexFecHeader, flexFecRepairPayload...),
 	}
 	flex.fecBaseSn++
+
 	return packet
 }
 
-func (flex *FlexEncoder03) encodeFlexFecHeader(mediaPackets *util.MediaPacketIterator, mask1 uint16, optionalMask2 uint32, optionalMask3 uint64, mediaBaseSn uint16) []byte {
+func (flex *FlexEncoder03) encodeFlexFecHeader(
+	mediaPackets *util.MediaPacketIterator,
+	mask1 uint16,
+	optionalMask2 uint32,
+	optionalMask3 uint64,
+	mediaBaseSn uint16,
+) []byte {
 	/*
 	    0                   1                   2                   3
 	    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -149,9 +156,9 @@ func (flex *FlexEncoder03) encodeFlexFecHeader(mediaPackets *util.MediaPacketIte
 		flexFecHeader[0] &= 0b00111111
 
 		// XOR the length recovery field
-		lengthRecoveryVal := uint16(mediaPacket.MarshalSize() - BaseRTPHeaderSize)
-		flexFecHeader[2] ^= uint8(lengthRecoveryVal >> 8)
-		flexFecHeader[3] ^= uint8(lengthRecoveryVal)
+		lengthRecoveryVal := uint16(mediaPacket.MarshalSize() - BaseRTPHeaderSize) //nolint:gosec // G115
+		flexFecHeader[2] ^= uint8(lengthRecoveryVal >> 8)                          //nolint:gosec // G115
+		flexFecHeader[3] ^= uint8(lengthRecoveryVal)                               //nolint:gosec // G115
 
 		// XOR the 5th to 8th bytes of the header: the timestamp field
 		flexFecHeader[4] ^= tmpMediaPacketBuf[4]
@@ -179,6 +186,7 @@ func (flex *FlexEncoder03) encodeFlexFecHeader(mediaPackets *util.MediaPacketIte
 
 	if optionalMask2 == 0 {
 		flexFecHeader[18] |= 0b10000000
+
 		return flexFecHeader
 	}
 	binary.BigEndian.PutUint32(flexFecHeader[20:24], optionalMask2)
@@ -209,5 +217,6 @@ func (flex *FlexEncoder03) encodeFlexFecRepairPayload(mediaPackets *util.MediaPa
 			flexFecPayload[byteIndex] ^= mediaPacketPayload[byteIndex]
 		}
 	}
+
 	return flexFecPayload
 }

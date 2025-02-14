@@ -23,7 +23,7 @@ type item struct {
 	attributes interceptor.Attributes
 }
 
-// LeakyBucketPacer implements a leaky bucket pacing algorithm
+// LeakyBucketPacer implements a leaky bucket pacing algorithm.
 type LeakyBucketPacer struct {
 	log logging.LeveledLogger
 
@@ -43,9 +43,9 @@ type LeakyBucketPacer struct {
 	pool *sync.Pool
 }
 
-// NewLeakyBucketPacer initializes a new LeakyBucketPacer
+// NewLeakyBucketPacer initializes a new LeakyBucketPacer.
 func NewLeakyBucketPacer(initialBitrate int) *LeakyBucketPacer {
-	p := &LeakyBucketPacer{
+	pacer := &LeakyBucketPacer{
 		log:            logging.NewDefaultLoggerFactory().NewLogger("pacer"),
 		f:              1.5,
 		targetBitrate:  initialBitrate,
@@ -56,18 +56,20 @@ func NewLeakyBucketPacer(initialBitrate int) *LeakyBucketPacer {
 		ssrcToWriter:   map[uint32]interceptor.RTPWriter{},
 		pool:           &sync.Pool{},
 	}
-	p.pool = &sync.Pool{
+	pacer.pool = &sync.Pool{
 		New: func() interface{} {
 			b := make([]byte, 1460)
+
 			return &b
 		},
 	}
 
-	go p.Run()
-	return p
+	go pacer.Run()
+
+	return pacer
 }
 
-// AddStream adds a new stream and its corresponding writer to the pacer
+// AddStream adds a new stream and its corresponding writer to the pacer.
 func (p *LeakyBucketPacer) AddStream(ssrc uint32, writer interceptor.RTPWriter) {
 	p.writerLock.Lock()
 	defer p.writerLock.Unlock()
@@ -75,7 +77,7 @@ func (p *LeakyBucketPacer) AddStream(ssrc uint32, writer interceptor.RTPWriter) 
 }
 
 // SetTargetBitrate updates the target bitrate at which the pacer is allowed to
-// send packets. The pacer may exceed this limit by p.f
+// send packets. The pacer may exceed this limit by p.f.
 func (p *LeakyBucketPacer) SetTargetBitrate(rate int) {
 	p.targetBitrateLock.Lock()
 	defer p.targetBitrateLock.Unlock()
@@ -112,7 +114,7 @@ func (p *LeakyBucketPacer) Write(header *rtp.Header, payload []byte, attributes 
 	return header.MarshalSize() + len(payload), nil
 }
 
-// Run starts the LeakyBucketPacer
+// Run starts the LeakyBucketPacer.
 func (p *LeakyBucketPacer) Run() {
 	ticker := time.NewTicker(p.pacingInterval)
 	defer ticker.Stop()
@@ -131,6 +133,7 @@ func (p *LeakyBucketPacer) Run() {
 				p.qLock.Unlock()
 				if !ok {
 					p.log.Warnf("failed to access leaky bucket pacer queue, cast failed")
+
 					continue
 				}
 
@@ -141,6 +144,7 @@ func (p *LeakyBucketPacer) Run() {
 					p.log.Warnf("no writer found for ssrc: %v", next.header.SSRC)
 					p.pool.Put(next.payload)
 					p.qLock.Lock()
+
 					continue
 				}
 
@@ -159,8 +163,9 @@ func (p *LeakyBucketPacer) Run() {
 	}
 }
 
-// Close closes the LeakyBucketPacer
+// Close closes the LeakyBucketPacer.
 func (p *LeakyBucketPacer) Close() error {
 	close(p.done)
+
 	return nil
 }

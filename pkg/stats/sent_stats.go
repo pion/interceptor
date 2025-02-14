@@ -8,20 +8,21 @@ import (
 	"time"
 )
 
-// SentRTPStreamStats contains common sender stats of RTP streams
+// SentRTPStreamStats contains common sender stats of RTP streams.
 type SentRTPStreamStats struct {
 	PacketsSent uint64
 	BytesSent   uint64
 }
 
-// String returns a string representation of SentRTPStreamStats
+// String returns a string representation of SentRTPStreamStats.
 func (s SentRTPStreamStats) String() string {
 	out := fmt.Sprintf("\tPacketsSent: %v\n", s.PacketsSent)
 	out += fmt.Sprintf("\tBytesSent: %v\n", s.BytesSent)
+
 	return out
 }
 
-// OutboundRTPStreamStats contains stats of outbound RTP streams
+// OutboundRTPStreamStats contains stats of outbound RTP streams.
 type OutboundRTPStreamStats struct {
 	SentRTPStreamStats
 
@@ -31,7 +32,7 @@ type OutboundRTPStreamStats struct {
 	PLICount        uint32
 }
 
-// String returns a string representation of OutboundRTPStreamStats
+// String returns a string representation of OutboundRTPStreamStats.
 func (s OutboundRTPStreamStats) String() string {
 	out := "OutboundRTPStreamStats\n"
 	out += s.SentRTPStreamStats.String()
@@ -39,11 +40,12 @@ func (s OutboundRTPStreamStats) String() string {
 	out += fmt.Sprintf("\tNACKCount: %v\n", s.NACKCount)
 	out += fmt.Sprintf("\tFIRCount: %v\n", s.FIRCount)
 	out += fmt.Sprintf("\tPLICount: %v\n", s.PLICount)
+
 	return out
 }
 
 // RemoteOutboundRTPStreamStats contains stats of outbound RTP streams of the
-// remote peer
+// remote peer.
 type RemoteOutboundRTPStreamStats struct {
 	SentRTPStreamStats
 
@@ -54,7 +56,7 @@ type RemoteOutboundRTPStreamStats struct {
 	RoundTripTimeMeasurements uint64
 }
 
-// String returns a string representation of RemoteOutboundRTPStreamStats
+// String returns a string representation of RemoteOutboundRTPStreamStats.
 func (s RemoteOutboundRTPStreamStats) String() string {
 	out := "RemoteOutboundRTPStreamStats:\n"
 	out += s.SentRTPStreamStats.String()
@@ -63,5 +65,6 @@ func (s RemoteOutboundRTPStreamStats) String() string {
 	out += fmt.Sprintf("\tRoundTripTime: %v\n", s.RoundTripTime)
 	out += fmt.Sprintf("\tTotalRoundTripTime: %v\n", s.TotalRoundTripTime)
 	out += fmt.Sprintf("\tRoundTripTimeMeasurements: %v\n", s.RoundTripTimeMeasurements)
+
 	return out
 }

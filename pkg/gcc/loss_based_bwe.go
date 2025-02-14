@@ -24,7 +24,7 @@ const (
 	decreaseTimeThreshold = 200 * time.Millisecond
 )
 
-// LossStats contains internal statistics of the loss based controller
+// LossStats contains internal statistics of the loss based controller.
 type LossStats struct {
 	TargetBitrate int
 	AverageLoss   float64
@@ -94,11 +94,17 @@ func (e *lossBasedBandwidthEstimator) updateLossEstimate(results []cc.Acknowledg
 	decreaseLoss := math.Min(e.averageLoss, lossRatio)
 
 	if increaseLoss < increaseLossThreshold && time.Since(e.lastIncrease) > increaseTimeThreshold {
-		e.log.Infof("loss controller increasing; averageLoss: %v, decreaseLoss: %v, increaseLoss: %v", e.averageLoss, decreaseLoss, increaseLoss)
+		e.log.Infof(
+			"loss controller increasing; averageLoss: %v, decreaseLoss: %v, increaseLoss: %v",
+			e.averageLoss, decreaseLoss, increaseLoss,
+		)
 		e.lastIncrease = time.Now()
 		e.bitrate = clampInt(int(increaseFactor*float64(e.bitrate)), e.minBitrate, e.maxBitrate)
 	} else if decreaseLoss > decreaseLossThreshold && time.Since(e.lastDecrease) > decreaseTimeThreshold {
-		e.log.Infof("loss controller decreasing; averageLoss: %v, decreaseLoss: %v, increaseLoss: %v", e.averageLoss, decreaseLoss, increaseLoss)
+		e.log.Infof(
+			"loss controller decreasing; averageLoss: %v, decreaseLoss: %v, increaseLoss: %v",
+			e.averageLoss, decreaseLoss, increaseLoss,
+		)
 		e.lastDecrease = time.Now()
 		e.bitrate = clampInt(int(float64(e.bitrate)*(1-0.5*decreaseLoss)), e.minBitrate, e.maxBitrate)
 	}

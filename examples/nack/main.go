@@ -54,10 +54,17 @@ func receiveRoutine() {
 
 	// Create the writer just for a single SSRC stream
 	// this is a callback that is fired everytime a RTP packet is ready to be sent
-	streamReader := chain.BindRemoteStream(&interceptor.StreamInfo{
-		SSRC:         ssrc,
-		RTCPFeedback: []interceptor.RTCPFeedback{{Type: "nack", Parameter: ""}},
-	}, interceptor.RTPReaderFunc(func(b []byte, _ interceptor.Attributes) (int, interceptor.Attributes, error) { return len(b), nil, nil }))
+	streamReader := chain.BindRemoteStream(
+		&interceptor.StreamInfo{
+			SSRC:         ssrc,
+			RTCPFeedback: []interceptor.RTCPFeedback{{Type: "nack", Parameter: ""}},
+		},
+		interceptor.RTPReaderFunc(
+			func(b []byte, _ interceptor.Attributes) (int, interceptor.Attributes, error) {
+				return len(b), nil, nil
+			},
+		),
+	)
 
 	for rtcpBound, buffer := false, make([]byte, mtu); ; {
 		i, addr, err := conn.ReadFrom(buffer)
@@ -88,6 +95,7 @@ func receiveRoutine() {
 	}
 }
 
+//nolint:cyclop
 func sendRoutine() {
 	// Dial our UDP listener that we create in receiveRoutine
 	serverAddr, err := net.ResolveUDPAddr("udp4", fmt.Sprintf("127.0.0.1:%d", listenPort))
@@ -116,9 +124,11 @@ func sendRoutine() {
 
 	// Set the interceptor wide RTCP Reader
 	// this is a handle to send NACKs back into the interceptor.
-	rtcpReader := chain.BindRTCPReader(interceptor.RTCPReaderFunc(func(in []byte, _ interceptor.Attributes) (int, interceptor.Attributes, error) {
-		return len(in), nil, nil
-	}))
+	rtcpReader := chain.BindRTCPReader(
+		interceptor.RTCPReaderFunc(func(in []byte, _ interceptor.Attributes) (int, interceptor.Attributes, error) {
+			return len(in), nil, nil
+		}),
+	)
 
 	// Create the writer just for a single SSRC stream
 	// this is a callback that is fired everytime a RTP packet is ready to be sent

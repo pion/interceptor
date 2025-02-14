@@ -15,10 +15,10 @@ import (
 	"github.com/pion/rtp"
 )
 
-// ErrBothBinaryAndDeprecatedFormat is returned when both binary and deprecated format callbacks are set
+// ErrBothBinaryAndDeprecatedFormat is returned when both binary and deprecated format callbacks are set.
 var ErrBothBinaryAndDeprecatedFormat = fmt.Errorf("both binary and deprecated format callbacks are set")
 
-// PacketDumper dumps packet to a io.Writer
+// PacketDumper dumps packet to a io.Writer.
 type PacketDumper struct {
 	log logging.LeveledLogger
 
@@ -42,9 +42,9 @@ type PacketDumper struct {
 	rtcpPerPacketFilter RTCPPerPacketFilterCallback
 }
 
-// NewPacketDumper creates a new PacketDumper
+// NewPacketDumper creates a new PacketDumper.
 func NewPacketDumper(opts ...PacketDumperOption) (*PacketDumper, error) {
-	d := &PacketDumper{
+	dumper := &PacketDumper{
 		log:              logging.NewDefaultLoggerFactory().NewLogger("packet_dumper"),
 		wg:               sync.WaitGroup{},
 		close:            make(chan struct{}),
@@ -67,28 +67,28 @@ func NewPacketDumper(opts ...PacketDumperOption) (*PacketDumper, error) {
 		},
 	}
 
-	if d.rtpFormat != nil && d.rtpFormatBinary != nil {
+	if dumper.rtpFormat != nil && dumper.rtpFormatBinary != nil {
 		return nil, ErrBothBinaryAndDeprecatedFormat
 	}
 
 	for _, opt := range opts {
-		if err := opt(d); err != nil {
+		if err := opt(dumper); err != nil {
 			return nil, err
 		}
 	}
 
-	if d.rtpFormat == nil && d.rtpFormatBinary == nil {
-		d.rtpFormat = DefaultRTPFormatter
+	if dumper.rtpFormat == nil && dumper.rtpFormatBinary == nil {
+		dumper.rtpFormat = DefaultRTPFormatter
 	}
 
-	if d.rtcpFormat == nil && d.rtcpFormatBinary == nil {
-		d.rtcpFormat = DefaultRTCPFormatter
+	if dumper.rtcpFormat == nil && dumper.rtcpFormatBinary == nil {
+		dumper.rtcpFormat = DefaultRTCPFormatter
 	}
 
-	d.wg.Add(1)
-	go d.loop()
+	dumper.wg.Add(1)
+	go dumper.loop()
 
-	return d, nil
+	return dumper, nil
 }
 
 func (d *PacketDumper) logRTPPacket(header *rtp.Header, payload []byte, attributes interceptor.Attributes) {
@@ -114,13 +114,14 @@ func (d *PacketDumper) logRTCPPackets(pkts []rtcp.Packet, attributes interceptor
 	}
 }
 
-// Close closes the PacketDumper
+// Close closes the PacketDumper.
 func (d *PacketDumper) Close() error {
 	defer d.wg.Wait()
 
 	if !d.isClosed() {
 		close(d.close)
 	}
+
 	return nil
 }
 

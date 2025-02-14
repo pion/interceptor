@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+//nolint:maintidx
 func TestReceiverInterceptor(t *testing.T) {
 	t.Run("before any packet", func(t *testing.T) {
 		mt := test.MockTime{}
@@ -77,7 +78,7 @@ func TestReceiverInterceptor(t *testing.T) {
 
 		for i := 0; i < 10; i++ {
 			stream.ReceiveRTP(&rtp.Packet{Header: rtp.Header{
-				SequenceNumber: uint16(i),
+				SequenceNumber: uint16(i), //nolint:gosec // G115
 			}})
 		}
 
@@ -119,7 +120,7 @@ func TestReceiverInterceptor(t *testing.T) {
 
 		for i := 0; i < 10; i++ {
 			stream.ReceiveRTP(&rtp.Packet{Header: rtp.Header{
-				SequenceNumber: uint16(i),
+				SequenceNumber: uint16(i), //nolint:gosec // G115
 			}})
 		}
 

@@ -22,7 +22,7 @@ type Recorder struct {
 	streams map[uint32]*streamLog
 }
 
-// NewRecorder creates a new Recorder
+// NewRecorder creates a new Recorder.
 func NewRecorder() *Recorder {
 	return &Recorder{
 		streams: map[uint32]*streamLog{},

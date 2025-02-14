@@ -12,7 +12,10 @@ import (
 
 func TestRTPBuffer(t *testing.T) {
 	pm := NewPacketFactoryCopy()
-	for _, start := range []uint16{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 511, 512, 513, 32767, 32768, 32769, 65527, 65528, 65529, 65530, 65531, 65532, 65533, 65534, 65535} {
+	for _, start := range []uint16{
+		0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 511, 512, 513, 32767, 32768, 32769,
+		65527, 65528, 65529, 65530, 65531, 65532, 65533, 65534, 65535,
+	} {
 		start := start
 
 		sb, err := NewRTPBuffer(8)
@@ -34,6 +37,7 @@ func TestRTPBuffer(t *testing.T) {
 				packet := sb.Get(seq)
 				if packet == nil {
 					t.Errorf("packet not found: %d", seq)
+
 					continue
 				}
 				if packet.Header().SequenceNumber != seq {
@@ -72,7 +76,10 @@ func TestRTPBuffer(t *testing.T) {
 
 func TestRTPBuffer_WithRTX(t *testing.T) {
 	pm := NewPacketFactoryCopy()
-	for _, start := range []uint16{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 511, 512, 513, 32767, 32768, 32769, 65527, 65528, 65529, 65530, 65531, 65532, 65533, 65534, 65535} {
+	for _, start := range []uint16{
+		0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 511, 512, 513, 32767, 32768, 32769,
+		65527, 65528, 65529, 65530, 65531, 65532, 65533, 65534, 65535,
+	} {
 		start := start
 
 		sb, err := NewRTPBuffer(8)
@@ -94,10 +101,14 @@ func TestRTPBuffer_WithRTX(t *testing.T) {
 				packet := sb.Get(seq)
 				if packet == nil {
 					t.Errorf("packet not found: %d", seq)
+
 					continue
 				}
 				if packet.Header().SSRC != 1 && packet.Header().PayloadType != 1 {
-					t.Errorf("packet for %d returned with incorrect SSRC : %d and PayloadType: %d", seq, packet.Header().SSRC, packet.Header().PayloadType)
+					t.Errorf(
+						"packet for %d returned with incorrect SSRC : %d and PayloadType: %d",
+						seq, packet.Header().SSRC, packet.Header().PayloadType,
+					)
 				}
 				packet.Release()
 			}

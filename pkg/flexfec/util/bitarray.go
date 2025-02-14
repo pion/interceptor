@@ -33,6 +33,7 @@ func (b *BitArray) GetBit(bitIndex uint32) uint8 {
 		if result > 0 {
 			return 1
 		}
+
 		return 0
 	}
 
@@ -41,5 +42,6 @@ func (b *BitArray) GetBit(bitIndex uint32) uint8 {
 	if result > 0 {
 		return 1
 	}
+
 	return 0
 }

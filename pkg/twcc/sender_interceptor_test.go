@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+//nolint:maintidx
 func TestSenderInterceptor(t *testing.T) {
 	t.Run("before any packets", func(t *testing.T) {
 		f, err := NewSenderInterceptor()
@@ -60,6 +61,7 @@ func TestSenderInterceptor(t *testing.T) {
 
 		for i := 0; i < 10; i++ {
 			hdr := rtp.Header{}
+			//nolint:gosec // G115
 			tcc, err := (&rtp.TransportCCExtension{TransportSequence: uint16(i)}).Marshal()
 			assert.NoError(t, err)
 			err = hdr.SetExtension(1, tcc)
@@ -103,6 +105,7 @@ func TestSenderInterceptor(t *testing.T) {
 			time.Sleep(time.Duration(d) * time.Millisecond)
 
 			hdr := rtp.Header{}
+			//nolint:gosec // G115
 			tcc, err := (&rtp.TransportCCExtension{TransportSequence: uint16(i)}).Marshal()
 			assert.NoError(t, err)
 			err = hdr.SetExtension(1, tcc)
@@ -159,6 +162,7 @@ func TestSenderInterceptor(t *testing.T) {
 			time.Sleep(time.Duration(d) * time.Millisecond)
 
 			hdr := rtp.Header{}
+			//nolint:gosec // G115
 			tcc, err := (&rtp.TransportCCExtension{TransportSequence: uint16(i)}).Marshal()
 			assert.NoError(t, err)
 			err = hdr.SetExtension(1, tcc)
@@ -226,6 +230,7 @@ func TestSenderInterceptor(t *testing.T) {
 
 		for _, i := range []int{65530, 65534, 65535, 1, 2, 10} {
 			hdr := rtp.Header{}
+			//nolint:gosec // G115
 			tcc, err := (&rtp.TransportCCExtension{TransportSequence: uint16(i)}).Marshal()
 			assert.NoError(t, err)
 			err = hdr.SetExtension(1, tcc)
@@ -280,7 +285,7 @@ func TestSenderInterceptor_Leak(t *testing.T) {
 	f, err := NewSenderInterceptor(SendInterval(200 * time.Millisecond))
 	assert.NoError(t, err)
 
-	i, err := f.NewInterceptor("")
+	testInterceptor, err := f.NewInterceptor("")
 	assert.NoError(t, err)
 
 	stream := test.NewMockStream(&interceptor.StreamInfo{RTPHeaderExtensions: []interceptor.RTPHeaderExtension{
@@ -288,14 +293,15 @@ func TestSenderInterceptor_Leak(t *testing.T) {
 			URI: transportCCURI,
 			ID:  1,
 		},
-	}}, i)
+	}}, testInterceptor)
 	defer func() {
 		assert.NoError(t, stream.Close())
 	}()
 
-	assert.NoError(t, i.Close())
+	assert.NoError(t, testInterceptor.Close())
 	for _, i := range []int{0, 1, 2, 3, 4, 5} {
 		hdr := rtp.Header{}
+		//nolint:gosec // G115
 		tcc, err := (&rtp.TransportCCExtension{TransportSequence: uint16(i)}).Marshal()
 		assert.NoError(t, err)
 

@@ -73,7 +73,7 @@ func TestSenderInterceptor(t *testing.T) {
 
 		for i := 0; i < 10; i++ {
 			assert.NoError(t, stream.WriteRTP(&rtp.Packet{
-				Header:  rtp.Header{SequenceNumber: uint16(i)},
+				Header:  rtp.Header{SequenceNumber: uint16(i)}, //nolint:gosec // G115
 				Payload: []byte("\x00\x00"),
 			}))
 		}
@@ -116,8 +116,8 @@ func TestSenderInterceptor(t *testing.T) {
 		for i := 0; i < 10; i++ {
 			assert.NoError(t, stream.WriteRTP(&rtp.Packet{
 				Header: rtp.Header{
-					SequenceNumber: uint16(i),
-					Timestamp:      uint32(i),
+					SequenceNumber: uint16(i), //nolint:gosec // G115
+					Timestamp:      uint32(i), //nolint:gosec // G115
 				},
 				Payload: []byte("\x00\x00"),
 			}))
@@ -179,8 +179,8 @@ func TestSenderInterceptor(t *testing.T) {
 		for i := 0; i < 10; i++ {
 			assert.NoError(t, stream.WriteRTP(&rtp.Packet{
 				Header: rtp.Header{
-					SequenceNumber: uint16(i),
-					Timestamp:      uint32(i),
+					SequenceNumber: uint16(i), //nolint:gosec // G115
+					Timestamp:      uint32(i), //nolint:gosec // G115
 				},
 				Payload: []byte("\x00\x00"),
 			}))

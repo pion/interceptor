@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+//nolint:maintidx,cyclop
 func TestInterceptor(t *testing.T) {
 	t.Run("before any packet", func(t *testing.T) {
 		f, err := NewSenderInterceptor()
@@ -59,7 +60,7 @@ func TestInterceptor(t *testing.T) {
 					Extension:        false,
 					Marker:           false,
 					PayloadType:      0,
-					SequenceNumber:   uint16(i),
+					SequenceNumber:   uint16(i), //nolint:gosec // G115
 					Timestamp:        0,
 					SSRC:             123456,
 					CSRC:             []uint32{},
@@ -115,7 +116,7 @@ func TestInterceptor(t *testing.T) {
 			mNow.SetNow(zero.Add(d))
 			stream.ReceiveRTP(&rtp.Packet{
 				Header: rtp.Header{
-					SequenceNumber: uint16(i),
+					SequenceNumber: uint16(i), //nolint:gosec // G115
 					SSRC:           123456,
 				},
 			})
@@ -200,7 +201,7 @@ func TestInterceptor(t *testing.T) {
 			mNow.SetNow(zero.Add(time.Duration(sequenceNumberToDelay[i]) * time.Millisecond))
 			stream.ReceiveRTP(&rtp.Packet{
 				Header: rtp.Header{
-					SequenceNumber: uint16(i),
+					SequenceNumber: uint16(i), //nolint:gosec // G115
 					SSRC:           123456,
 				},
 			})

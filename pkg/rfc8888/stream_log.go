@@ -53,7 +53,7 @@ func (l *streamLog) metricsAfter(reference time.Time, maxReportBlocks int64) rtc
 	if len(l.log) == 0 {
 		return rtcp.CCFeedbackReportBlock{
 			MediaSSRC:     l.ssrc,
-			BeginSequence: uint16(l.nextSequenceNumberToReport),
+			BeginSequence: uint16(l.nextSequenceNumberToReport), //nolint:gosec // G115
 			MetricBlocks:  []rtcp.CCFeedbackMetricBlock{},
 		}
 	}
@@ -66,7 +66,7 @@ func (l *streamLog) metricsAfter(reference time.Time, maxReportBlocks int64) rtc
 	offset := l.nextSequenceNumberToReport
 	lastReceived := l.nextSequenceNumberToReport
 	gapDetected := false
-	for i := offset; i <= l.lastSequenceNumberReceived; i++ {
+	for i := offset; i <= l.lastSequenceNumberReceived; i++ { //nolint:varnamelen // i int64
 		received := false
 		ecn := uint8(0)
 		ato := uint16(0)
@@ -92,9 +92,10 @@ func (l *streamLog) metricsAfter(reference time.Time, maxReportBlocks int64) rtc
 			}
 		}
 	}
+
 	return rtcp.CCFeedbackReportBlock{
 		MediaSSRC:     l.ssrc,
-		BeginSequence: uint16(offset),
+		BeginSequence: uint16(offset), //nolint:gosec // G115
 		MetricBlocks:  metricBlocks,
 	}
 }
@@ -107,5 +108,6 @@ func getArrivalTimeOffset(base time.Time, arrival time.Time) uint16 {
 	if ato > 0x1FFD {
 		return 0x1FFE
 	}
+
 	return ato
 }

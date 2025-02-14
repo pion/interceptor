@@ -43,7 +43,7 @@ func (d *overuseDetector) onDelayStats(ds DelayStats) {
 	thresholdUse, estimate, currentThreshold := d.threshold.compare(ds.Estimate, ds.LastReceiveDelta)
 
 	use := usageNormal
-	if thresholdUse == usageOver {
+	if thresholdUse == usageOver { //nolint:nestif
 		if d.increasingDuration == 0 {
 			d.increasingDuration = delta / 2
 		} else {

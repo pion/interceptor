@@ -72,7 +72,7 @@ func TestHeaderExtensionInterceptor(t *testing.T) {
 							panic("written rtp packet not found")
 						}
 					}
-				}(pChan, uint16(i+1))
+				}(pChan, uint16(i+1)) //nolint:gosec // G115
 			}
 			wg.Wait()
 			close(pChan)

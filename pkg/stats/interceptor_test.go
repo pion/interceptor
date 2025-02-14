@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+//nolint:cyclop
 func TestInterceptor(t *testing.T) {
 	t.Run("before any packets", func(t *testing.T) {
 		f, err := NewInterceptor()
@@ -46,7 +47,7 @@ func TestInterceptor(t *testing.T) {
 	t.Run("records packets", func(t *testing.T) {
 		mockRecorder := newMockRecorder()
 		now := time.Now()
-		f, err := NewInterceptor(
+		testInterceptor, err := NewInterceptor(
 			SetRecorderFactory(func(uint32, float64) Recorder {
 				return mockRecorder
 			}),
@@ -56,13 +57,13 @@ func TestInterceptor(t *testing.T) {
 		)
 		assert.NoError(t, err)
 		statsCh := make(chan Getter)
-		f.OnNewPeerConnection(func(_ string, g Getter) {
+		testInterceptor.OnNewPeerConnection(func(_ string, g Getter) {
 			go func() {
 				statsCh <- g
 			}()
 		})
 
-		i, err := f.NewInterceptor("")
+		i, err := testInterceptor.NewInterceptor("")
 		assert.NoError(t, err)
 
 		stream := test.NewMockStream(&interceptor.StreamInfo{SSRC: 0}, i)

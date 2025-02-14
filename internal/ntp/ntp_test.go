@@ -24,7 +24,10 @@ func TestNTPToTimeConverstion(t *testing.T) {
 	} {
 		t.Run(fmt.Sprintf("TimeToNTP/%v", i), func(t *testing.T) {
 			assert.InDelta(t, cc.ts.UnixNano(), ToTime(ToNTP(cc.ts)).UnixNano(), float64(time.Millisecond.Nanoseconds()))
-			assert.InDelta(t, cc.ts.UnixNano(), ToTime32(ToNTP32(cc.ts), cc.ts).UnixNano(), float64(time.Millisecond.Nanoseconds()))
+			assert.InDelta(
+				t,
+				cc.ts.UnixNano(), ToTime32(ToNTP32(cc.ts), cc.ts).UnixNano(), float64(time.Millisecond.Nanoseconds()),
+			)
 		})
 	}
 }
@@ -68,7 +71,8 @@ func TestNTPTime32(t *testing.T) {
 			expected: 1 << 16,
 		},
 		{
-			input:    notSoLongAgo,
+			input: notSoLongAgo,
+			//nolint:gosec // G115
 			expected: uint32(uint(notSoLongAgo.Sub(zero).Seconds())&0xffff) << 16,
 		},
 		{

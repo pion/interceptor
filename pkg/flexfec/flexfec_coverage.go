@@ -32,7 +32,7 @@ type ProtectionCoverage struct {
 // Fec packets that we will be generating to cover the list of mediaPackets. This allows us to know
 // how big the underlying map should be.
 func NewCoverage(mediaPackets []rtp.Packet, numFecPackets uint32) *ProtectionCoverage {
-	numMediaPackets := uint32(len(mediaPackets))
+	numMediaPackets := uint32(len(mediaPackets)) //nolint:gosec // G115
 
 	// Basic sanity checks
 	if numMediaPackets <= 0 || numMediaPackets > MaxMediaPackets {
@@ -53,13 +53,14 @@ func NewCoverage(mediaPackets []rtp.Packet, numFecPackets uint32) *ProtectionCov
 	}
 
 	coverage.UpdateCoverage(mediaPackets, numFecPackets)
+
 	return coverage
 }
 
 // UpdateCoverage updates the ProtectionCoverage object with new bitmasks accounting for the numFecPackets
 // we want to use to protect the batch media packets.
 func (p *ProtectionCoverage) UpdateCoverage(mediaPackets []rtp.Packet, numFecPackets uint32) {
-	numMediaPackets := uint32(len(mediaPackets))
+	numMediaPackets := uint32(len(mediaPackets)) //nolint:gosec // G115
 
 	// Basic sanity checks
 	if numMediaPackets <= 0 || numMediaPackets > MaxMediaPackets {
@@ -111,6 +112,7 @@ func (p *ProtectionCoverage) GetCoveredBy(fecPacketIndex uint32) *util.MediaPack
 			coverage = append(coverage, mediaPacketIndex)
 		}
 	}
+
 	return util.NewMediaPacketIterator(p.mediaPackets, coverage)
 }
 
@@ -120,7 +122,8 @@ func (p *ProtectionCoverage) ExtractMask1(fecPacketIndex uint32) uint16 {
 	mask := p.packetMasks[fecPacketIndex]
 	// We get the first 16 bits (64 - 16 -> shift by 48) and we shift once more for K field
 	mask1 := mask.Lo >> 49
-	return uint16(mask1)
+
+	return uint16(mask1) //nolint:gosec // G115
 }
 
 // ExtractMask2 returns the second section of the bitmask as defined by the FEC header.
@@ -131,7 +134,8 @@ func (p *ProtectionCoverage) ExtractMask2(fecPacketIndex uint32) uint32 {
 	mask2 := mask.Lo << 15
 	// We get the first 31 bits (64 - 31 -> shift by 33) and we shift once more for K field
 	mask2 >>= 34
-	return uint32(mask2)
+
+	return uint32(mask2) //nolint:gosec // G115
 }
 
 // ExtractMask3 returns the third section of the bitmask as defined by the FEC header.
@@ -142,6 +146,7 @@ func (p *ProtectionCoverage) ExtractMask3(fecPacketIndex uint32) uint64 {
 	maskLo := mask.Lo << 46
 	maskHi := mask.Hi >> 18
 	mask3 := maskLo | maskHi
+
 	return mask3
 }
 
@@ -155,5 +160,6 @@ func (p *ProtectionCoverage) ExtractMask3_03(fecPacketIndex uint32) uint64 {
 	mask3 := maskLo | maskHi
 	// We shift once for the K bit.
 	mask3 >>= 1
+
 	return mask3
 }

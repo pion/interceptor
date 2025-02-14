@@ -16,6 +16,7 @@ type GeneratorOption func(r *GeneratorInterceptor) error
 func GeneratorLog(log logging.LeveledLogger) GeneratorOption {
 	return func(r *GeneratorInterceptor) error {
 		r.log = log
+
 		return nil
 	}
 }
@@ -24,6 +25,7 @@ func GeneratorLog(log logging.LeveledLogger) GeneratorOption {
 func GeneratorInterval(interval time.Duration) GeneratorOption {
 	return func(r *GeneratorInterceptor) error {
 		r.interval = interval
+
 		return nil
 	}
 }

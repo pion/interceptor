@@ -32,7 +32,7 @@ func TestSenderFilterEverythingOut(t *testing.T) {
 	)
 	assert.NoError(t, err)
 
-	i, err := factory.NewInterceptor("")
+	testInterceptor, err := factory.NewInterceptor("")
 	assert.NoError(t, err)
 
 	assert.Zero(t, buf.Len())
@@ -40,7 +40,7 @@ func TestSenderFilterEverythingOut(t *testing.T) {
 	stream := test.NewMockStream(&interceptor.StreamInfo{
 		SSRC:      123456,
 		ClockRate: 90000,
-	}, i)
+	}, testInterceptor)
 	defer func() {
 		assert.NoError(t, stream.Close())
 	}()
@@ -59,7 +59,7 @@ func TestSenderFilterEverythingOut(t *testing.T) {
 	// Give time for packets to be handled and stream written to.
 	time.Sleep(50 * time.Millisecond)
 
-	err = i.Close()
+	err = testInterceptor.Close()
 	assert.NoError(t, err)
 
 	// Every packet should have been filtered out – nothing should be written.
@@ -82,7 +82,7 @@ func TestSenderFilterNothing(t *testing.T) {
 	)
 	assert.NoError(t, err)
 
-	i, err := factory.NewInterceptor("")
+	testInterceptor, err := factory.NewInterceptor("")
 	assert.NoError(t, err)
 
 	assert.EqualValues(t, 0, buf.Len())
@@ -90,7 +90,7 @@ func TestSenderFilterNothing(t *testing.T) {
 	stream := test.NewMockStream(&interceptor.StreamInfo{
 		SSRC:      123456,
 		ClockRate: 90000,
-	}, i)
+	}, testInterceptor)
 	defer func() {
 		assert.NoError(t, stream.Close())
 	}()
@@ -109,7 +109,7 @@ func TestSenderFilterNothing(t *testing.T) {
 	// Give time for packets to be handled and stream written to.
 	time.Sleep(50 * time.Millisecond)
 
-	err = i.Close()
+	err = testInterceptor.Close()
 	assert.NoError(t, err)
 
 	assert.NotZero(t, buf.Len())
@@ -133,12 +133,13 @@ func TestSenderCustomBinaryFormatter(t *testing.T) {
 			for _, ssrc := range p.DestinationSSRC() {
 				b = append(b, byte(ssrc))
 			}
+
 			return b, nil
 		}),
 	)
 	assert.NoError(t, err)
 
-	i, err := factory.NewInterceptor("")
+	testInterceptor, err := factory.NewInterceptor("")
 	assert.NoError(t, err)
 
 	assert.EqualValues(t, 0, rtpBuf.Len())
@@ -147,7 +148,7 @@ func TestSenderCustomBinaryFormatter(t *testing.T) {
 	stream := test.NewMockStream(&interceptor.StreamInfo{
 		SSRC:      123456,
 		ClockRate: 90000,
-	}, i)
+	}, testInterceptor)
 	defer func() {
 		assert.NoError(t, stream.Close())
 	}()
@@ -166,7 +167,7 @@ func TestSenderCustomBinaryFormatter(t *testing.T) {
 	// Give time for packets to be handled and stream written to.
 	time.Sleep(50 * time.Millisecond)
 
-	err = i.Close()
+	err = testInterceptor.Close()
 	assert.NoError(t, err)
 
 	// check that there is custom formatter results in buffer
@@ -182,16 +183,18 @@ func TestSenderRTCPPerPacketFilter(t *testing.T) {
 		Log(logging.NewDefaultLoggerFactory().NewLogger("test")),
 		RTCPPerPacketFilter(func(packet rtcp.Packet) bool {
 			_, isPli := packet.(*rtcp.PictureLossIndication)
+
 			return isPli
 		}),
 		RTCPBinaryFormatter(func(p rtcp.Packet, _ interceptor.Attributes) ([]byte, error) {
 			assert.IsType(t, &rtcp.PictureLossIndication{}, p)
+
 			return []byte{123}, nil
 		}),
 	)
 	assert.NoError(t, err)
 
-	i, err := factory.NewInterceptor("")
+	testInterceptor, err := factory.NewInterceptor("")
 	assert.NoError(t, err)
 
 	assert.EqualValues(t, 0, buf.Len())
@@ -199,7 +202,7 @@ func TestSenderRTCPPerPacketFilter(t *testing.T) {
 	stream := test.NewMockStream(&interceptor.StreamInfo{
 		SSRC:      123456,
 		ClockRate: 90000,
-	}, i)
+	}, testInterceptor)
 	defer func() {
 		assert.NoError(t, stream.Close())
 	}()
@@ -218,7 +221,7 @@ func TestSenderRTCPPerPacketFilter(t *testing.T) {
 	// Give time for packets to be handled and stream written to.
 	time.Sleep(50 * time.Millisecond)
 
-	err = i.Close()
+	err = testInterceptor.Close()
 	assert.NoError(t, err)
 
 	// Only single PictureLossIndication should have been written.

@@ -149,7 +149,7 @@ func TestRecorder(t *testing.T) {
 		// Add 1000 packets on 10 different streams
 		for i := 0; i < 10; i++ {
 			for j := 0; j < 100; j++ {
-				recorder.AddPacket(now, uint32(i), uint16(j), 0)
+				recorder.AddPacket(now, uint32(i), uint16(j), 0) //nolint:gosec // G115
 			}
 		}
 		reports := recorder.BuildReport(time.Time{}, 1380)

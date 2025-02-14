@@ -10,6 +10,7 @@ import (
 	"github.com/pion/interceptor"
 )
 
+//nolint:cyclop
 func TestInterceptor(t *testing.T) {
 	dummyRTPWriter := &RTPWriter{}
 	dummyRTPReader := &RTPReader{}
@@ -18,23 +19,23 @@ func TestInterceptor(t *testing.T) {
 	dummyStreamInfo := &interceptor.StreamInfo{}
 
 	t.Run("Default", func(t *testing.T) {
-		i := &Interceptor{}
+		testInterceptor := &Interceptor{}
 
-		if i.BindRTCPWriter(dummyRTCPWriter) != dummyRTCPWriter {
+		if testInterceptor.BindRTCPWriter(dummyRTCPWriter) != dummyRTCPWriter {
 			t.Error("Default BindRTCPWriter should return given writer")
 		}
-		if i.BindRTCPReader(dummyRTCPReader) != dummyRTCPReader {
+		if testInterceptor.BindRTCPReader(dummyRTCPReader) != dummyRTCPReader {
 			t.Error("Default BindRTCPReader should return given reader")
 		}
-		if i.BindLocalStream(dummyStreamInfo, dummyRTPWriter) != dummyRTPWriter {
+		if testInterceptor.BindLocalStream(dummyStreamInfo, dummyRTPWriter) != dummyRTPWriter {
 			t.Error("Default BindLocalStream should return given writer")
 		}
-		i.UnbindLocalStream(dummyStreamInfo)
-		if i.BindRemoteStream(dummyStreamInfo, dummyRTPReader) != dummyRTPReader {
+		testInterceptor.UnbindLocalStream(dummyStreamInfo)
+		if testInterceptor.BindRemoteStream(dummyStreamInfo, dummyRTPReader) != dummyRTPReader {
 			t.Error("Default BindRemoteStream should return given reader")
 		}
-		i.UnbindRemoteStream(dummyStreamInfo)
-		if i.Close() != nil {
+		testInterceptor.UnbindRemoteStream(dummyStreamInfo)
+		if testInterceptor.Close() != nil {
 			t.Error("Default Close should return nil")
 		}
 	})
@@ -48,17 +49,20 @@ func TestInterceptor(t *testing.T) {
 			cntUnbindRemoteStream uint32
 			cntClose              uint32
 		)
-		i := &Interceptor{
+		testInterceptor := &Interceptor{
 			BindRTCPReaderFn: func(reader interceptor.RTCPReader) interceptor.RTCPReader {
 				atomic.AddUint32(&cntBindRTCPReader, 1)
+
 				return reader
 			},
 			BindRTCPWriterFn: func(writer interceptor.RTCPWriter) interceptor.RTCPWriter {
 				atomic.AddUint32(&cntBindRTCPWriter, 1)
+
 				return writer
 			},
 			BindLocalStreamFn: func(_ *interceptor.StreamInfo, writer interceptor.RTPWriter) interceptor.RTPWriter {
 				atomic.AddUint32(&cntBindLocalStream, 1)
+
 				return writer
 			},
 			UnbindLocalStreamFn: func(*interceptor.StreamInfo) {
@@ -66,6 +70,7 @@ func TestInterceptor(t *testing.T) {
 			},
 			BindRemoteStreamFn: func(_ *interceptor.StreamInfo, reader interceptor.RTPReader) interceptor.RTPReader {
 				atomic.AddUint32(&cntBindRemoteStream, 1)
+
 				return reader
 			},
 			UnbindRemoteStreamFn: func(*interceptor.StreamInfo) {
@@ -73,25 +78,26 @@ func TestInterceptor(t *testing.T) {
 			},
 			CloseFn: func() error {
 				atomic.AddUint32(&cntClose, 1)
+
 				return nil
 			},
 		}
 
-		if i.BindRTCPWriter(dummyRTCPWriter) != dummyRTCPWriter {
+		if testInterceptor.BindRTCPWriter(dummyRTCPWriter) != dummyRTCPWriter {
 			t.Error("Mocked BindRTCPWriter should return given writer")
 		}
-		if i.BindRTCPReader(dummyRTCPReader) != dummyRTCPReader {
+		if testInterceptor.BindRTCPReader(dummyRTCPReader) != dummyRTCPReader {
 			t.Error("Mocked BindRTCPReader should return given reader")
 		}
-		if i.BindLocalStream(dummyStreamInfo, dummyRTPWriter) != dummyRTPWriter {
+		if testInterceptor.BindLocalStream(dummyStreamInfo, dummyRTPWriter) != dummyRTPWriter {
 			t.Error("Mocked BindLocalStream should return given writer")
 		}
-		i.UnbindLocalStream(dummyStreamInfo)
-		if i.BindRemoteStream(dummyStreamInfo, dummyRTPReader) != dummyRTPReader {
+		testInterceptor.UnbindLocalStream(dummyStreamInfo)
+		if testInterceptor.BindRemoteStream(dummyStreamInfo, dummyRTPReader) != dummyRTPReader {
 			t.Error("Mocked BindRemoteStream should return given reader")
 		}
-		i.UnbindRemoteStream(dummyStreamInfo)
-		if i.Close() != nil {
+		testInterceptor.UnbindRemoteStream(dummyStreamInfo)
+		if testInterceptor.Close() != nil {
 			t.Error("Mocked Close should return nil")
 		}
 

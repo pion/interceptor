@@ -19,6 +19,7 @@ func (t staticThreshold) compare(estimate, _ time.Duration) (usage, time.Duratio
 	if estimate < -time.Duration(t) {
 		return usageUnder, estimate, time.Duration(t)
 	}
+
 	return usageNormal, estimate, time.Duration(t)
 }
 

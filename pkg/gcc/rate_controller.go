@@ -50,7 +50,9 @@ func (a *exponentialMovingAverage) update(value float64) {
 	}
 }
 
-func newRateController(now now, initialTargetBitrate, minBitrate, maxBitrate int, dsw func(DelayStats)) *rateController {
+func newRateController(
+	now now, initialTargetBitrate, minBitrate, maxBitrate int, dsw func(DelayStats),
+) *rateController {
 	return &rateController{
 		now:                  now,
 		initialTargetBitrate: initialTargetBitrate,
@@ -87,6 +89,7 @@ func (c *rateController) onDelayStats(ds DelayStats) {
 		c.delayStats = ds
 		c.delayStats.State = stateIncrease
 		c.init = true
+
 		return
 	}
 	c.delayStats = ds
@@ -134,7 +137,8 @@ func (c *rateController) onDelayStats(ds DelayStats) {
 }
 
 func (c *rateController) increase(now time.Time) int {
-	if c.latestDecreaseRate.average > 0 && float64(c.latestReceivedRate) > c.latestDecreaseRate.average-3*c.latestDecreaseRate.stdDeviation &&
+	if c.latestDecreaseRate.average > 0 &&
+		float64(c.latestReceivedRate) > c.latestDecreaseRate.average-3*c.latestDecreaseRate.stdDeviation &&
 		float64(c.latestReceivedRate) < c.latestDecreaseRate.average+3*c.latestDecreaseRate.stdDeviation {
 		bitsPerFrame := float64(c.target) / 30.0
 		packetsPerFrame := math.Ceil(bitsPerFrame / (1200 * 8))
@@ -144,6 +148,7 @@ func (c *rateController) increase(now time.Time) int {
 		alpha := 0.5 * math.Min(float64(now.Sub(c.lastUpdate).Milliseconds())/float64(responseTime.Milliseconds()), 1.0)
 		increase := int(math.Max(1000.0, alpha*expectedPacketSizeBits))
 		c.lastUpdate = now
+
 		return int(math.Min(float64(c.target+increase), 1.5*float64(c.latestReceivedRate)))
 	}
 	eta := math.Pow(1.08, math.Min(float64(now.Sub(c.lastUpdate).Milliseconds())/1000, 1.0))
@@ -160,6 +165,7 @@ func (c *rateController) increase(now time.Time) int {
 	if rate < c.target {
 		return c.target
 	}
+
 	return rate
 }
 
@@ -167,5 +173,6 @@ func (c *rateController) decrease() int {
 	target := int(beta * float64(c.latestReceivedRate))
 	c.latestDecreaseRate.update(float64(c.latestReceivedRate))
 	c.lastUpdate = c.now()
+
 	return target
 }

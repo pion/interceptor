@@ -16,7 +16,7 @@ import (
 )
 
 // mockTWCCResponder is a RTPWriter that writes
-// TWCC feedback to a embedded SendSideBWE instantly
+// TWCC feedback to a embedded SendSideBWE instantly.
 type mockTWCCResponder struct {
 	bwe     *SendSideBWE
 	rtpChan chan []byte
@@ -25,6 +25,7 @@ type mockTWCCResponder struct {
 func (m *mockTWCCResponder) Read(out []byte, _ interceptor.Attributes) (int, interceptor.Attributes, error) {
 	pkt := <-m.rtpChan
 	copy(out, pkt)
+
 	return len(pkt), nil, nil
 }
 
@@ -33,7 +34,7 @@ func (m *mockTWCCResponder) Write(pkts []rtcp.Packet, attributes interceptor.Att
 }
 
 // mockGCCWriteStream receives RTP packets that have been paced by
-// the congestion controller
+// the congestion controller.
 type mockGCCWriteStream struct {
 	twccResponder *mockTWCCResponder
 }
@@ -45,6 +46,7 @@ func (m *mockGCCWriteStream) Write(header *rtp.Header, payload []byte, _ interce
 	}
 
 	m.twccResponder.rtpChan <- pkt
+
 	return 0, err
 }
 
@@ -60,7 +62,7 @@ func TestSendSideBWE(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, bwe)
 
-	m := &mockGCCWriteStream{
+	gccMock := &mockGCCWriteStream{
 		&mockTWCCResponder{
 			bwe,
 			make(chan []byte, 500),
@@ -71,13 +73,13 @@ func TestSendSideBWE(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, twccSender)
 
-	twccInboundRTP := twccSender.BindRemoteStream(streamInfo, m.twccResponder)
-	twccSender.BindRTCPWriter(m.twccResponder)
+	twccInboundRTP := twccSender.BindRemoteStream(streamInfo, gccMock.twccResponder)
+	twccSender.BindRTCPWriter(gccMock.twccResponder)
 
 	require.Equal(t, latestBitrate, bwe.GetTargetBitrate())
 	require.NotEqual(t, 0, len(bwe.GetStats()))
 
-	rtpWriter := bwe.AddStream(streamInfo, m)
+	rtpWriter := bwe.AddStream(streamInfo, gccMock)
 	require.NotNil(t, rtpWriter)
 
 	twccWriter := twcc.HeaderExtensionInterceptor{}
@@ -118,7 +120,7 @@ func BenchmarkSendSideBWE_WriteRTCP(b *testing.B) {
 			require.NoError(b, err)
 			require.NotNil(b, bwe)
 
-			r := twcc.NewRecorder(5000)
+			recorder := twcc.NewRecorder(5000)
 			seq := uint16(0)
 			arrivalTime := int64(0)
 
@@ -130,11 +132,11 @@ func BenchmarkSendSideBWE_WriteRTCP(b *testing.B) {
 
 					if rand.Intn(5) != 0 { //nolint:gosec
 						arrivalTime += int64(rtcp.TypeTCCDeltaScaleFactor * (rand.Intn(128) + 1)) //nolint:gosec
-						r.Record(5000, seq, arrivalTime)
+						recorder.Record(5000, seq, arrivalTime)
 					}
 				}
 
-				rtcpPackets := r.BuildFeedbackPacket()
+				rtcpPackets := recorder.BuildFeedbackPacket()
 				require.Equal(b, 1, len(rtcpPackets))
 
 				require.NoError(b, bwe.WriteRTCP(rtcpPackets, nil))

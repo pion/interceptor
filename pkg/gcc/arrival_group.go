@@ -34,5 +34,6 @@ func (g arrivalGroup) String() string {
 	s += fmt.Sprintf("\tARRIVAL:\t%v\n", int64(float64(g.arrival.UnixNano())/1e+6))
 	s += fmt.Sprintf("\tDEPARTURE:\t%v\n", int64(float64(g.departure.UnixNano())/1e+6))
 	s += fmt.Sprintf("\tPACKETS:\n%v\n", g.packets)
+
 	return s
 }

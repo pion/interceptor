@@ -9,7 +9,7 @@ import (
 	"github.com/pion/rtp"
 )
 
-// RetainablePacket is a referenced counted RTP packet
+// RetainablePacket is a referenced counted RTP packet.
 type RetainablePacket struct {
 	onRelease func(*rtp.Header, *[]byte)
 
@@ -23,17 +23,17 @@ type RetainablePacket struct {
 	sequenceNumber uint16
 }
 
-// Header returns the RTP Header of the RetainablePacket
+// Header returns the RTP Header of the RetainablePacket.
 func (p *RetainablePacket) Header() *rtp.Header {
 	return p.header
 }
 
-// Payload returns the RTP Payload of the RetainablePacket
+// Payload returns the RTP Payload of the RetainablePacket.
 func (p *RetainablePacket) Payload() []byte {
 	return p.payload
 }
 
-// Retain increases the reference count of the RetainablePacket
+// Retain increases the reference count of the RetainablePacket.
 func (p *RetainablePacket) Retain() error {
 	p.countMu.Lock()
 	defer p.countMu.Unlock()
@@ -42,10 +42,11 @@ func (p *RetainablePacket) Retain() error {
 		return errPacketReleased
 	}
 	p.count++
+
 	return nil
 }
 
-// Release decreases the reference count of the RetainablePacket and frees if needed
+// Release decreases the reference count of the RetainablePacket and frees if needed.
 func (p *RetainablePacket) Release() {
 	p.countMu.Lock()
 	defer p.countMu.Unlock()

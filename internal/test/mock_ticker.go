@@ -16,12 +16,12 @@ type MockTicker struct {
 func (t *MockTicker) Stop() {
 }
 
-// Ch returns the tickers channel
+// Ch returns the tickers channel.
 func (t *MockTicker) Ch() <-chan time.Time {
 	return t.C
 }
 
-// Tick sends now to the channel
+// Tick sends now to the channel.
 func (t *MockTicker) Tick(now time.Time) {
 	t.C <- now
 }

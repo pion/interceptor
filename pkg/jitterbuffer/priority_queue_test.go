@@ -28,13 +28,23 @@ func TestPriorityQueue(t *testing.T) {
 	})
 
 	t.Run("Appends many in order", func(*testing.T) {
-		q := NewQueue()
+		queue := NewQueue()
 		for i := 0; i < 100; i++ {
-			q.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: uint16(5012 + i), Timestamp: uint32(512 + i)}, Payload: []byte{0x02}}, uint16(5012+i))
+			//nolint:gosec // G115
+			queue.Push(
+				&rtp.Packet{
+					Header: rtp.Header{
+						SequenceNumber: uint16(5012 + i),
+						Timestamp:      uint32(512 + i),
+					},
+					Payload: []byte{0x02},
+				},
+				uint16(5012+i),
+			)
 		}
-		assert.Equal(uint16(100), q.Length())
+		assert.Equal(uint16(100), queue.Length())
 		last := (*node)(nil)
-		cur := q.next
+		cur := queue.next
 		for cur != nil {
 			last = cur
 			cur = cur.next
@@ -42,66 +52,102 @@ func TestPriorityQueue(t *testing.T) {
 				assert.Equal(cur.priority, last.priority+1)
 			}
 		}
-		assert.Equal(q.next.priority, uint16(5012))
+		assert.Equal(queue.next.priority, uint16(5012))
 		assert.Equal(last.priority, uint16(5012+99))
 	})
 
 	t.Run("Can remove an element", func(*testing.T) {
 		pkt := &rtp.Packet{Header: rtp.Header{SequenceNumber: 5000, Timestamp: 500}, Payload: []byte{0x02}}
-		q := NewQueue()
-		q.Push(pkt, pkt.SequenceNumber)
+		queue := NewQueue()
+		queue.Push(pkt, pkt.SequenceNumber)
 		pkt2 := &rtp.Packet{Header: rtp.Header{SequenceNumber: 5004, Timestamp: 500}, Payload: []byte{0x02}}
-		q.Push(pkt2, pkt2.SequenceNumber)
+		queue.Push(pkt2, pkt2.SequenceNumber)
 		for i := 0; i < 100; i++ {
-			q.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: uint16(5012 + i), Timestamp: uint32(512 + i)}, Payload: []byte{0x02}}, uint16(5012+i))
+			//nolint:gosec // G115
+			queue.Push(
+				&rtp.Packet{
+					Header:  rtp.Header{SequenceNumber: uint16(5012 + i), Timestamp: uint32(512 + i)},
+					Payload: []byte{0x02},
+				},
+				uint16(5012+i),
+			)
 		}
-		popped, _ := q.Pop()
+		popped, _ := queue.Pop()
 		assert.Equal(popped.SequenceNumber, uint16(5000))
-		_, _ = q.Pop()
-		nextPop, _ := q.Pop()
+		_, _ = queue.Pop()
+		nextPop, _ := queue.Pop()
 		assert.Equal(nextPop.SequenceNumber, uint16(5012))
 	})
 
 	t.Run("Appends in order", func(*testing.T) {
-		q := NewQueue()
+		queue := NewQueue()
 		for i := 0; i < 100; i++ {
-			q.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: uint16(5012 + i), Timestamp: uint32(512 + i)}, Payload: []byte{0x02}}, uint16(5012+i))
+			queue.Push(
+				&rtp.Packet{
+					Header: rtp.Header{
+						SequenceNumber: uint16(5012 + i), //nolint:gosec // G115
+						Timestamp:      uint32(512 + i),  //nolint:gosec // G115
+					},
+					Payload: []byte{0x02},
+				},
+				uint16(5012+i), //nolint:gosec // G115
+			)
 		}
-		assert.Equal(uint16(100), q.Length())
+		assert.Equal(uint16(100), queue.Length())
 		pkt := &rtp.Packet{Header: rtp.Header{SequenceNumber: 5000, Timestamp: 500}, Payload: []byte{0x02}}
-		q.Push(pkt, pkt.SequenceNumber)
-		assert.Equal(pkt, q.next.val)
-		assert.Equal(uint16(101), q.Length())
-		assert.Equal(q.next.priority, uint16(5000))
+		queue.Push(pkt, pkt.SequenceNumber)
+		assert.Equal(pkt, queue.next.val)
+		assert.Equal(uint16(101), queue.Length())
+		assert.Equal(queue.next.priority, uint16(5000))
 	})
 
 	t.Run("Can find", func(*testing.T) {
-		q := NewQueue()
+		queue := NewQueue()
 		for i := 0; i < 100; i++ {
-			q.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: uint16(5012 + i), Timestamp: uint32(512 + i)}, Payload: []byte{0x02}}, uint16(5012+i))
+			//nolint:gosec // G115
+			queue.Push(
+				&rtp.Packet{
+					Header: rtp.Header{
+						SequenceNumber: uint16(5012 + i),
+						Timestamp:      uint32(512 + i),
+					},
+					Payload: []byte{0x02},
+				},
+				uint16(5012+i),
+			)
 		}
-		pkt, err := q.Find(5012)
+		pkt, err := queue.Find(5012)
 		assert.Equal(pkt.SequenceNumber, uint16(5012))
 		assert.Equal(err, nil)
 	})
 
 	t.Run("Updates the length when PopAt* are called", func(*testing.T) {
 		pkt := &rtp.Packet{Header: rtp.Header{SequenceNumber: 5000, Timestamp: 500}, Payload: []byte{0x02}}
-		q := NewQueue()
-		q.Push(pkt, pkt.SequenceNumber)
+		queue := NewQueue()
+		queue.Push(pkt, pkt.SequenceNumber)
 		pkt2 := &rtp.Packet{Header: rtp.Header{SequenceNumber: 5004, Timestamp: 500}, Payload: []byte{0x02}}
-		q.Push(pkt2, pkt2.SequenceNumber)
+		queue.Push(pkt2, pkt2.SequenceNumber)
 		for i := 0; i < 100; i++ {
-			q.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: uint16(5012 + i), Timestamp: uint32(512 + i)}, Payload: []byte{0x02}}, uint16(5012+i))
+			//nolint:gosec // G115
+			queue.Push(
+				&rtp.Packet{
+					Header: rtp.Header{
+						SequenceNumber: uint16(5012 + i),
+						Timestamp:      uint32(512 + i),
+					},
+					Payload: []byte{0x02},
+				},
+				uint16(5012+i),
+			)
 		}
-		assert.Equal(uint16(102), q.Length())
-		popped, _ := q.PopAt(uint16(5012))
+		assert.Equal(uint16(102), queue.Length())
+		popped, _ := queue.PopAt(uint16(5012))
 		assert.Equal(popped.SequenceNumber, uint16(5012))
-		assert.Equal(uint16(101), q.Length())
+		assert.Equal(uint16(101), queue.Length())
 
-		popped, err := q.PopAtTimestamp(uint32(500))
+		popped, err := queue.PopAtTimestamp(uint32(500))
 		assert.Equal(popped.SequenceNumber, uint16(5000))
-		assert.Equal(uint16(100), q.Length())
+		assert.Equal(uint16(100), queue.Length())
 		assert.Equal(err, nil)
 	})
 }
@@ -151,11 +197,11 @@ func TestPriorityQueue_Unreference(t *testing.T) {
 	numPkts := 100
 	for i := 0; i < numPkts; i++ {
 		atomic.AddInt64(&refs, 1)
-		seq := uint16(i)
+		seq := uint16(i) //nolint:gosec // G115
 		p := rtp.Packet{
 			Header: rtp.Header{
 				SequenceNumber: seq,
-				Timestamp:      uint32(i + 42),
+				Timestamp:      uint32(i + 42), //nolint:gosec // G115
 			},
 			Payload: []byte{byte(i)},
 		}

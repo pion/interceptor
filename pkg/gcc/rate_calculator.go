@@ -38,6 +38,7 @@ func (c *rateCalculator) run(in <-chan []cc.Acknowledgment, onRateUpdate func(in
 				// which is by definition in the window that ends with the last
 				// arrival time
 				onRateUpdate(next.Size * 8)
+
 				continue
 			}
 
@@ -53,6 +54,7 @@ func (c *rateCalculator) run(in <-chan []cc.Acknowledgment, onRateUpdate func(in
 			history = history[del:]
 			if len(history) == 0 {
 				onRateUpdate(0)
+
 				continue
 			}
 			dt := next.Arrival.Sub(history[0].Arrival)

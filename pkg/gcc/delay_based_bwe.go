@@ -12,7 +12,7 @@ import (
 )
 
 // DelayStats contains some internal statistics of the delay based congestion
-// controller
+// controller.
 type DelayStats struct {
 	Measurement      time.Duration
 	Estimate         time.Duration
@@ -47,7 +47,7 @@ type delayControllerConfig struct {
 	maxBitrate     int
 }
 
-func newDelayController(c delayControllerConfig) *delayController {
+func newDelayController(delayConfig delayControllerConfig) *delayController {
 	ackPipe := make(chan []cc.Acknowledgment)
 	ackRatePipe := make(chan []cc.Acknowledgment)
 
@@ -61,12 +61,15 @@ func newDelayController(c delayControllerConfig) *delayController {
 		log:                     logging.NewDefaultLoggerFactory().NewLogger("gcc_delay_controller"),
 	}
 
-	rateController := newRateController(c.nowFn, c.initialBitrate, c.minBitrate, c.maxBitrate, func(ds DelayStats) {
-		delayController.log.Infof("delaystats: %v", ds)
-		if delayController.onUpdateCallback != nil {
-			delayController.onUpdateCallback(ds)
-		}
-	})
+	rateController := newRateController(
+		delayConfig.nowFn, delayConfig.initialBitrate, delayConfig.minBitrate, delayConfig.maxBitrate,
+		func(ds DelayStats) {
+			delayController.log.Infof("delaystats: %v", ds)
+			if delayController.onUpdateCallback != nil {
+				delayController.onUpdateCallback(ds)
+			}
+		},
+	)
 	delayController.rateController = rateController
 	overuseDetector := newOveruseDetector(newAdaptiveThreshold(), 10*time.Millisecond, rateController.onDelayStats)
 	slopeEstimator := newSlopeEstimator(newKalman(), overuseDetector.onDelayStats)

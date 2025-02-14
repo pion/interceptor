@@ -31,6 +31,7 @@ func (a *arrivalGroupAccumulator) run(in <-chan []cc.Acknowledgment, agWriter fu
 			if !init {
 				group = newArrivalGroup(next)
 				init = true
+
 				continue
 			}
 			if next.Arrival.Before(group.arrival) {
@@ -42,6 +43,7 @@ func (a *arrivalGroupAccumulator) run(in <-chan []cc.Acknowledgment, agWriter fu
 				// constitute a group.
 				if interDepartureTimePkt(group, next) <= a.interDepartureThreshold {
 					group.add(next)
+
 					continue
 				}
 
@@ -51,6 +53,7 @@ func (a *arrivalGroupAccumulator) run(in <-chan []cc.Acknowledgment, agWriter fu
 				if interArrivalTimePkt(group, next) <= a.interArrivalThreshold &&
 					interGroupDelayVariationPkt(group, next) < a.interGroupDelayVariationTreshold {
 					group.add(next)
+
 					continue
 				}
 
@@ -69,6 +72,7 @@ func interDepartureTimePkt(group arrivalGroup, ack cc.Acknowledgment) time.Durat
 	if len(group.packets) == 0 {
 		return 0
 	}
+
 	return ack.Departure.Sub(group.departure)
 }
 

@@ -25,6 +25,7 @@ func newReceiveLog(size uint16) (*receiveLog, error) {
 	for i := 6; i < 16; i++ {
 		if size == 1<<i {
 			correctSize = true
+
 			break
 		}
 		allowedSizes = append(allowedSizes, 1<<i)
@@ -49,6 +50,7 @@ func (s *receiveLog) add(seq uint16) {
 		s.end = seq
 		s.started = true
 		s.lastConsecutive = seq
+
 		return
 	}
 
@@ -127,6 +129,7 @@ func (s *receiveLog) delReceived(seq uint16) {
 
 func (s *receiveLog) getReceived(seq uint16) bool {
 	pos := seq % s.size
+
 	return (s.packets[pos/64] & (1 << (pos % 64))) != 0
 }
 

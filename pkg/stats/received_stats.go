@@ -8,22 +8,23 @@ import (
 	"time"
 )
 
-// ReceivedRTPStreamStats contains common receiver stats of RTP streams
+// ReceivedRTPStreamStats contains common receiver stats of RTP streams.
 type ReceivedRTPStreamStats struct {
 	PacketsReceived uint64
 	PacketsLost     int64
 	Jitter          float64
 }
 
-// String returns a string representation of ReceivedRTPStreamStats
+// String returns a string representation of ReceivedRTPStreamStats.
 func (s ReceivedRTPStreamStats) String() string {
 	out := fmt.Sprintf("\tPacketsReceived: %v\n", s.PacketsReceived)
 	out += fmt.Sprintf("\tPacketsLost: %v\n", s.PacketsLost)
 	out += fmt.Sprintf("\tJitter: %v\n", s.Jitter)
+
 	return out
 }
 
-// InboundRTPStreamStats contains stats of inbound RTP streams
+// InboundRTPStreamStats contains stats of inbound RTP streams.
 type InboundRTPStreamStats struct {
 	ReceivedRTPStreamStats
 
@@ -35,7 +36,7 @@ type InboundRTPStreamStats struct {
 	NACKCount                   uint32
 }
 
-// String returns a string representation of InboundRTPStreamStats
+// String returns a string representation of InboundRTPStreamStats.
 func (s InboundRTPStreamStats) String() string {
 	out := "InboundRTPStreamStats:\n"
 	out += s.ReceivedRTPStreamStats.String()
@@ -45,11 +46,12 @@ func (s InboundRTPStreamStats) String() string {
 	out += fmt.Sprintf("\tFIRCount: %v\n", s.FIRCount)
 	out += fmt.Sprintf("\tPLICount: %v\n", s.PLICount)
 	out += fmt.Sprintf("\tNACKCount: %v\n", s.NACKCount)
+
 	return out
 }
 
 // RemoteInboundRTPStreamStats contains stats of inbound RTP streams of the
-// remote peer
+// remote peer.
 type RemoteInboundRTPStreamStats struct {
 	ReceivedRTPStreamStats
 
@@ -59,7 +61,7 @@ type RemoteInboundRTPStreamStats struct {
 	RoundTripTimeMeasurements uint64
 }
 
-// String returns a string representation of RemoteInboundRTPStreamStats
+// String returns a string representation of RemoteInboundRTPStreamStats.
 func (s RemoteInboundRTPStreamStats) String() string {
 	out := "RemoteInboundRTPStreamStats:\n"
 	out += s.ReceivedRTPStreamStats.String()
@@ -67,5 +69,6 @@ func (s RemoteInboundRTPStreamStats) String() string {
 	out += fmt.Sprintf("\tTotalRoundTripTime: %v\n", s.TotalRoundTripTime)
 	out += fmt.Sprintf("\tFractionLost: %v\n", s.FractionLost)
 	out += fmt.Sprintf("\tRoundTripTimeMeasurements: %v\n", s.RoundTripTimeMeasurements)
+
 	return out
 }

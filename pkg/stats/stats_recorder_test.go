@@ -18,17 +18,22 @@ import (
 )
 
 func mustMarshalRTP(t *testing.T, pkt rtp.Packet) []byte {
+	t.Helper()
 	buf, err := pkt.Marshal()
 	assert.NoError(t, err)
+
 	return buf
 }
 
 func mustMarshalRTCPs(t *testing.T, pkt rtcp.Packet) []byte {
+	t.Helper()
 	buf, err := pkt.Marshal()
 	assert.NoError(t, err)
+
 	return buf
 }
 
+//nolint:maintidx
 func TestStatsRecorder(t *testing.T) {
 	cname := &rtcp.SourceDescription{
 		Chunks: []rtcp.SourceDescriptionChunk{{
@@ -228,7 +233,8 @@ func TestStatsRecorder(t *testing.T) {
 							&rtcp.ReceiverReport{
 								SSRC: 0,
 								Reports: []rtcp.ReceptionReport{{
-									SSRC:             0,
+									SSRC: 0,
+									//nolint:gosec // G115
 									LastSenderReport: uint32((ntp.ToNTP(now) & 0x0000FFFFFFFF0000) >> 16),
 									Delay:            1 * 65536.0,
 								}},
@@ -303,7 +309,8 @@ func TestStatsRecorder(t *testing.T) {
 									&rtcp.DLRRReportBlock{
 										Reports: []rtcp.DLRRReport{
 											{
-												SSRC:   0,
+												SSRC: 0,
+												//nolint:gosec // G115
 												LastRR: uint32((ntp.ToNTP(now) >> 16) & 0xFFFFFFFF),
 												DLRR:   1 * 65536.0,
 											},
@@ -785,30 +792,30 @@ func TestStatsRecorder(t *testing.T) {
 		},
 	} {
 		t.Run(fmt.Sprintf("%v:%v", i, cc.name), func(t *testing.T) {
-			r := newRecorder(0, 90_000)
+			recorder := newRecorder(0, 90_000)
 
-			r.Start()
+			recorder.Start()
 
 			for _, record := range cc.records {
 				switch v := record.content.(type) {
 				case incomingRTP:
-					r.QueueIncomingRTP(record.ts, mustMarshalRTP(t, rtp.Packet{Header: v.header}), v.attr)
+					recorder.QueueIncomingRTP(record.ts, mustMarshalRTP(t, rtp.Packet{Header: v.header}), v.attr)
 				case incomingRTCP:
 					pkts := make(rtcp.CompoundPacket, len(v.pkts))
 					copy(pkts, v.pkts)
-					r.QueueIncomingRTCP(record.ts, mustMarshalRTCPs(t, &pkts), v.attr)
+					recorder.QueueIncomingRTCP(record.ts, mustMarshalRTCPs(t, &pkts), v.attr)
 				case outgoingRTP:
-					r.QueueOutgoingRTP(record.ts, &v.header, []byte{}, v.attr)
+					recorder.QueueOutgoingRTP(record.ts, &v.header, []byte{}, v.attr)
 				case outgoingRTCP:
-					r.QueueOutgoingRTCP(record.ts, v.pkts, v.attr)
+					recorder.QueueOutgoingRTCP(record.ts, v.pkts, v.attr)
 				default:
 					assert.FailNow(t, "invalid test case")
 				}
 			}
 
-			s := r.GetStats()
+			s := recorder.GetStats()
 
-			r.Stop()
+			recorder.Stop()
 
 			assert.Equal(t, cc.expectedInboundRTPStreamStats, s.InboundRTPStreamStats)
 			assert.Equal(t, cc.expectedOutboundRTPStreamStats, s.OutboundRTPStreamStats)
@@ -819,7 +826,7 @@ func TestStatsRecorder(t *testing.T) {
 }
 
 func TestStatsRecorder_DLRR_Precision(t *testing.T) {
-	r := newRecorder(0, 90_000)
+	recorder := newRecorder(0, 90_000)
 
 	report := &rtcp.ExtendedReport{
 		Reports: []rtcp.ReportBlock{
@@ -835,7 +842,7 @@ func TestStatsRecorder_DLRR_Precision(t *testing.T) {
 		},
 	}
 
-	s := r.recordIncomingXR(internalStats{
+	s := recorder.recordIncomingXR(internalStats{
 		lastReceiverReferenceTimes: []uint64{50000000},
 	}, report, time.Time{})
 
@@ -863,7 +870,7 @@ func TestGetStatsNotBlocking(t *testing.T) {
 }
 
 func TestQueueNotBlocking(t *testing.T) {
-	for _, i := range []struct {
+	for _, testCase := range []struct {
 		f    func(r *recorder)
 		name string
 	}{
@@ -892,7 +899,7 @@ func TestQueueNotBlocking(t *testing.T) {
 			name: "QueueOutgoingRTCP",
 		},
 	} {
-		t.Run(i.name+"NotBlocking", func(t *testing.T) {
+		t.Run(testCase.name+"NotBlocking", func(t *testing.T) {
 			r := newRecorder(0, 90_000)
 
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -901,7 +908,7 @@ func TestQueueNotBlocking(t *testing.T) {
 			go func() {
 				defer cancel()
 				r.Start()
-				i.f(r)
+				testCase.f(r)
 			}()
 			go r.Stop()
 

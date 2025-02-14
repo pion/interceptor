@@ -426,6 +426,8 @@ func TestUnpackStatusVectorChunk(t *testing.T) {
 }
 
 func getPacketWithTransportCCExt(t *testing.T, sequenceNumber uint16) *rtp.Packet {
+	t.Helper()
+
 	pkt := rtp.Packet{
 		Header:  rtp.Header{},
 		Payload: []byte{},
@@ -436,9 +438,11 @@ func getPacketWithTransportCCExt(t *testing.T, sequenceNumber uint16) *rtp.Packe
 	b, err := ext.Marshal()
 	assert.NoError(t, err)
 	assert.NoError(t, pkt.SetExtension(hdrExtID, b))
+
 	return &pkt
 }
 
+//nolint:maintidx,cyclop
 func TestFeedbackAdapterTWCC(t *testing.T) {
 	t.Run("empty", func(t *testing.T) {
 		adapter := NewFeedbackAdapter()
@@ -454,7 +458,10 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		for i := uint16(0); i < 22; i++ {
 			pkt := getPacketWithTransportCCExt(t, i)
 			headers = append(headers, pkt.Header)
-			assert.NoError(t, adapter.OnSent(t0, &pkt.Header, 1200, interceptor.Attributes{TwccExtensionAttributesKey: hdrExtID}))
+			assert.NoError(
+				t,
+				adapter.OnSent(t0, &pkt.Header, 1200, interceptor.Attributes{TwccExtensionAttributesKey: hdrExtID}),
+			)
 		}
 		results, err := adapter.OnTransportCCFeedback(t0, &rtcp.TransportLayerCC{
 			Header:             rtcp.Header{},
@@ -621,8 +628,14 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		adapter := NewFeedbackAdapter()
 		pkt65535 := getPacketWithTransportCCExt(t, 65535)
 		pkt0 := getPacketWithTransportCCExt(t, 0)
-		assert.NoError(t, adapter.OnSent(t0, &pkt65535.Header, 1200, interceptor.Attributes{TwccExtensionAttributesKey: hdrExtID}))
-		assert.NoError(t, adapter.OnSent(t0, &pkt0.Header, 1200, interceptor.Attributes{TwccExtensionAttributesKey: hdrExtID}))
+		assert.NoError(
+			t,
+			adapter.OnSent(t0, &pkt65535.Header, 1200, interceptor.Attributes{TwccExtensionAttributesKey: hdrExtID}),
+		)
+		assert.NoError(
+			t,
+			adapter.OnSent(t0, &pkt0.Header, 1200, interceptor.Attributes{TwccExtensionAttributesKey: hdrExtID}),
+		)
 
 		results, err := adapter.OnTransportCCFeedback(t0, &rtcp.TransportLayerCC{
 			Header:             rtcp.Header{},
@@ -684,7 +697,10 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		for i := uint16(0); i < 8; i++ {
 			pkt := getPacketWithTransportCCExt(t, i)
 			headers = append(headers, pkt.Header)
-			assert.NoError(t, adapter.OnSent(t0, &pkt.Header, 1200, interceptor.Attributes{TwccExtensionAttributesKey: hdrExtID}))
+			assert.NoError(
+				t,
+				adapter.OnSent(t0, &pkt.Header, 1200, interceptor.Attributes{TwccExtensionAttributesKey: hdrExtID}),
+			)
 		}
 
 		results, err := adapter.OnTransportCCFeedback(t0, &rtcp.TransportLayerCC{
@@ -751,7 +767,10 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		t0 := time.Time{}
 		for i := uint16(0); i < 20; i++ {
 			pkt := getPacketWithTransportCCExt(t, i)
-			assert.NoError(t, adapter.OnSent(t0, &pkt.Header, 1200, interceptor.Attributes{TwccExtensionAttributesKey: hdrExtID}))
+			assert.NoError(
+				t,
+				adapter.OnSent(t0, &pkt.Header, 1200, interceptor.Attributes{TwccExtensionAttributesKey: hdrExtID}),
+			)
 		}
 		packets, err := adapter.OnTransportCCFeedback(t0, &rtcp.TransportLayerCC{
 			Header:             rtcp.Header{},
@@ -792,7 +811,10 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		t0 := time.Time{}
 		for i := uint16(0); i < 20; i++ {
 			pkt := getPacketWithTransportCCExt(t, i)
-			assert.NoError(t, adapter.OnSent(t0, &pkt.Header, 1200, interceptor.Attributes{TwccExtensionAttributesKey: hdrExtID}))
+			assert.NoError(
+				t,
+				adapter.OnSent(t0, &pkt.Header, 1200, interceptor.Attributes{TwccExtensionAttributesKey: hdrExtID}),
+			)
 		}
 		packets, err := adapter.OnTransportCCFeedback(t0, &rtcp.TransportLayerCC{
 			Header:             rtcp.Header{},
@@ -849,7 +871,10 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		t0 := time.Time{}
 		for i := uint16(0); i < 20; i++ {
 			pkt := getPacketWithTransportCCExt(t, i)
-			assert.NoError(t, adapter.OnSent(t0, &pkt.Header, 1200, interceptor.Attributes{TwccExtensionAttributesKey: hdrExtID}))
+			assert.NoError(
+				t,
+				adapter.OnSent(t0, &pkt.Header, 1200, interceptor.Attributes{TwccExtensionAttributesKey: hdrExtID}),
+			)
 		}
 
 		//nolint:dupl
@@ -916,7 +941,10 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		t0 := time.Time{}
 		for i := uint16(1008); i < 1030; i++ {
 			pkt := getPacketWithTransportCCExt(t, i)
-			assert.NoError(t, adapter.OnSent(t0, &pkt.Header, 1200, interceptor.Attributes{TwccExtensionAttributesKey: hdrExtID}))
+			assert.NoError(
+				t,
+				adapter.OnSent(t0, &pkt.Header, 1200, interceptor.Attributes{TwccExtensionAttributesKey: hdrExtID}),
+			)
 		}
 
 		//nolint:dupl

@@ -25,5 +25,6 @@ func (t *MockTime) SetNow(n time.Time) {
 func (t *MockTime) Now() time.Time {
 	t.m.RLock()
 	defer t.m.RUnlock()
+
 	return t.curNow
 }

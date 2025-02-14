@@ -13,10 +13,11 @@ const (
 	stateHold
 )
 
-func (s state) transition(u usage) state {
+//nolint:cyclop
+func (s state) transition(use usage) state {
 	switch s {
 	case stateHold:
-		switch u {
+		switch use {
 		case usageOver:
 			return stateDecrease
 		case usageNormal:
@@ -26,7 +27,7 @@ func (s state) transition(u usage) state {
 		}
 
 	case stateIncrease:
-		switch u {
+		switch use {
 		case usageOver:
 			return stateDecrease
 		case usageNormal:
@@ -36,7 +37,7 @@ func (s state) transition(u usage) state {
 		}
 
 	case stateDecrease:
-		switch u {
+		switch use {
 		case usageOver:
 			return stateDecrease
 		case usageNormal:
@@ -45,6 +46,7 @@ func (s state) transition(u usage) state {
 			return stateHold
 		}
 	}
+
 	return stateIncrease
 }
 

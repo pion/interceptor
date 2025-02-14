@@ -12,12 +12,12 @@ import (
 	"github.com/pion/rtcp"
 )
 
-// ReceiverInterceptorFactory is a interceptor.Factory for a ReceiverInterceptor
+// ReceiverInterceptorFactory is a interceptor.Factory for a ReceiverInterceptor.
 type ReceiverInterceptorFactory struct {
 	opts []GeneratorOption
 }
 
-// NewReceiverInterceptor returns a new ReceiverInterceptor
+// NewReceiverInterceptor returns a new ReceiverInterceptor.
 func NewReceiverInterceptor(opts ...GeneratorOption) (*ReceiverInterceptorFactory, error) {
 	return &ReceiverInterceptorFactory{
 		opts: opts,
@@ -47,7 +47,7 @@ type GeneratorInterceptor struct {
 
 // NewGeneratorInterceptor returns a new GeneratorInterceptor interceptor.
 func NewGeneratorInterceptor(opts ...GeneratorOption) (*GeneratorInterceptor, error) {
-	r := &GeneratorInterceptor{
+	generatorInterceptor := &GeneratorInterceptor{
 		interval:           3 * time.Second,
 		log:                logging.NewDefaultLoggerFactory().NewLogger("pli_generator"),
 		immediatePLINeeded: make(chan []uint32, 1),
@@ -55,12 +55,12 @@ func NewGeneratorInterceptor(opts ...GeneratorOption) (*GeneratorInterceptor, er
 	}
 
 	for _, opt := range opts {
-		if err := opt(r); err != nil {
+		if err := opt(generatorInterceptor); err != nil {
 			return nil, err
 		}
 	}
 
-	return r, nil
+	return generatorInterceptor, nil
 }
 
 func (r *GeneratorInterceptor) isClosed() bool {
@@ -128,6 +128,7 @@ func (r *GeneratorInterceptor) loop(rtcpWriter interceptor.RTCPWriter) {
 				}
 
 				ssrcs = append(ssrcs, key)
+
 				return true
 			})
 
@@ -142,6 +143,7 @@ func (r *GeneratorInterceptor) loop(rtcpWriter interceptor.RTCPWriter) {
 func (r *GeneratorInterceptor) createLoopTicker() (*time.Ticker, <-chan time.Time) {
 	if r.interval > 0 {
 		ticker := time.NewTicker(r.interval)
+
 		return ticker, ticker.C
 	}
 
@@ -164,9 +166,12 @@ func (r *GeneratorInterceptor) writePLIs(rtcpWriter interceptor.RTCPWriter, ssrc
 	}
 }
 
-// BindRemoteStream lets you modify any incoming RTP packets. It is called once for per RemoteStream. The returned method
+// BindRemoteStream lets you modify any incoming RTP packets.
+// It is called once for per RemoteStream. The returned method
 // will be called once per rtp packet.
-func (r *GeneratorInterceptor) BindRemoteStream(info *interceptor.StreamInfo, reader interceptor.RTPReader) interceptor.RTPReader {
+func (r *GeneratorInterceptor) BindRemoteStream(
+	info *interceptor.StreamInfo, reader interceptor.RTPReader,
+) interceptor.RTPReader {
 	if !streamSupportPli(info) {
 		return reader
 	}

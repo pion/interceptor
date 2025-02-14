@@ -64,7 +64,8 @@ func TestGeneratorInterceptor(t *testing.T) {
 		assert.True(t, ok, "TransportLayerNack rtcp packet expected, found: %T", pkts[0])
 
 		assert.Equal(t, uint16(13), p.Nacks[0].PacketID)
-		assert.Equal(t, rtcp.PacketBitmap(0b10), p.Nacks[0].LostPackets) // we want packets: 13, 15 (not packet 17, because skipLastN is setReceived to 2)
+		// we want packets: 13, 15 (not packet 17, because skipLastN is setReceived to 2)
+		assert.Equal(t, rtcp.PacketBitmap(0b10), p.Nacks[0].LostPackets)
 	case <-time.After(10 * time.Millisecond):
 		t.Fatal("written rtcp packet not found")
 	}
@@ -90,13 +91,13 @@ func TestGeneratorInterceptor_StreamFilter(t *testing.T) {
 	)
 	assert.NoError(t, err)
 
-	i, err := f.NewInterceptor("")
+	testInterceptor, err := f.NewInterceptor("")
 	assert.NoError(t, err)
 
 	streamWithoutNacks := test.NewMockStream(&interceptor.StreamInfo{
 		SSRC:         1,
 		RTCPFeedback: []interceptor.RTCPFeedback{{Type: "nack"}},
-	}, i)
+	}, testInterceptor)
 	defer func() {
 		assert.NoError(t, streamWithoutNacks.Close())
 	}()
@@ -104,7 +105,7 @@ func TestGeneratorInterceptor_StreamFilter(t *testing.T) {
 	streamWithNacks := test.NewMockStream(&interceptor.StreamInfo{
 		SSRC:         2,
 		RTCPFeedback: []interceptor.RTCPFeedback{{Type: "nack"}},
-	}, i)
+	}, testInterceptor)
 	defer func() {
 		assert.NoError(t, streamWithNacks.Close())
 	}()

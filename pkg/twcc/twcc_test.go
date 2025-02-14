@@ -12,6 +12,8 @@ import (
 )
 
 func rtcpToTwcc(t *testing.T, in []rtcp.Packet) []*rtcp.TransportLayerCC {
+	t.Helper()
+
 	out := make([]*rtcp.TransportLayerCC, len(in))
 	var ok bool
 	for i, pkt := range in {
@@ -25,20 +27,20 @@ func rtcpToTwcc(t *testing.T, in []rtcp.Packet) []*rtcp.TransportLayerCC {
 
 func Test_chunk_add(t *testing.T) {
 	t.Run("fill with not received", func(t *testing.T) {
-		c := &chunk{}
+		testChunk := &chunk{}
 
 		for i := 0; i < maxRunLengthCap; i++ {
-			assert.True(t, c.canAdd(rtcp.TypeTCCPacketNotReceived), i)
-			c.add(rtcp.TypeTCCPacketNotReceived)
+			assert.True(t, testChunk.canAdd(rtcp.TypeTCCPacketNotReceived), i)
+			testChunk.add(rtcp.TypeTCCPacketNotReceived)
 		}
-		assert.Equal(t, make([]uint16, maxRunLengthCap), c.deltas)
-		assert.False(t, c.hasDifferentTypes)
+		assert.Equal(t, make([]uint16, maxRunLengthCap), testChunk.deltas)
+		assert.False(t, testChunk.hasDifferentTypes)
 
-		assert.False(t, c.canAdd(rtcp.TypeTCCPacketNotReceived))
-		assert.False(t, c.canAdd(rtcp.TypeTCCPacketReceivedSmallDelta))
-		assert.False(t, c.canAdd(rtcp.TypeTCCPacketReceivedLargeDelta))
+		assert.False(t, testChunk.canAdd(rtcp.TypeTCCPacketNotReceived))
+		assert.False(t, testChunk.canAdd(rtcp.TypeTCCPacketReceivedSmallDelta))
+		assert.False(t, testChunk.canAdd(rtcp.TypeTCCPacketReceivedLargeDelta))
 
-		statusChunk := c.encode()
+		statusChunk := testChunk.encode()
 		assert.IsType(t, &rtcp.RunLengthChunk{}, statusChunk)
 
 		buf, err := statusChunk.Marshal()
@@ -47,20 +49,20 @@ func Test_chunk_add(t *testing.T) {
 	})
 
 	t.Run("fill with small delta", func(t *testing.T) {
-		c := &chunk{}
+		testChunk := &chunk{}
 
 		for i := 0; i < maxOneBitCap; i++ {
-			assert.True(t, c.canAdd(rtcp.TypeTCCPacketReceivedSmallDelta), i)
-			c.add(rtcp.TypeTCCPacketReceivedSmallDelta)
+			assert.True(t, testChunk.canAdd(rtcp.TypeTCCPacketReceivedSmallDelta), i)
+			testChunk.add(rtcp.TypeTCCPacketReceivedSmallDelta)
 		}
 
-		assert.Equal(t, c.deltas, []uint16{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1})
-		assert.False(t, c.hasDifferentTypes)
+		assert.Equal(t, testChunk.deltas, []uint16{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1})
+		assert.False(t, testChunk.hasDifferentTypes)
 
-		assert.False(t, c.canAdd(rtcp.TypeTCCPacketReceivedLargeDelta))
-		assert.False(t, c.canAdd(rtcp.TypeTCCPacketNotReceived))
+		assert.False(t, testChunk.canAdd(rtcp.TypeTCCPacketReceivedLargeDelta))
+		assert.False(t, testChunk.canAdd(rtcp.TypeTCCPacketNotReceived))
 
-		statusChunk := c.encode()
+		statusChunk := testChunk.encode()
 		assert.IsType(t, &rtcp.RunLengthChunk{}, statusChunk)
 
 		buf, err := statusChunk.Marshal()
@@ -69,21 +71,21 @@ func Test_chunk_add(t *testing.T) {
 	})
 
 	t.Run("fill with large delta", func(t *testing.T) {
-		c := &chunk{}
+		testChunk := &chunk{}
 
 		for i := 0; i < maxTwoBitCap; i++ {
-			assert.True(t, c.canAdd(rtcp.TypeTCCPacketReceivedLargeDelta), i)
-			c.add(rtcp.TypeTCCPacketReceivedLargeDelta)
+			assert.True(t, testChunk.canAdd(rtcp.TypeTCCPacketReceivedLargeDelta), i)
+			testChunk.add(rtcp.TypeTCCPacketReceivedLargeDelta)
 		}
 
-		assert.Equal(t, c.deltas, []uint16{2, 2, 2, 2, 2, 2, 2})
-		assert.True(t, c.hasLargeDelta)
-		assert.False(t, c.hasDifferentTypes)
+		assert.Equal(t, testChunk.deltas, []uint16{2, 2, 2, 2, 2, 2, 2})
+		assert.True(t, testChunk.hasLargeDelta)
+		assert.False(t, testChunk.hasDifferentTypes)
 
-		assert.False(t, c.canAdd(rtcp.TypeTCCPacketReceivedSmallDelta))
-		assert.False(t, c.canAdd(rtcp.TypeTCCPacketNotReceived))
+		assert.False(t, testChunk.canAdd(rtcp.TypeTCCPacketReceivedSmallDelta))
+		assert.False(t, testChunk.canAdd(rtcp.TypeTCCPacketNotReceived))
 
-		statusChunk := c.encode()
+		statusChunk := testChunk.encode()
 		assert.IsType(t, &rtcp.RunLengthChunk{}, statusChunk)
 
 		buf, err := statusChunk.Marshal()
@@ -92,27 +94,27 @@ func Test_chunk_add(t *testing.T) {
 	})
 
 	t.Run("fill with different types", func(t *testing.T) {
-		c := &chunk{}
+		testChunk := &chunk{}
 
-		assert.True(t, c.canAdd(rtcp.TypeTCCPacketReceivedSmallDelta))
-		c.add(rtcp.TypeTCCPacketReceivedSmallDelta)
-		assert.True(t, c.canAdd(rtcp.TypeTCCPacketReceivedSmallDelta))
-		c.add(rtcp.TypeTCCPacketReceivedSmallDelta)
-		assert.True(t, c.canAdd(rtcp.TypeTCCPacketReceivedSmallDelta))
-		c.add(rtcp.TypeTCCPacketReceivedSmallDelta)
-		assert.True(t, c.canAdd(rtcp.TypeTCCPacketReceivedSmallDelta))
-		c.add(rtcp.TypeTCCPacketReceivedSmallDelta)
+		assert.True(t, testChunk.canAdd(rtcp.TypeTCCPacketReceivedSmallDelta))
+		testChunk.add(rtcp.TypeTCCPacketReceivedSmallDelta)
+		assert.True(t, testChunk.canAdd(rtcp.TypeTCCPacketReceivedSmallDelta))
+		testChunk.add(rtcp.TypeTCCPacketReceivedSmallDelta)
+		assert.True(t, testChunk.canAdd(rtcp.TypeTCCPacketReceivedSmallDelta))
+		testChunk.add(rtcp.TypeTCCPacketReceivedSmallDelta)
+		assert.True(t, testChunk.canAdd(rtcp.TypeTCCPacketReceivedSmallDelta))
+		testChunk.add(rtcp.TypeTCCPacketReceivedSmallDelta)
 
-		assert.True(t, c.canAdd(rtcp.TypeTCCPacketReceivedLargeDelta))
-		c.add(rtcp.TypeTCCPacketReceivedLargeDelta)
-		assert.True(t, c.canAdd(rtcp.TypeTCCPacketReceivedLargeDelta))
-		c.add(rtcp.TypeTCCPacketReceivedLargeDelta)
-		assert.True(t, c.canAdd(rtcp.TypeTCCPacketReceivedLargeDelta))
-		c.add(rtcp.TypeTCCPacketReceivedLargeDelta)
+		assert.True(t, testChunk.canAdd(rtcp.TypeTCCPacketReceivedLargeDelta))
+		testChunk.add(rtcp.TypeTCCPacketReceivedLargeDelta)
+		assert.True(t, testChunk.canAdd(rtcp.TypeTCCPacketReceivedLargeDelta))
+		testChunk.add(rtcp.TypeTCCPacketReceivedLargeDelta)
+		assert.True(t, testChunk.canAdd(rtcp.TypeTCCPacketReceivedLargeDelta))
+		testChunk.add(rtcp.TypeTCCPacketReceivedLargeDelta)
 
-		assert.False(t, c.canAdd(rtcp.TypeTCCPacketReceivedLargeDelta))
+		assert.False(t, testChunk.canAdd(rtcp.TypeTCCPacketReceivedLargeDelta))
 
-		statusChunk := c.encode()
+		statusChunk := testChunk.encode()
 		assert.IsType(t, &rtcp.StatusVectorChunk{}, statusChunk)
 
 		buf, err := statusChunk.Marshal()
@@ -121,38 +123,38 @@ func Test_chunk_add(t *testing.T) {
 	})
 
 	t.Run("overfill and encode", func(t *testing.T) {
-		c := chunk{}
+		testChunk := chunk{}
 
-		assert.True(t, c.canAdd(rtcp.TypeTCCPacketReceivedSmallDelta))
-		c.add(rtcp.TypeTCCPacketReceivedSmallDelta)
-		assert.True(t, c.canAdd(rtcp.TypeTCCPacketNotReceived))
-		c.add(rtcp.TypeTCCPacketNotReceived)
-		assert.True(t, c.canAdd(rtcp.TypeTCCPacketNotReceived))
-		c.add(rtcp.TypeTCCPacketNotReceived)
-		assert.True(t, c.canAdd(rtcp.TypeTCCPacketNotReceived))
-		c.add(rtcp.TypeTCCPacketNotReceived)
-		assert.True(t, c.canAdd(rtcp.TypeTCCPacketNotReceived))
-		c.add(rtcp.TypeTCCPacketNotReceived)
-		assert.True(t, c.canAdd(rtcp.TypeTCCPacketNotReceived))
-		c.add(rtcp.TypeTCCPacketNotReceived)
-		assert.True(t, c.canAdd(rtcp.TypeTCCPacketNotReceived))
-		c.add(rtcp.TypeTCCPacketNotReceived)
-		assert.True(t, c.canAdd(rtcp.TypeTCCPacketNotReceived))
-		c.add(rtcp.TypeTCCPacketNotReceived)
+		assert.True(t, testChunk.canAdd(rtcp.TypeTCCPacketReceivedSmallDelta))
+		testChunk.add(rtcp.TypeTCCPacketReceivedSmallDelta)
+		assert.True(t, testChunk.canAdd(rtcp.TypeTCCPacketNotReceived))
+		testChunk.add(rtcp.TypeTCCPacketNotReceived)
+		assert.True(t, testChunk.canAdd(rtcp.TypeTCCPacketNotReceived))
+		testChunk.add(rtcp.TypeTCCPacketNotReceived)
+		assert.True(t, testChunk.canAdd(rtcp.TypeTCCPacketNotReceived))
+		testChunk.add(rtcp.TypeTCCPacketNotReceived)
+		assert.True(t, testChunk.canAdd(rtcp.TypeTCCPacketNotReceived))
+		testChunk.add(rtcp.TypeTCCPacketNotReceived)
+		assert.True(t, testChunk.canAdd(rtcp.TypeTCCPacketNotReceived))
+		testChunk.add(rtcp.TypeTCCPacketNotReceived)
+		assert.True(t, testChunk.canAdd(rtcp.TypeTCCPacketNotReceived))
+		testChunk.add(rtcp.TypeTCCPacketNotReceived)
+		assert.True(t, testChunk.canAdd(rtcp.TypeTCCPacketNotReceived))
+		testChunk.add(rtcp.TypeTCCPacketNotReceived)
 
-		assert.False(t, c.canAdd(rtcp.TypeTCCPacketReceivedLargeDelta))
+		assert.False(t, testChunk.canAdd(rtcp.TypeTCCPacketReceivedLargeDelta))
 
-		statusChunk1 := c.encode()
+		statusChunk1 := testChunk.encode()
 		assert.IsType(t, &rtcp.StatusVectorChunk{}, statusChunk1)
-		assert.Equal(t, 1, len(c.deltas))
+		assert.Equal(t, 1, len(testChunk.deltas))
 
-		assert.True(t, c.canAdd(rtcp.TypeTCCPacketReceivedLargeDelta))
-		c.add(rtcp.TypeTCCPacketReceivedLargeDelta)
+		assert.True(t, testChunk.canAdd(rtcp.TypeTCCPacketReceivedLargeDelta))
+		testChunk.add(rtcp.TypeTCCPacketReceivedLargeDelta)
 
-		statusChunk2 := c.encode()
+		statusChunk2 := testChunk.encode()
 		assert.IsType(t, &rtcp.StatusVectorChunk{}, statusChunk2)
 
-		assert.Equal(t, 0, len(c.deltas))
+		assert.Equal(t, 0, len(testChunk.deltas))
 
 		assert.Equal(t, &rtcp.StatusVectorChunk{
 			SymbolSize: rtcp.TypeTCCSymbolSizeTwoBit,
@@ -177,23 +179,23 @@ func Test_feedback(t *testing.T) {
 	})
 
 	t.Run("add received 1", func(t *testing.T) {
-		f := &feedback{}
-		f.setBase(1, 1000*1000)
+		testFeedback := &feedback{}
+		testFeedback.setBase(1, 1000*1000)
 
-		got := f.addReceived(1, 1023*1000)
+		got := testFeedback.addReceived(1, 1023*1000)
 
 		assert.True(t, got)
-		assert.Equal(t, uint16(2), f.nextSequenceNumber)
-		assert.Equal(t, int64(15), f.refTimestamp64MS)
+		assert.Equal(t, uint16(2), testFeedback.nextSequenceNumber)
+		assert.Equal(t, int64(15), testFeedback.refTimestamp64MS)
 
-		got = f.addReceived(4, 1086*1000)
+		got = testFeedback.addReceived(4, 1086*1000)
 		assert.True(t, got)
-		assert.Equal(t, uint16(5), f.nextSequenceNumber)
-		assert.Equal(t, int64(15), f.refTimestamp64MS)
+		assert.Equal(t, uint16(5), testFeedback.nextSequenceNumber)
+		assert.Equal(t, int64(15), testFeedback.refTimestamp64MS)
 
-		assert.True(t, f.lastChunk.hasDifferentTypes)
-		assert.Equal(t, 4, len(f.lastChunk.deltas))
-		assert.NotContains(t, f.lastChunk.deltas, rtcp.TypeTCCPacketReceivedLargeDelta)
+		assert.True(t, testFeedback.lastChunk.hasDifferentTypes)
+		assert.Equal(t, 4, len(testFeedback.lastChunk.deltas))
+		assert.NotContains(t, testFeedback.lastChunk.deltas, rtcp.TypeTCCPacketReceivedLargeDelta)
 	})
 
 	t.Run("add received 2", func(t *testing.T) {
@@ -263,7 +265,7 @@ func Test_feedback(t *testing.T) {
 		f.setBase(5, base)
 
 		for i := int64(0); i < 5; i++ {
-			got := f.addReceived(5+uint16(i+1), base+deltaUS*i)
+			got := f.addReceived(5+uint16(i+1), base+deltaUS*i) //nolint:gosec // G115
 			assert.True(t, got)
 		}
 
@@ -402,6 +404,8 @@ func Test_feedback(t *testing.T) {
 }
 
 func addRun(t *testing.T, r *Recorder, sequenceNumbers []uint16, arrivalTimes []int64) {
+	t.Helper()
+
 	assert.Equal(t, len(sequenceNumbers), len(arrivalTimes))
 
 	for i := range sequenceNumbers {
@@ -415,25 +419,29 @@ const (
 
 func increaseTime(arrivalTime *int64, increaseAmount int64) int64 {
 	*arrivalTime += increaseAmount
+
 	return *arrivalTime
 }
 
 func marshalAll(t *testing.T, pkts []rtcp.Packet) {
+	t.Helper()
+
 	for _, pkt := range pkts {
 		marshaled, err := pkt.Marshal()
 		assert.NoError(t, err)
 
 		// Chrome expects feedback packets to always be 18 bytes or more.
 		// https://source.chromium.org/chromium/chromium/src/+/main:third_party/webrtc/modules/rtp_rtcp/source/rtcp_packet/transport_feedback.cc;l=423?q=transport_feedback.cc&ss=chromium%2Fchromium%2Fsrc
+		//nolint:lll
 		assert.GreaterOrEqual(t, len(marshaled), 18)
 	}
 }
 
 func TestBuildFeedbackPacket(t *testing.T) {
-	r := NewRecorder(5000)
+	recoder := NewRecorder(5000)
 
 	arrivalTime := int64(scaleFactorReferenceTime)
-	addRun(t, r, []uint16{0, 1, 2, 3, 4, 5, 6, 7}, []int64{
+	addRun(t, recoder, []uint16{0, 1, 2, 3, 4, 5, 6, 7}, []int64{
 		scaleFactorReferenceTime,
 		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
 		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
@@ -444,7 +452,7 @@ func TestBuildFeedbackPacket(t *testing.T) {
 		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor*256),
 	})
 
-	rtcpPackets := r.BuildFeedbackPacket()
+	rtcpPackets := recoder.BuildFeedbackPacket()
 	assert.Equal(t, 1, len(rtcpPackets))
 
 	assert.Equal(t, &rtcp.TransportLayerCC{
@@ -487,25 +495,25 @@ func TestBuildFeedbackPacket(t *testing.T) {
 }
 
 func TestBuildFeedbackPacket_Rolling(t *testing.T) {
-	r := NewRecorder(5000)
+	recoder := NewRecorder(5000)
 
 	arrivalTime := int64(scaleFactorReferenceTime)
-	addRun(t, r, []uint16{65534, 65535}, []int64{
+	addRun(t, recoder, []uint16{65534, 65535}, []int64{
 		arrivalTime,
 		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
 	})
 
-	rtcpPackets := r.BuildFeedbackPacket()
+	rtcpPackets := recoder.BuildFeedbackPacket()
 	assert.Equal(t, 1, len(rtcpPackets))
 
-	addRun(t, r, []uint16{0, 4, 5, 6}, []int64{
+	addRun(t, recoder, []uint16{0, 4, 5, 6}, []int64{
 		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
 		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
 		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
 		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
 	})
 
-	rtcpPackets = r.BuildFeedbackPacket()
+	rtcpPackets = recoder.BuildFeedbackPacket()
 	assert.Equal(t, 1, len(rtcpPackets))
 
 	assert.Equal(t, &rtcp.TransportLayerCC{
@@ -585,30 +593,36 @@ func TestBuildFeedbackPacket_MinInput(t *testing.T) {
 }
 
 func TestBuildFeedbackPacket_MissingPacketsBetweenFeedbacks(t *testing.T) {
-	r := NewRecorder(5000)
+	recorder := NewRecorder(5000)
 
 	// Create a run of received packets.
 	arrivalTime := int64(scaleFactorReferenceTime)
-	addRun(t, r, []uint16{0, 1, 2, 3}, []int64{
+	addRun(t, recorder, []uint16{0, 1, 2, 3}, []int64{
 		scaleFactorReferenceTime,
 		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
 		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
 		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
 	})
-	rtcpPackets := r.BuildFeedbackPacket()
+	rtcpPackets := recorder.BuildFeedbackPacket()
 	assert.Equal(t, 1, len(rtcpPackets))
 
 	// Now create another run of received packets, but with a gap.
-	addRun(t, r, []uint16{7, 8, 9}, []int64{
+	addRun(t, recorder, []uint16{7, 8, 9}, []int64{
 		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor*256),
 		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
 		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
 	})
-	rtcpPackets = r.BuildFeedbackPacket()
+	rtcpPackets = recorder.BuildFeedbackPacket()
 	require.Equal(t, 1, len(rtcpPackets))
 	twccPacket := rtcpToTwcc(t, rtcpPackets)[0]
-	assert.Equal(t, uint16(4), twccPacket.BaseSequenceNumber, "Base sequence should be one after the end of the previous feedback")
-	assert.Equal(t, uint16(6), twccPacket.PacketStatusCount, "Feedback should include status for both the lost and received packets")
+	assert.Equal(
+		t, uint16(4), twccPacket.BaseSequenceNumber,
+		"Base sequence should be one after the end of the previous feedback",
+	)
+	assert.Equal(
+		t, uint16(6), twccPacket.PacketStatusCount,
+		"Feedback should include status for both the lost and received packets",
+	)
 	expectedPacketChunks := []rtcp.PacketStatusChunk{
 		&rtcp.StatusVectorChunk{
 			Type:       rtcp.TypeTCCRunLengthChunk,
@@ -628,26 +642,26 @@ func TestBuildFeedbackPacket_MissingPacketsBetweenFeedbacks(t *testing.T) {
 }
 
 func TestBuildFeedbackPacketCount(t *testing.T) {
-	r := NewRecorder(5000)
+	recorder := NewRecorder(5000)
 
 	arrivalTime := int64(scaleFactorReferenceTime)
-	addRun(t, r, []uint16{0, 1}, []int64{
+	addRun(t, recorder, []uint16{0, 1}, []int64{
 		arrivalTime,
 		arrivalTime,
 	})
 
-	pkts := r.BuildFeedbackPacket()
+	pkts := recorder.BuildFeedbackPacket()
 	assert.Len(t, pkts, 1)
 
 	twcc := rtcpToTwcc(t, pkts)[0]
 	assert.Equal(t, uint8(0), twcc.FbPktCount)
 
-	addRun(t, r, []uint16{0, 1}, []int64{
+	addRun(t, recorder, []uint16{0, 1}, []int64{
 		arrivalTime,
 		arrivalTime,
 	})
 
-	pkts = r.BuildFeedbackPacket()
+	pkts = recorder.BuildFeedbackPacket()
 	assert.Len(t, pkts, 1)
 
 	twcc = rtcpToTwcc(t, pkts)[0]
@@ -700,10 +714,10 @@ func TestDuplicatePackets(t *testing.T) {
 
 func TestShortDeltas(t *testing.T) {
 	t.Run("SplitsOneBitDeltas", func(t *testing.T) {
-		r := NewRecorder(5000)
+		recorder := NewRecorder(5000)
 
 		arrivalTime := int64(scaleFactorReferenceTime)
-		addRun(t, r, []uint16{3, 4, 5, 7, 6, 8, 10, 11, 13, 14}, []int64{
+		addRun(t, recorder, []uint16{3, 4, 5, 7, 6, 8, 10, 11, 13, 14}, []int64{
 			arrivalTime,
 			arrivalTime,
 			arrivalTime,
@@ -716,7 +730,7 @@ func TestShortDeltas(t *testing.T) {
 			arrivalTime,
 		})
 
-		rtcpPackets := r.BuildFeedbackPacket()
+		rtcpPackets := recorder.BuildFeedbackPacket()
 		assert.Equal(t, 1, len(rtcpPackets))
 
 		pkt := rtcpToTwcc(t, rtcpPackets)[0]
@@ -821,10 +835,10 @@ func TestShortDeltas(t *testing.T) {
 }
 
 func TestReorderedPackets(t *testing.T) {
-	r := NewRecorder(5000)
+	recorder := NewRecorder(5000)
 
 	arrivalTime := int64(scaleFactorReferenceTime)
-	addRun(t, r, []uint16{3, 4, 5, 7, 6, 8, 10, 11, 13, 14}, []int64{
+	addRun(t, recorder, []uint16{3, 4, 5, 7, 6, 8, 10, 11, 13, 14}, []int64{
 		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
 		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
 		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
@@ -837,7 +851,7 @@ func TestReorderedPackets(t *testing.T) {
 		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
 	})
 
-	rtcpPackets := r.BuildFeedbackPacket()
+	rtcpPackets := recorder.BuildFeedbackPacket()
 	assert.Equal(t, 1, len(rtcpPackets))
 
 	pkt := rtcpToTwcc(t, rtcpPackets)[0]
@@ -890,23 +904,23 @@ func TestReorderedPackets(t *testing.T) {
 }
 
 func TestPacketsHheld(t *testing.T) {
-	r := NewRecorder(5000)
-	assert.Zero(t, r.PacketsHeld())
+	recorder := NewRecorder(5000)
+	assert.Zero(t, recorder.PacketsHeld())
 
 	arrivalTime := int64(scaleFactorReferenceTime)
-	addRun(t, r, []uint16{0, 1, 2}, []int64{
+	addRun(t, recorder, []uint16{0, 1, 2}, []int64{
 		arrivalTime,
 		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
 		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
 	})
-	assert.Equal(t, r.PacketsHeld(), 3)
+	assert.Equal(t, recorder.PacketsHeld(), 3)
 
-	addRun(t, r, []uint16{3, 4}, []int64{
+	addRun(t, recorder, []uint16{3, 4}, []int64{
 		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
 		increaseTime(&arrivalTime, rtcp.TypeTCCDeltaScaleFactor),
 	})
-	assert.Equal(t, r.PacketsHeld(), 5)
+	assert.Equal(t, recorder.PacketsHeld(), 5)
 
-	r.BuildFeedbackPacket()
-	assert.Zero(t, r.PacketsHeld())
+	recorder.BuildFeedbackPacket()
+	assert.Zero(t, recorder.PacketsHeld())
 }

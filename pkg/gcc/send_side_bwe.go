@@ -23,10 +23,10 @@ const (
 	maxBitrate     = 50_000_000
 )
 
-// ErrSendSideBWEClosed is raised when SendSideBWE.WriteRTCP is called after SendSideBWE.Close
+// ErrSendSideBWEClosed is raised when SendSideBWE.WriteRTCP is called after SendSideBWE.Close.
 var ErrSendSideBWEClosed = errors.New("SendSideBwe closed")
 
-// Pacer is the interface implemented by packet pacers
+// Pacer is the interface implemented by packet pacers.
 type Pacer interface {
 	interceptor.RTPWriter
 	AddStream(ssrc uint32, writer interceptor.RTPWriter)
@@ -34,13 +34,13 @@ type Pacer interface {
 	Close() error
 }
 
-// Stats contains internal statistics of the bandwidth estimator
+// Stats contains internal statistics of the bandwidth estimator.
 type Stats struct {
 	LossStats
 	DelayStats
 }
 
-// SendSideBWE implements a combination of loss and delay based GCC
+// SendSideBWE implements a combination of loss and delay based GCC.
 type SendSideBWE struct {
 	pacer           Pacer
 	lossController  *lossBasedBandwidthEstimator
@@ -59,29 +59,32 @@ type SendSideBWE struct {
 	closeLock sync.RWMutex
 }
 
-// Option configures a bandwidth estimator
+// Option configures a bandwidth estimator.
 type Option func(*SendSideBWE) error
 
-// SendSideBWEInitialBitrate sets the initial bitrate of new GCC interceptors
+// SendSideBWEInitialBitrate sets the initial bitrate of new GCC interceptors.
 func SendSideBWEInitialBitrate(rate int) Option {
 	return func(e *SendSideBWE) error {
 		e.latestBitrate = rate
+
 		return nil
 	}
 }
 
-// SendSideBWEMaxBitrate sets the initial bitrate of new GCC interceptors
+// SendSideBWEMaxBitrate sets the initial bitrate of new GCC interceptors.
 func SendSideBWEMaxBitrate(rate int) Option {
 	return func(e *SendSideBWE) error {
 		e.maxBitrate = rate
+
 		return nil
 	}
 }
 
-// SendSideBWEMinBitrate sets the initial bitrate of new GCC interceptors
+// SendSideBWEMinBitrate sets the initial bitrate of new GCC interceptors.
 func SendSideBWEMinBitrate(rate int) Option {
 	return func(e *SendSideBWE) error {
 		e.minBitrate = rate
+
 		return nil
 	}
 }
@@ -90,13 +93,14 @@ func SendSideBWEMinBitrate(rate int) Option {
 func SendSideBWEPacer(p Pacer) Option {
 	return func(e *SendSideBWE) error {
 		e.pacer = p
+
 		return nil
 	}
 }
 
-// NewSendSideBWE creates a new sender side bandwidth estimator
+// NewSendSideBWE creates a new sender side bandwidth estimator.
 func NewSendSideBWE(opts ...Option) (*SendSideBWE, error) {
-	e := &SendSideBWE{
+	send := &SendSideBWE{
 		pacer:                 nil,
 		lossController:        nil,
 		delayController:       nil,
@@ -110,52 +114,59 @@ func NewSendSideBWE(opts ...Option) (*SendSideBWE, error) {
 		close:                 make(chan struct{}),
 	}
 	for _, opt := range opts {
-		if err := opt(e); err != nil {
+		if err := opt(send); err != nil {
 			return nil, err
 		}
 	}
-	if e.pacer == nil {
-		e.pacer = NewLeakyBucketPacer(e.latestBitrate)
+	if send.pacer == nil {
+		send.pacer = NewLeakyBucketPacer(send.latestBitrate)
 	}
-	e.lossController = newLossBasedBWE(e.latestBitrate)
-	e.delayController = newDelayController(delayControllerConfig{
+	send.lossController = newLossBasedBWE(send.latestBitrate)
+	send.delayController = newDelayController(delayControllerConfig{
 		nowFn:          time.Now,
-		initialBitrate: e.latestBitrate,
-		minBitrate:     e.minBitrate,
-		maxBitrate:     e.maxBitrate,
+		initialBitrate: send.latestBitrate,
+		minBitrate:     send.minBitrate,
+		maxBitrate:     send.maxBitrate,
 	})
 
-	e.delayController.onUpdate(e.onDelayUpdate)
+	send.delayController.onUpdate(send.onDelayUpdate)
 
-	return e, nil
+	return send, nil
 }
 
-// AddStream adds a new stream to the bandwidth estimator
+// AddStream adds a new stream to the bandwidth estimator.
 func (e *SendSideBWE) AddStream(info *interceptor.StreamInfo, writer interceptor.RTPWriter) interceptor.RTPWriter {
 	var hdrExtID uint8
 	for _, e := range info.RTPHeaderExtensions {
 		if e.URI == transportCCURI {
-			hdrExtID = uint8(e.ID)
+			hdrExtID = uint8(e.ID) //nolint:gosec // G115
+
 			break
 		}
 	}
 
-	e.pacer.AddStream(info.SSRC, interceptor.RTPWriterFunc(func(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
-		if hdrExtID != 0 {
-			if attributes == nil {
-				attributes = make(interceptor.Attributes)
+	e.pacer.AddStream(info.SSRC, interceptor.RTPWriterFunc(
+		func(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
+			if hdrExtID != 0 {
+				if attributes == nil {
+					attributes = make(interceptor.Attributes)
+				}
+				attributes.Set(cc.TwccExtensionAttributesKey, hdrExtID)
 			}
-			attributes.Set(cc.TwccExtensionAttributesKey, hdrExtID)
-		}
-		if err := e.feedbackAdapter.OnSent(time.Now(), header, len(payload), attributes); err != nil {
-			return 0, err
-		}
-		return writer.Write(header, payload, attributes)
-	}))
+			if err := e.feedbackAdapter.OnSent(time.Now(), header, len(payload), attributes); err != nil {
+				return 0, err
+			}
+
+			return writer.Write(header, payload, attributes)
+		},
+	))
+
 	return e.pacer
 }
 
-// WriteRTCP adds some RTCP feedback to the bandwidth estimator
+// WriteRTCP adds some RTCP feedback to the bandwidth estimator.
+//
+//nolint:cyclop
 func (e *SendSideBWE) WriteRTCP(pkts []rtcp.Packet, _ interceptor.Attributes) error {
 	now := time.Now()
 	e.closeLock.RLock()
@@ -178,6 +189,7 @@ func (e *SendSideBWE) WriteRTCP(pkts []rtcp.Packet, _ interceptor.Attributes) er
 			for i, ack := range acks {
 				if i == 0 {
 					feedbackSentTime = ack.Arrival
+
 					continue
 				}
 				if ack.Arrival.After(feedbackSentTime) {
@@ -207,10 +219,11 @@ func (e *SendSideBWE) WriteRTCP(pkts []rtcp.Packet, _ interceptor.Attributes) er
 		e.lossController.updateLossEstimate(acks)
 		e.delayController.updateDelayEstimate(acks)
 	}
+
 	return nil
 }
 
-// GetTargetBitrate returns the current target bitrate in bits per second
+// GetTargetBitrate returns the current target bitrate in bits per second.
 func (e *SendSideBWE) GetTargetBitrate() int {
 	e.lock.Lock()
 	defer e.lock.Unlock()
@@ -218,7 +231,7 @@ func (e *SendSideBWE) GetTargetBitrate() int {
 	return e.latestBitrate
 }
 
-// GetStats returns some internal statistics of the bandwidth estimator
+// GetStats returns some internal statistics of the bandwidth estimator.
 func (e *SendSideBWE) GetStats() map[string]interface{} {
 	e.lock.Lock()
 	defer e.lock.Unlock()
@@ -236,12 +249,12 @@ func (e *SendSideBWE) GetStats() map[string]interface{} {
 }
 
 // OnTargetBitrateChange sets the callback that is called when the target
-// bitrate in bits per second changes
+// bitrate in bits per second changes.
 func (e *SendSideBWE) OnTargetBitrateChange(f func(bitrate int)) {
 	e.onTargetBitrateChange = f
 }
 
-// isClosed returns true if SendSideBWE is closed
+// isClosed returns true if SendSideBWE is closed.
 func (e *SendSideBWE) isClosed() bool {
 	select {
 	case <-e.close:
@@ -251,7 +264,7 @@ func (e *SendSideBWE) isClosed() bool {
 	}
 }
 
-// Close stops and closes the bandwidth estimator
+// Close stops and closes the bandwidth estimator.
 func (e *SendSideBWE) Close() error {
 	e.closeLock.Lock()
 	defer e.closeLock.Unlock()
@@ -260,6 +273,7 @@ func (e *SendSideBWE) Close() error {
 		return err
 	}
 	close(e.close)
+
 	return e.pacer.Close()
 }
 

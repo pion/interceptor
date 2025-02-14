@@ -9,8 +9,11 @@ import (
 	"testing"
 )
 
+//nolint:cyclop
 func TestReceivedBuffer(t *testing.T) {
-	for _, start := range []uint16{0, 1, 127, 128, 129, 511, 512, 513, 32767, 32768, 32769, 65407, 65408, 65409, 65534, 65535} {
+	for _, start := range []uint16{
+		0, 1, 127, 128, 129, 511, 512, 513, 32767, 32768, 32769, 65407, 65408, 65409, 65534, 65535,
+	} {
 		start := start
 
 		t.Run(fmt.Sprintf("StartFrom%d", start), func(t *testing.T) {
@@ -24,6 +27,7 @@ func TestReceivedBuffer(t *testing.T) {
 				for i := minVal; i != maxVal+1; i++ {
 					result = append(result, i)
 				}
+
 				return result
 			}
 			join := func(parts ...[]uint16) []uint16 {
@@ -31,6 +35,7 @@ func TestReceivedBuffer(t *testing.T) {
 				for _, p := range parts {
 					result = append(result, p...)
 				}
+
 				return result
 			}
 

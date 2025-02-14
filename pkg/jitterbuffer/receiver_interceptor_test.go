@@ -24,7 +24,7 @@ func TestBufferStart(t *testing.T) {
 	)
 	assert.NoError(t, err)
 
-	i, err := factory.NewInterceptor("")
+	testInterceptor, err := factory.NewInterceptor("")
 	assert.NoError(t, err)
 
 	assert.Zero(t, buf.Len())
@@ -32,7 +32,7 @@ func TestBufferStart(t *testing.T) {
 	stream := test.NewMockStream(&interceptor.StreamInfo{
 		SSRC:      123456,
 		ClockRate: 90000,
-	}, i)
+	}, testInterceptor)
 	defer func() {
 		assert.NoError(t, stream.Close())
 	}()
@@ -53,7 +53,7 @@ func TestBufferStart(t *testing.T) {
 	default:
 		// No data ready to read, this is what we expect
 	}
-	err = i.Close()
+	err = testInterceptor.Close()
 	assert.NoError(t, err)
 	assert.Zero(t, buf.Len())
 }
@@ -66,7 +66,7 @@ func TestReceiverBuffersAndPlaysout(t *testing.T) {
 	)
 	assert.NoError(t, err)
 
-	i, err := factory.NewInterceptor("")
+	testInterceptor, err := factory.NewInterceptor("")
 	assert.NoError(t, err)
 
 	assert.EqualValues(t, 0, buf.Len())
@@ -74,7 +74,7 @@ func TestReceiverBuffersAndPlaysout(t *testing.T) {
 	stream := test.NewMockStream(&interceptor.StreamInfo{
 		SSRC:      123456,
 		ClockRate: 90000,
-	}, i)
+	}, testInterceptor)
 
 	stream.ReceiveRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{
 		SenderSSRC: 123,
@@ -82,7 +82,7 @@ func TestReceiverBuffersAndPlaysout(t *testing.T) {
 	}})
 	for s := 0; s < 61; s++ {
 		stream.ReceiveRTP(&rtp.Packet{Header: rtp.Header{
-			SequenceNumber: uint16(s),
+			SequenceNumber: uint16(s), //nolint:gosec // G115
 		}})
 	}
 	// Give time for packets to be handled and stream written to.
@@ -90,9 +90,9 @@ func TestReceiverBuffersAndPlaysout(t *testing.T) {
 	for s := 0; s < 10; s++ {
 		read := <-stream.ReadRTP()
 		seq := read.Packet.Header.SequenceNumber
-		assert.EqualValues(t, uint16(s), seq)
+		assert.EqualValues(t, uint16(s), seq) //nolint:gosec // G115
 	}
 	assert.NoError(t, stream.Close())
-	err = i.Close()
+	err = testInterceptor.Close()
 	assert.NoError(t, err)
 }

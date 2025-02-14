@@ -120,6 +120,7 @@ func TestResponderInterceptor_DisableCopy(t *testing.T) {
 // this test is only useful when being run with the race detector, it won't fail otherwise:
 //
 // go test -race ./pkg/nack/
+// .
 func TestResponderInterceptor_Race(t *testing.T) {
 	f, err := NewResponderInterceptor(
 		ResponderSize(32768),
@@ -156,7 +157,8 @@ func TestResponderInterceptor_Race(t *testing.T) {
 
 // this test is only useful when being run with the race detector, it won't fail otherwise:
 //
-// go test -race ./pkg/nack/
+// go test -race ./pkg/nack
+// .
 func TestResponderInterceptor_RaceConcurrentStreams(t *testing.T) {
 	f, err := NewResponderInterceptor(
 		ResponderSize(32768),
@@ -195,13 +197,13 @@ func TestResponderInterceptor_StreamFilter(t *testing.T) {
 
 	require.NoError(t, err)
 
-	i, err := f.NewInterceptor("")
+	testInterceptor, err := f.NewInterceptor("")
 	require.NoError(t, err)
 
 	streamWithoutNacks := test.NewMockStream(&interceptor.StreamInfo{
 		SSRC:         1,
 		RTCPFeedback: []interceptor.RTCPFeedback{{Type: "nack"}},
-	}, i)
+	}, testInterceptor)
 	defer func() {
 		require.NoError(t, streamWithoutNacks.Close())
 	}()
@@ -209,7 +211,7 @@ func TestResponderInterceptor_StreamFilter(t *testing.T) {
 	streamWithNacks := test.NewMockStream(&interceptor.StreamInfo{
 		SSRC:         2,
 		RTCPFeedback: []interceptor.RTCPFeedback{{Type: "nack"}},
-	}, i)
+	}, testInterceptor)
 	defer func() {
 		require.NoError(t, streamWithNacks.Close())
 	}()
@@ -323,6 +325,7 @@ func TestResponderInterceptor_RFC4588(t *testing.T) {
 	}
 }
 
+//nolint:cyclop
 func TestResponderInterceptor_BypassUnknownSSRCs(t *testing.T) {
 	f, err := NewResponderInterceptor(
 		ResponderSize(8),

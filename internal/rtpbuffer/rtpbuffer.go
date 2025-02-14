@@ -9,13 +9,14 @@ import (
 )
 
 const (
-	// Uint16SizeHalf is half of a math.Uint16
+	// Uint16SizeHalf is half of a math.Uint16.
 	Uint16SizeHalf = 1 << 15
 
 	maxPayloadLen = 1460
 )
 
-// RTPBuffer stores RTP packets and allows custom logic around the lifetime of them via the PacketFactory
+// RTPBuffer stores RTP packets and allows custom logic
+// around the lifetime of them via the PacketFactory.
 type RTPBuffer struct {
 	packets      []*RetainablePacket
 	size         uint16
@@ -23,13 +24,14 @@ type RTPBuffer struct {
 	started      bool
 }
 
-// NewRTPBuffer constructs a new RTPBuffer
+// NewRTPBuffer constructs a new RTPBuffer.
 func NewRTPBuffer(size uint16) (*RTPBuffer, error) {
 	allowedSizes := make([]uint16, 0)
 	correctSize := false
 	for i := 0; i < 16; i++ {
 		if size == 1<<i {
 			correctSize = true
+
 			break
 		}
 		allowedSizes = append(allowedSizes, 1<<i)
@@ -45,13 +47,14 @@ func NewRTPBuffer(size uint16) (*RTPBuffer, error) {
 	}, nil
 }
 
-// Add places the RetainablePacket in the RTPBuffer
+// Add places the RetainablePacket in the RTPBuffer.
 func (r *RTPBuffer) Add(packet *RetainablePacket) {
 	seq := packet.sequenceNumber
 	if !r.started {
 		r.packets[seq%r.size] = packet
 		r.highestAdded = seq
 		r.started = true
+
 		return
 	}
 
@@ -78,7 +81,7 @@ func (r *RTPBuffer) Add(packet *RetainablePacket) {
 	r.packets[idx] = packet
 }
 
-// Get returns the RetainablePacket for the requested sequence number
+// Get returns the RetainablePacket for the requested sequence number.
 func (r *RTPBuffer) Get(seq uint16) *RetainablePacket {
 	diff := r.highestAdded - seq
 	if diff >= Uint16SizeHalf {
@@ -99,5 +102,6 @@ func (r *RTPBuffer) Get(seq uint16) *RetainablePacket {
 			return nil
 		}
 	}
+
 	return pkt
 }

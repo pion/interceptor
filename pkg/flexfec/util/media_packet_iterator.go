@@ -25,6 +25,7 @@ func NewMediaPacketIterator(mediaPackets []rtp.Packet, coveredIndices []uint32) 
 // Reset sets the starting iterating index back to 0.
 func (m *MediaPacketIterator) Reset() *MediaPacketIterator {
 	m.nextIndex = 0
+
 	return m
 }
 
@@ -41,6 +42,7 @@ func (m *MediaPacketIterator) Next() *rtp.Packet {
 	}
 	packet := m.mediaPackets[m.nextIndex]
 	m.nextIndex++
+
 	return &packet
 }
 

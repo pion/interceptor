@@ -35,6 +35,7 @@ func (e *slopeEstimator) onArrivalGroup(ag arrivalGroup) {
 	if !e.init {
 		e.group = ag
 		e.init = true
+
 		return
 	}
 	measurement := interGroupDelayVariation(e.group, ag)

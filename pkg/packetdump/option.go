@@ -9,13 +9,14 @@ import (
 	"github.com/pion/logging"
 )
 
-// PacketDumperOption can be used to configure SenderInterceptor
+// PacketDumperOption can be used to configure SenderInterceptor.
 type PacketDumperOption func(d *PacketDumper) error
 
-// Log sets a logger for the interceptor
+// Log sets a logger for the interceptor.
 func Log(log logging.LeveledLogger) PacketDumperOption {
 	return func(d *PacketDumper) error {
 		d.log = log
+
 		return nil
 	}
 }
@@ -24,6 +25,7 @@ func Log(log logging.LeveledLogger) PacketDumperOption {
 func RTPWriter(w io.Writer) PacketDumperOption {
 	return func(d *PacketDumper) error {
 		d.rtpStream = w
+
 		return nil
 	}
 }
@@ -32,40 +34,45 @@ func RTPWriter(w io.Writer) PacketDumperOption {
 func RTCPWriter(w io.Writer) PacketDumperOption {
 	return func(d *PacketDumper) error {
 		d.rtcpStream = w
+
 		return nil
 	}
 }
 
 // RTPFormatter sets the RTP format
-// Deprecated: prefer RTPBinaryFormatter
+// Deprecated: prefer RTPBinaryFormatter.
 func RTPFormatter(f RTPFormatCallback) PacketDumperOption {
 	return func(d *PacketDumper) error {
 		d.rtpFormat = f
+
 		return nil
 	}
 }
 
 // RTCPFormatter sets the RTCP format
-// Deprecated: prefer RTCPBinaryFormatter
+// Deprecated: prefer RTCPBinaryFormatter.
 func RTCPFormatter(f RTCPFormatCallback) PacketDumperOption {
 	return func(d *PacketDumper) error {
 		d.rtcpFormat = f
+
 		return nil
 	}
 }
 
-// RTPBinaryFormatter sets the RTP binary formatter
+// RTPBinaryFormatter sets the RTP binary formatter.
 func RTPBinaryFormatter(f RTPBinaryFormatCallback) PacketDumperOption {
 	return func(d *PacketDumper) error {
 		d.rtpFormatBinary = f
+
 		return nil
 	}
 }
 
-// RTCPBinaryFormatter sets the RTCP binary formatter
+// RTCPBinaryFormatter sets the RTCP binary formatter.
 func RTCPBinaryFormatter(f RTCPBinaryFormatCallback) PacketDumperOption {
 	return func(d *PacketDumper) error {
 		d.rtcpFormatBinary = f
+
 		return nil
 	}
 }
@@ -74,15 +81,17 @@ func RTCPBinaryFormatter(f RTCPBinaryFormatCallback) PacketDumperOption {
 func RTPFilter(callback RTPFilterCallback) PacketDumperOption {
 	return func(d *PacketDumper) error {
 		d.rtpFilter = callback
+
 		return nil
 	}
 }
 
 // RTCPFilter sets the RTCP filter.
-// Deprecated: prefer RTCPPerPacketFilter
+// Deprecated: prefer RTCPPerPacketFilter.
 func RTCPFilter(callback RTCPFilterCallback) PacketDumperOption {
 	return func(d *PacketDumper) error {
 		d.rtcpFilter = callback
+
 		return nil
 	}
 }
@@ -91,6 +100,7 @@ func RTCPFilter(callback RTCPFilterCallback) PacketDumperOption {
 func RTCPPerPacketFilter(callback RTCPPerPacketFilterCallback) PacketDumperOption {
 	return func(d *PacketDumper) error {
 		d.rtcpPerPacketFilter = callback
+
 		return nil
 	}
 }

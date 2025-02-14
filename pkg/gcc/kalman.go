@@ -66,6 +66,7 @@ func newKalman(opts ...kalmanOption) *kalman {
 	for _, opt := range opts {
 		opt(k)
 	}
+
 	return k
 }
 
@@ -91,5 +92,6 @@ func (k *kalman) updateEstimate(measurement time.Duration) time.Duration {
 	k.estimate += time.Duration(k.gain * zms * float64(time.Millisecond))
 
 	k.estimateError = (1 - k.gain) * estimateUncertainty
+
 	return k.estimate
 }

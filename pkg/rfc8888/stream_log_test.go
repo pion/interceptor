@@ -202,6 +202,7 @@ func TestStreamLogAdd(t *testing.T) {
 	}
 }
 
+//nolint:maintidx
 func TestStreamLogMetricsAfter(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -575,7 +576,7 @@ func TestRemoveOldestPackets(t *testing.T) {
 	now := time.Now().Add(10 * time.Second)
 	for i := 2; i < 16386; i++ {
 		now = now.Add(10 * time.Millisecond)
-		sl.add(now, uint16(i), 0)
+		sl.add(now, uint16(i), 0) //nolint:gosec // G115
 	}
 	metrics := sl.metricsAfter(now, maxReportsPerReportBlock)
 	assert.Equal(t, uint16(2), metrics.BeginSequence)
