@@ -1,25 +1,243 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyblackText: 2023 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package jitterbuffer
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/pion/rtp"
 )
 
-// PriorityQueue provides a linked list sorting of RTP packets by SequenceNumber.
-type PriorityQueue struct {
-	next   *node
+type treeColor bool
+type direction int8
+
+const (
+	red, black treeColor = false, true
+)
+const (
+	left, right direction = 0, 1
+)
+
+type RBNode struct {
+	parent, left, right *RBNode
+	priority            uint16
+	val                 *rtp.Packet
+	color               treeColor
+}
+
+type RBTree struct {
+	root   *RBNode
 	length uint16
 }
 
-type node struct {
-	val      *rtp.Packet
-	next     *node
-	prev     *node
-	priority uint16
+func NewTree() *RBTree {
+	return &RBTree{}
+}
+
+func (t *RBTree) RotateRight(x *RBNode) error {
+	if x == nil || x.left == nil {
+		return errors.New("RotateRight: node or left child is nil")
+	}
+
+	y := x.left
+	x.left = y.right
+	if y.right != nil {
+		y.right.parent = x
+	}
+
+	y.parent = x.parent
+	if x.parent == nil {
+		t.root = y
+	} else if x == x.parent.right {
+		x.parent.right = y
+	} else {
+		x.parent.left = y
+	}
+
+	y.right = x
+	x.parent = y
+
+	return nil
+}
+
+func (t *RBTree) RotateLeft(x *RBNode) error {
+	if x == nil || x.right == nil {
+		return errors.New("RotateLeft: node or right child is nil")
+	}
+
+	y := x.right
+	x.right = y.left
+	if y.left != nil {
+		y.left.parent = x
+	}
+
+	y.parent = x.parent
+	if x.parent == nil {
+		t.root = y
+	} else if x == x.parent.left {
+		x.parent.left = y
+	} else {
+		x.parent.right = y
+	}
+
+	y.left = x
+	x.parent = y
+
+	return nil
+}
+
+func (t *RBTree) Insert(pkt *rtp.Packet) {
+	n := &RBNode{
+		val:      pkt,
+		priority: pkt.SequenceNumber,
+		color:    red,
+	}
+	t.length++
+	if t.root == nil {
+		t.root = n
+		t.root.color = black
+		return
+	}
+
+	current := t.root
+	var parent *RBNode
+	for current != nil {
+		parent = current
+		if n.priority < current.priority {
+			current = current.left
+		} else {
+			current = current.right
+		}
+	}
+
+	n.parent = parent
+	if n.priority < parent.priority {
+		parent.left = n
+	} else {
+		parent.right = n
+	}
+
+	t.fixInsert(n)
+}
+
+func (t *RBTree) fixInsert(n *RBNode) {
+	n.color = red
+
+	for n != t.root && n.parent != nil && n.parent.color == red {
+		if n.parent.parent == nil {
+			break
+		}
+
+		grandparent := n.parent.parent
+		isParentLeft := n.parent == grandparent.left
+		uncle := grandparent.right
+		if !isParentLeft {
+			uncle = grandparent.left
+		}
+
+		if uncle != nil && uncle.color == red {
+			uncle.color = black
+			n.parent.color = black
+			if grandparent != t.root {
+				grandparent.color = red
+			}
+			n = grandparent
+			continue
+		}
+
+		if isParentLeft {
+			if n == n.parent.right {
+				if err := t.RotateLeft(n.parent); err != nil {
+					t.PrettyPrint()
+					panic(fmt.Sprintf("unable to rotate tree left %+v\n", t))
+				}
+				n = n.left
+			}
+			n.parent.color = black
+			grandparent.color = red
+			if err := t.RotateRight(grandparent); err != nil {
+				t.PrettyPrint()
+				panic(fmt.Sprintf("unable to rotate tree right %+v\n", t))
+			}
+
+		} else {
+			if n == n.parent.left {
+				if err := t.RotateRight(n.parent); err != nil {
+					t.PrettyPrint()
+					panic(fmt.Sprintf("unable to rotate tree right %+v\n", t))
+				}
+
+				n = n.right
+			}
+			n.parent.color = black
+			grandparent.color = red
+			if err := t.RotateLeft(grandparent); err != nil {
+				t.PrettyPrint()
+				panic(fmt.Sprintf("unable to rotate tree left %+v\n", t))
+			}
+
+		}
+	}
+
+	t.root.color = black
+}
+
+func (t *RBTree) Find(priority uint16) (*rtp.Packet, error) {
+	current := t.root
+	for current != nil {
+		if priority == current.priority {
+			return current.val, nil
+		}
+		if priority < current.priority {
+			current = current.left
+		} else {
+			current = current.right
+		}
+	}
+	return nil, ErrNotFound
+}
+
+func (t *RBTree) PrettyPrint() {
+	if t.root == nil {
+		fmt.Println("Empty tree")
+		return
+	}
+
+	// Helper function to get node details
+	nodeInfo := func(n *RBNode) string {
+		if n == nil {
+			return "NIL(B)"
+		}
+		color := "R"
+		if n.color == black {
+			color = "B"
+		}
+		return fmt.Sprintf("%d(%s)", n.priority, color)
+	}
+
+	var printNode func(node *RBNode, prefix string, isLeft bool)
+	printNode = func(node *RBNode, prefix string, isLeft bool) {
+		if node == nil {
+			return
+		}
+
+		nodePrefix := "└──"
+		childPrefix := "    "
+		if isLeft {
+			nodePrefix = "├──"
+			childPrefix = "│   "
+		}
+
+		fmt.Printf("%s%s%s\n", prefix, nodePrefix, nodeInfo(node))
+		printNode(node.left, prefix+childPrefix, true)
+		printNode(node.right, prefix+childPrefix, false)
+	}
+
+	fmt.Printf("%s\n", nodeInfo(t.root))
+	printNode(t.root.left, "", true)
+	printNode(t.root.right, "", false)
 }
 
 var (
@@ -31,173 +249,245 @@ var (
 
 // NewQueue will create a new PriorityQueue whose order relies on monotonically
 // increasing Sequence Number, wrapping at MaxUint16, so
-// a packet with sequence number MaxUint16 - 1 will be after 0.
-func NewQueue() *PriorityQueue {
-	return &PriorityQueue{
-		next:   nil,
-		length: 0,
-	}
+// a packet with sequence number MaxUint16 - 1 will be after 0
+func NewQueue() *RBTree {
+	return &RBTree{}
 }
 
-func newNode(val *rtp.Packet, priority uint16) *node {
-	return &node{
-		val:      val,
-		prev:     nil,
-		next:     nil,
-		priority: priority,
-	}
+// Push will insert a packet in to the queue in order of sequence number
+func (t *RBTree) Push(val *rtp.Packet, priority uint16) {
+	t.Insert(val)
 }
 
-// Find a packet in the queue with the provided sequence number,
-// regardless of position (the packet is retained in the queue).
-func (q *PriorityQueue) Find(sqNum uint16) (*rtp.Packet, error) {
-	next := q.next
-	for next != nil {
-		if next.priority == sqNum {
-			return next.val, nil
-		}
-		next = next.next
-	}
-
-	return nil, ErrNotFound
+// Length will get the total length of the queue
+func (t *RBTree) Length() uint16 {
+	return t.length
 }
 
-// Push will insert a packet in to the queue in order of sequence number.
-func (q *PriorityQueue) Push(val *rtp.Packet, priority uint16) {
-	newPq := newNode(val, priority)
-	if q.next == nil {
-		q.next = newPq
-		q.length++
-
-		return
+// sequence number
+func (t *RBTree) Pop() (*rtp.Packet, error) {
+	node := t.root
+	err := t.Delete(node.priority)
+	if err != nil {
+		return nil, err
 	}
-	if priority < q.next.priority {
-		newPq.next = q.next
-		q.next.prev = newPq
-		q.next = newPq
-		q.length++
-
-		return
-	}
-	head := q.next
-	prev := q.next
-	for head != nil {
-		if priority <= head.priority {
-			break
-		}
-		prev = head
-		head = head.next
-	}
-	if head == nil {
-		if prev != nil {
-			prev.next = newPq
-		}
-		newPq.prev = prev
-	} else {
-		newPq.next = head
-		newPq.prev = prev
-		if prev != nil {
-			prev.next = newPq
-		}
-		head.prev = newPq
-	}
-	q.length++
+	return node.val, nil
 }
 
-// Length will get the total length of the queue.
-func (q *PriorityQueue) Length() uint16 {
-	return q.length
-}
-
-// Pop removes the first element from the queue, regardless
-// sequence number.
-func (q *PriorityQueue) Pop() (*rtp.Packet, error) {
-	if q.next == nil {
-		return nil, ErrInvalidOperation
-	}
-	val := q.next.val
-	q.next.val = nil
-	q.length--
-	q.next = q.next.next
-
-	return val, nil
-}
-
-// PopAt removes an element at the specified sequence number (priority).
-func (q *PriorityQueue) PopAt(sqNum uint16) (*rtp.Packet, error) {
-	if q.next == nil {
-		return nil, ErrInvalidOperation
-	}
-	if q.next.priority == sqNum {
-		val := q.next.val
-		q.next.val = nil
-		q.next = q.next.next
-		q.length--
-
-		return val, nil
-	}
-	pos := q.next
-	prev := q.next.prev
-	for pos != nil {
-		if pos.priority == sqNum {
-			val := pos.val
-			pos.val = nil
-			prev.next = pos.next
-			if prev.next != nil {
-				prev.next.prev = prev
-			}
-			q.length--
-
-			return val, nil
-		}
-		prev = pos
-		pos = pos.next
+// PopAt removes an element at the specified sequence number (priority)
+func (t *RBTree) PopAt(sqNum uint16) (*rtp.Packet, error) {
+	pkt, err := t.Find(sqNum)
+	if err != nil {
+		return nil, err
 	}
 
-	return nil, ErrNotFound
+	err = t.Delete(sqNum)
+	if err != nil {
+		return nil, err
+	}
+	return pkt, nil
 }
 
 // PopAtTimestamp removes and returns a packet at the given RTP Timestamp, regardless
-// sequence number order.
-func (q *PriorityQueue) PopAtTimestamp(timestamp uint32) (*rtp.Packet, error) {
-	if q.next == nil {
-		return nil, ErrInvalidOperation
+// sequence number order
+func (t *RBTree) PopAtTimestamp(timestamp uint32) (*rtp.Packet, error) {
+	if t.root == nil {
+		return nil, ErrNotFound
 	}
-	if q.next.val.Timestamp == timestamp {
-		val := q.next.val
-		q.next.val = nil
-		q.next = q.next.next
-		q.length--
 
-		return val, nil
-	}
-	pos := q.next
-	prev := q.next.prev
-	for pos != nil {
-		if pos.val.Timestamp == timestamp {
-			val := pos.val
-			pos.val = nil
-			prev.next = pos.next
-			if prev.next != nil {
-				prev.next.prev = prev
+	queue := []*RBNode{t.root}
+
+	for len(queue) > 0 {
+		node := queue[0]
+		queue = queue[1:]
+
+		if node.val.Timestamp == timestamp {
+			pkt := node.val
+			err := t.Delete(node.priority)
+			if err != nil {
+				return nil, err
 			}
-			q.length--
-
-			return val, nil
+			return pkt, nil
 		}
-		prev = pos
-		pos = pos.next
+
+		if node.left != nil {
+			queue = append(queue, node.left)
+		}
+		if node.right != nil {
+			queue = append(queue, node.right)
+		}
 	}
 
 	return nil, ErrNotFound
 }
 
-// Clear will empty a PriorityQueue.
-func (q *PriorityQueue) Clear() {
-	next := q.next
-	q.length = 0
-	for next != nil {
-		next.prev = nil
-		next = next.next
+// Clear will empty a PriorityQueue
+func (t *RBTree) Clear() {
+	t.clear(t.root)
+	t.root = nil
+	t.length = 0
+}
+func (t *RBTree) clear(n *RBNode) {
+	if n == nil {
+		return
+	}
+	t.clear(n.left)
+	t.clear(n.right)
+	n = nil
+}
+
+// Find a node by priority
+func (t *RBTree) Peek(priority uint16) (*rtp.Packet, error) {
+	return t.Find(priority)
+}
+
+// Delete removes a node with the given priority from the tree
+func (t *RBTree) Delete(priority uint16) error {
+	node := t.root
+	for node != nil && node.priority != priority {
+		if priority < node.priority {
+			node = node.left
+		} else {
+			node = node.right
+		}
+	}
+	if node == nil {
+		return ErrNotFound
+	}
+	t.length--
+	// y is the node to be removed from the tree
+	// If node has less than 2 children, y = node
+	// If node has 2 children, y = successor
+	var y *RBNode
+	var x *RBNode // x is y's only child (or nil)
+
+	if node.left == nil || node.right == nil {
+		y = node
+	} else {
+		// Find successor (smallest value in right subtree)
+		y = node.right
+		for y.left != nil {
+			y = y.left
+		}
+	}
+
+	if y.left != nil {
+		x = y.left
+	} else {
+		x = y.right
+	}
+
+	if x != nil {
+		x.parent = y.parent
+	}
+	if y.parent == nil {
+		t.root = x
+	} else if y == y.parent.left {
+		y.parent.left = x
+	} else {
+		y.parent.right = x
+	}
+
+	// If we removed the successor, copy its data to the original node
+	if y != node {
+		node.priority = y.priority
+		node.val = y.val
+	}
+
+	// If we removed a black node, we need to fix the tree
+	if y.color == black {
+		t.fixDelete(x, y.parent)
+	}
+
+	return nil
+}
+
+func (t *RBTree) fixDelete(x *RBNode, parent *RBNode) {
+	for x != t.root && (x == nil || x.color == black) {
+		if x == nil && parent == nil {
+			break
+		}
+
+		var w *RBNode
+		isLeft := x == parent.left
+		if isLeft {
+			w = parent.right
+		} else {
+			w = parent.left
+		}
+
+		if w == nil {
+			x = parent
+			parent = parent.parent
+			continue
+		}
+
+		if w.color == red {
+			w.color = black
+			parent.color = red
+			if isLeft {
+				if err := t.RotateLeft(parent); err != nil {
+					t.PrettyPrint()
+					panic(fmt.Sprintf("unable to rotate tree left %+v\n", t))
+				}
+
+				w = parent.right
+			} else {
+				if err := t.RotateRight(parent); err != nil {
+					t.PrettyPrint()
+					panic(fmt.Sprintf("unable to rotate tree right %+v\n", t))
+				}
+
+				w = parent.left
+			}
+		}
+
+		wLeftBlack := w.left == nil || w.left.color == black
+		wRightBlack := w.right == nil || w.right.color == black
+
+		if wLeftBlack && wRightBlack {
+			w.color = red
+			x = parent
+			parent = parent.parent
+		} else {
+			if isLeft {
+				if wRightBlack {
+					if w.left != nil {
+						w.left.color = black
+					}
+					w.color = red
+					if err := t.RotateRight(w); err != nil {
+						t.PrettyPrint()
+						panic(fmt.Sprintf("unable to rotate tree right %+v\n", t))
+					}
+					w = parent.right
+				}
+				w.color = parent.color
+				parent.color = black
+				if w.right != nil {
+					w.right.color = black
+				}
+				t.RotateLeft(parent)
+			} else {
+				if wLeftBlack {
+					if w.right != nil {
+						w.right.color = black
+					}
+					w.color = red
+					t.RotateLeft(w)
+					w = parent.left
+				}
+				w.color = parent.color
+				parent.color = black
+				if w.left != nil {
+					w.left.color = black
+				}
+				t.RotateRight(parent)
+			}
+			x = t.root
+		}
+	}
+	if x != nil {
+		x.color = black
 	}
 }
