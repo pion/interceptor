@@ -42,11 +42,11 @@ type ReceiverInterceptor struct {
 // BindRemoteStream lets you modify any incoming RTP packets. It is called once for per RemoteStream.
 // The returned method will be called once per rtp packet.
 func (r *ReceiverInterceptor) BindRemoteStream(
-	_ *interceptor.StreamInfo, reader interceptor.RTPReader,
-) interceptor.RTPReader {
-	return interceptor.RTPReaderFunc(
-		func(bytes []byte, attributes interceptor.Attributes) (int, interceptor.Attributes, error) {
-			i, attr, err := reader.Read(bytes, attributes)
+	_ *interceptor.StreamInfo, processor interceptor.RTPProcessor,
+) interceptor.RTPProcessor {
+	return interceptor.RTPProcessorFunc(
+		func(i int, bytes []byte, attributes interceptor.Attributes) (int, interceptor.Attributes, error) {
+			i, attr, err := processor.Process(i, bytes, attributes)
 			if err != nil {
 				return 0, nil, err
 			}

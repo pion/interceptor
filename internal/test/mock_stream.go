@@ -17,10 +17,11 @@ import (
 type MockStream struct {
 	interceptor interceptor.Interceptor
 
-	rtcpReader interceptor.RTCPReader
-	rtcpWriter interceptor.RTCPWriter
-	rtpReader  interceptor.RTPReader
-	rtpWriter  interceptor.RTPWriter
+	rtcpReader   interceptor.RTCPReader
+	rtcpWriter   interceptor.RTCPWriter
+	rtpReader    interceptor.RTPReader
+	rtpProcessor interceptor.RTPProcessor
+	rtpWriter    interceptor.RTPWriter
 
 	rtcpIn chan []rtcp.Packet
 	rtpIn  chan *rtp.Packet
@@ -96,24 +97,32 @@ func NewMockStream(info *interceptor.StreamInfo, i interceptor.Interceptor) *Moc
 			},
 		),
 	)
-	mockStream.rtpReader = i.BindRemoteStream(
-		info, interceptor.RTPReaderFunc(
-			func(b []byte, attrs interceptor.Attributes) (int, interceptor.Attributes, error) {
-				p, ok := <-mockStream.rtpIn
-				if !ok {
-					return 0, nil, io.EOF
-				}
+	// Bind rtpReader to the remote stream
+	mockStream.rtpReader = interceptor.RTPReaderFunc(
+		func(b []byte, attrs interceptor.Attributes) (int, interceptor.Attributes, error) {
+			p, ok := <-mockStream.rtpIn
+			if !ok {
+				return 0, nil, io.EOF
+			}
 
-				marshaled, err := p.Marshal()
-				if err != nil {
-					return 0, nil, io.EOF
-				} else if len(marshaled) > len(b) {
-					return 0, nil, io.ErrShortBuffer
-				}
+			marshaled, err := p.Marshal()
+			if err != nil {
+				return 0, nil, io.EOF
+			} else if len(marshaled) > len(b) {
+				return 0, nil, io.ErrShortBuffer
+			}
 
-				copy(b, marshaled)
+			copy(b, marshaled)
 
-				return len(marshaled), attrs, err
+			return len(marshaled), attrs, err
+		},
+	)
+
+	// Bind rtpProcessor to process RTP packets and pass them to rtpWriter
+	mockStream.rtpProcessor = i.BindRemoteStream(
+		info, interceptor.RTPProcessorFunc(
+			func(i int, b []byte, attrs interceptor.Attributes) (int, interceptor.Attributes, error) {
+				return i, attrs, nil
 			},
 		),
 	)
@@ -143,16 +152,19 @@ func NewMockStream(info *interceptor.StreamInfo, i interceptor.Interceptor) *Moc
 	go func() {
 		buf := make([]byte, 1500)
 		for {
-			i, _, err := mockStream.rtpReader.Read(buf, interceptor.Attributes{})
+			i, attrs, err := mockStream.rtpReader.Read(buf, interceptor.Attributes{})
 			if err != nil {
-				if err.Error() == "attempt to pop while buffering" {
-					continue
-				}
 				if errors.Is(err, io.EOF) {
 					mockStream.rtpInModified <- RTPWithError{Err: err}
 				}
 
 				return
+			}
+
+			// Process the RTP packet through the interceptor pipeline
+			_, _, err = mockStream.rtpProcessor.Process(i, buf[:i], attrs)
+			if err != nil {
+				continue
 			}
 
 			p := &rtp.Packet{}
@@ -162,6 +174,7 @@ func NewMockStream(info *interceptor.StreamInfo, i interceptor.Interceptor) *Moc
 				return
 			}
 
+			//fmt.Println(p)
 			mockStream.rtpInModified <- RTPWithError{Packet: p}
 		}
 	}()

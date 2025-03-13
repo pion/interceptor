@@ -109,8 +109,8 @@ type packet struct {
 //
 //nolint:cyclop
 func (s *SenderInterceptor) BindRemoteStream(
-	info *interceptor.StreamInfo, reader interceptor.RTPReader,
-) interceptor.RTPReader {
+	info *interceptor.StreamInfo, processor interceptor.RTPProcessor,
+) interceptor.RTPProcessor {
 	var hdrExtID uint8
 	for _, e := range info.RTPHeaderExtensions {
 		if e.URI == transportCCURI {
@@ -120,12 +120,12 @@ func (s *SenderInterceptor) BindRemoteStream(
 		}
 	}
 	if hdrExtID == 0 { // Don't try to read header extension if ID is 0, because 0 is an invalid extension ID
-		return reader
+		return processor
 	}
 
-	return interceptor.RTPReaderFunc(
-		func(buf []byte, attributes interceptor.Attributes) (int, interceptor.Attributes, error) {
-			i, attr, err := reader.Read(buf, attributes)
+	return interceptor.RTPProcessorFunc(
+		func(n int, buf []byte, attributes interceptor.Attributes) (int, interceptor.Attributes, error) {
+			i, attr, err := processor.Process(n, buf, attributes)
 			if err != nil {
 				return 0, nil, err
 			}
