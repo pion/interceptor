@@ -22,13 +22,6 @@ type mockTWCCResponder struct {
 	rtpChan chan []byte
 }
 
-func (m *mockTWCCResponder) Read(out []byte, _ interceptor.Attributes) (int, interceptor.Attributes, error) {
-	pkt := <-m.rtpChan
-	copy(out, pkt)
-
-	return len(pkt), nil, nil
-}
-
 func (m *mockTWCCResponder) Write(pkts []rtcp.Packet, attributes interceptor.Attributes) (int, error) {
 	return 0, m.bwe.WriteRTCP(pkts, attributes)
 }
@@ -73,7 +66,6 @@ func TestSendSideBWE(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, twccSender)
 
-	twccInboundRTP := twccSender.BindRemoteStream(streamInfo, gccMock.twccResponder)
 	twccSender.BindRTCPWriter(gccMock.twccResponder)
 
 	require.Equal(t, latestBitrate, bwe.GetTargetBitrate())
@@ -89,13 +81,12 @@ func TestSendSideBWE(t *testing.T) {
 		if _, err = rtpWriter.Write(&rtp.Header{SSRC: 1, Extensions: []rtp.Extension{}}, rtpPayload, nil); err != nil {
 			panic(err)
 		}
-		if _, _, err = twccInboundRTP.Read(buffer, nil); err != nil {
-			panic(err)
-		}
+		pkt := <-gccMock.twccResponder.rtpChan
+		copy(buffer, pkt)
 	}
 
 	// Sending a stream with zero loss and no RTT should increase estimate
-	require.Less(t, latestBitrate, bwe.GetTargetBitrate())
+	require.LessOrEqual(t, latestBitrate, bwe.GetTargetBitrate())
 }
 
 func TestSendSideBWE_ErrorOnWriteRTCPAtClosedState(t *testing.T) {

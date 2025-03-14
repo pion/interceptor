@@ -88,10 +88,10 @@ func (n *GeneratorInterceptor) BindRTCPWriter(writer interceptor.RTCPWriter) int
 // BindRemoteStream lets you modify any incoming RTP packets. It is called once for per RemoteStream.
 // The returned method will be called once per rtp packet.
 func (n *GeneratorInterceptor) BindRemoteStream(
-	info *interceptor.StreamInfo, reader interceptor.RTPReader,
-) interceptor.RTPReader {
+	info *interceptor.StreamInfo, processor interceptor.RTPProcessor,
+) interceptor.RTPProcessor {
 	if !n.streamsFilter(info) {
-		return reader
+		return processor
 	}
 
 	// error is already checked in NewGeneratorInterceptor
@@ -100,8 +100,8 @@ func (n *GeneratorInterceptor) BindRemoteStream(
 	n.receiveLogs[info.SSRC] = receiveLog
 	n.receiveLogsMu.Unlock()
 
-	return interceptor.RTPReaderFunc(func(b []byte, a interceptor.Attributes) (int, interceptor.Attributes, error) {
-		i, attr, err := reader.Read(b, a)
+	return interceptor.RTPProcessorFunc(func(i int, b []byte, a interceptor.Attributes) (int, interceptor.Attributes, error) {
+		i, attr, err := processor.Process(i, b, a)
 		if err != nil {
 			return 0, nil, err
 		}

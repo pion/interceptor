@@ -13,7 +13,7 @@ import (
 //nolint:cyclop
 func TestInterceptor(t *testing.T) {
 	dummyRTPWriter := &RTPWriter{}
-	dummyRTPReader := &RTPReader{}
+	dummyRTPProcessor := &RTPProcessor{}
 	dummyRTCPWriter := &RTCPWriter{}
 	dummyRTCPReader := &RTCPReader{}
 	dummyStreamInfo := &interceptor.StreamInfo{}
@@ -31,7 +31,7 @@ func TestInterceptor(t *testing.T) {
 			t.Error("Default BindLocalStream should return given writer")
 		}
 		testInterceptor.UnbindLocalStream(dummyStreamInfo)
-		if testInterceptor.BindRemoteStream(dummyStreamInfo, dummyRTPReader) != dummyRTPReader {
+		if testInterceptor.BindRemoteStream(dummyStreamInfo, dummyRTPProcessor) != dummyRTPProcessor {
 			t.Error("Default BindRemoteStream should return given reader")
 		}
 		testInterceptor.UnbindRemoteStream(dummyStreamInfo)
@@ -68,7 +68,7 @@ func TestInterceptor(t *testing.T) {
 			UnbindLocalStreamFn: func(*interceptor.StreamInfo) {
 				atomic.AddUint32(&cntUnbindLocalStream, 1)
 			},
-			BindRemoteStreamFn: func(_ *interceptor.StreamInfo, reader interceptor.RTPReader) interceptor.RTPReader {
+			BindRemoteStreamFn: func(_ *interceptor.StreamInfo, reader interceptor.RTPProcessor) interceptor.RTPProcessor {
 				atomic.AddUint32(&cntBindRemoteStream, 1)
 
 				return reader
@@ -93,7 +93,7 @@ func TestInterceptor(t *testing.T) {
 			t.Error("Mocked BindLocalStream should return given writer")
 		}
 		testInterceptor.UnbindLocalStream(dummyStreamInfo)
-		if testInterceptor.BindRemoteStream(dummyStreamInfo, dummyRTPReader) != dummyRTPReader {
+		if testInterceptor.BindRemoteStream(dummyStreamInfo, dummyRTPProcessor) != dummyRTPProcessor {
 			t.Error("Mocked BindRemoteStream should return given reader")
 		}
 		testInterceptor.UnbindRemoteStream(dummyStreamInfo)

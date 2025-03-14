@@ -170,17 +170,17 @@ func (r *GeneratorInterceptor) writePLIs(rtcpWriter interceptor.RTCPWriter, ssrc
 // It is called once for per RemoteStream. The returned method
 // will be called once per rtp packet.
 func (r *GeneratorInterceptor) BindRemoteStream(
-	info *interceptor.StreamInfo, reader interceptor.RTPReader,
-) interceptor.RTPReader {
+	info *interceptor.StreamInfo, processor interceptor.RTPProcessor,
+) interceptor.RTPProcessor {
 	if !streamSupportPli(info) {
-		return reader
+		return processor
 	}
 
 	r.streams.Store(info.SSRC, nil)
 	// New streams need to receive a PLI as soon as possible.
 	r.ForcePLI(info.SSRC)
 
-	return reader
+	return processor
 }
 
 // UnbindLocalStream is called when the Stream is removed. It can be used to clean up any data related to that track.
