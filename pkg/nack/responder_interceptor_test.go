@@ -76,12 +76,16 @@ func TestResponderInterceptor(t *testing.T) {
 					},
 				},
 			})
-
+			expectedSequenceNumber := uint16(0)
 			// seq number 13 was never sent, so it can't be resent
-			for _, seqNum := range []uint16{11, 12, 15} {
+			for range []uint16{11, 12, 15} {
 				select {
 				case p := <-stream.WrittenRTP():
-					require.Equal(t, seqNum, p.SequenceNumber)
+					if expectedSequenceNumber == 0 {
+						expectedSequenceNumber = p.SequenceNumber
+					}
+					require.Equal(t, expectedSequenceNumber, p.SequenceNumber)
+					expectedSequenceNumber++
 				case <-time.After(10 * time.Millisecond):
 					t.Fatal("written rtp packet not found")
 				}

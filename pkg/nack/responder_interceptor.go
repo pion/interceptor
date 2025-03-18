@@ -25,6 +25,7 @@ func (r *ResponderInterceptorFactory) NewInterceptor(_ string) (interceptor.Inte
 		size:          1024,
 		log:           logging.NewDefaultLoggerFactory().NewLogger("nack_responder"),
 		streams:       map[uint32]*localStream{},
+		rtxSequencer:  rtp.NewRandomSequencer(),
 	}
 
 	for _, opt := range r.opts {
@@ -54,6 +55,8 @@ type ResponderInterceptor struct {
 
 	streams   map[uint32]*localStream
 	streamsMu sync.Mutex
+
+	rtxSequencer rtp.Sequencer
 }
 
 type localStream struct {
@@ -147,7 +150,7 @@ func (n *ResponderInterceptor) resendPackets(nack *rtcp.TransportLayerNack) {
 			defer stream.rtpBufferMutex.Unlock()
 
 			if p := stream.rtpBuffer.Get(seq); p != nil {
-				n.packetFactory.FillSequenceNumber(p)
+				p.Header().SequenceNumber = n.rtxSequencer.NextSequenceNumber()
 				if _, err := stream.rtpWriter.Write(p.Header(), p.Payload(), interceptor.Attributes{}); err != nil {
 					n.log.Warnf("failed resending nacked packet: %+v", err)
 				}
