@@ -6,6 +6,7 @@ import (
 	"github.com/pion/rtcp"
 )
 
+// nolint
 func convertTWCC(feedback *rtcp.TransportLayerCC) (time.Time, map[uint32][]acknowledgement) {
 	if feedback == nil {
 		return time.Time{}, nil
