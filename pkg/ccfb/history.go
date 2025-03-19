@@ -70,10 +70,11 @@ func (h *historyList) add(seqNr uint16, size int, departure time.Time) error {
 	if h.evictList.Len() > h.size {
 		h.removeOldest()
 	}
+
 	return nil
 }
 
-// Must be called while holding the lock
+// Must be called while holding the lock.
 func (h *historyList) removeOldest() {
 	if ent := h.evictList.Front(); ent != nil {
 		v := h.evictList.Remove(ent)
@@ -106,5 +107,6 @@ func (h *historyList) getReportForAck(acks []acknowledgement) []PacketReport {
 			}
 		}
 	}
+
 	return reports
 }

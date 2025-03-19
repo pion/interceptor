@@ -91,10 +91,10 @@ func TestHistory(t *testing.T) {
 	})
 
 	t.Run("garbageCollection", func(t *testing.T) {
-		h := newHistoryList(200)
+		hist := newHistoryList(200)
 
 		for i := uint16(0); i < 300; i++ {
-			assert.NoError(t, h.add(i, 1200, time.Time{}.Add(time.Duration(i)*time.Millisecond)))
+			assert.NoError(t, hist.add(i, 1200, time.Time{}.Add(time.Duration(i)*time.Millisecond)))
 		}
 
 		acks := []acknowledgement{}
@@ -106,9 +106,9 @@ func TestHistory(t *testing.T) {
 				ecn:     0,
 			})
 		}
-		prl := h.getReportForAck(acks)
+		prl := hist.getReportForAck(acks)
 		assert.Len(t, prl, 90)
-		assert.Equal(t, 200, len(h.seqNrToPacket))
-		assert.Equal(t, 200, h.evictList.Len())
+		assert.Equal(t, 200, len(hist.seqNrToPacket))
+		assert.Equal(t, 200, hist.evictList.Len())
 	})
 }

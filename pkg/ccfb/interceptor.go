@@ -16,7 +16,7 @@ const transportCCURI = "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide
 type ccfbAttributesKeyType uint32
 
 // CCFBAttributesKey is the key which can be used to retrieve the Report objects
-// from the interceptor.Attributes
+// from the interceptor.Attributes.
 const CCFBAttributesKey ccfbAttributesKeyType = iota
 
 // A Report contains Arrival and Departure (from the remote end) times of a RTCP
@@ -33,13 +33,14 @@ type history interface {
 	getReportForAck([]acknowledgement) []PacketReport
 }
 
-// Option can be used to set initial options on CCFB interceptors
+// Option can be used to set initial options on CCFB interceptors.
 type Option func(*Interceptor) error
 
 // HistorySize sets the size of the history of outgoing packets.
 func HistorySize(size int) Option {
 	return func(i *Interceptor) error {
 		i.historySize = size
+
 		return nil
 	}
 }
@@ -47,6 +48,7 @@ func HistorySize(size int) Option {
 func timeFactory(f func() time.Time) Option {
 	return func(i *Interceptor) error {
 		i.timestamp = f
+
 		return nil
 	}
 }
@@ -54,13 +56,16 @@ func timeFactory(f func() time.Time) Option {
 func historyFactory(f func(int) history) Option {
 	return func(i *Interceptor) error {
 		i.historyFactory = f
+
 		return nil
 	}
 }
 
+// nolint
 func ccfbConverterFactory(f func(ts time.Time, feedback *rtcp.CCFeedbackReport) (time.Time, map[uint32][]acknowledgement)) Option {
 	return func(i *Interceptor) error {
 		i.convertCCFB = f
+
 		return nil
 	}
 }
@@ -68,25 +73,26 @@ func ccfbConverterFactory(f func(ts time.Time, feedback *rtcp.CCFeedbackReport) 
 func twccConverterFactory(f func(feedback *rtcp.TransportLayerCC) (time.Time, map[uint32][]acknowledgement)) Option {
 	return func(i *Interceptor) error {
 		i.convertTWCC = f
+
 		return nil
 	}
 }
 
-// InterceptorFactory is a factory for CCFB interceptors
+// InterceptorFactory is a factory for CCFB interceptors.
 type InterceptorFactory struct {
 	opts []Option
 }
 
-// NewInterceptor returns a new CCFB InterceptorFactory
+// NewInterceptor returns a new CCFB InterceptorFactory.
 func NewInterceptor(opts ...Option) (*InterceptorFactory, error) {
 	return &InterceptorFactory{
 		opts: opts,
 	}, nil
 }
 
-// NewInterceptor returns a new ccfb.Interceptor
+// NewInterceptor returns a new ccfb.Interceptor.
 func (f *InterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, error) {
-	i := &Interceptor{
+	in := &Interceptor{
 		NoOp:          interceptor.NoOp{},
 		lock:          sync.Mutex{},
 		log:           logging.NewDefaultLoggerFactory().NewLogger("ccfb_interceptor"),
@@ -100,11 +106,12 @@ func (f *InterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, 
 		},
 	}
 	for _, opt := range f.opts {
-		if err := opt(i); err != nil {
+		if err := opt(in); err != nil {
 			return nil, err
 		}
 	}
-	return i, nil
+
+	return in, nil
 }
 
 // Interceptor implements a congestion control feedback receiver. It keeps track
@@ -129,13 +136,17 @@ type Interceptor struct {
 }
 
 // BindLocalStream implements interceptor.Interceptor.
-func (i *Interceptor) BindLocalStream(info *interceptor.StreamInfo, writer interceptor.RTPWriter) interceptor.RTPWriter {
+func (i *Interceptor) BindLocalStream(
+	info *interceptor.StreamInfo,
+	writer interceptor.RTPWriter,
+) interceptor.RTPWriter {
 	var twccHdrExtID uint8
 	var useTWCC bool
 	for _, e := range info.RTPHeaderExtensions {
 		if e.URI == transportCCURI {
 			twccHdrExtID = uint8(e.ID) // nolint:gosec
 			useTWCC = true
+
 			break
 		}
 	}
@@ -149,6 +160,7 @@ func (i *Interceptor) BindLocalStream(info *interceptor.StreamInfo, writer inter
 	}
 	i.ssrcToHistory[ssrc] = i.historyFactory(i.historySize)
 
+	// nolint
 	return interceptor.RTPWriterFunc(func(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
 		i.lock.Lock()
 		defer i.lock.Unlock()
@@ -162,7 +174,11 @@ func (i *Interceptor) BindLocalStream(info *interceptor.StreamInfo, writer inter
 		if useTWCC {
 			var twccHdrExt rtp.TransportCCExtension
 			if err := twccHdrExt.Unmarshal(header.GetExtension(twccHdrExtID)); err != nil {
-				i.log.Warnf("CCFB configured for TWCC, but failed to get TWCC header extension from outgoing packet. Falling back to saving history for CCFB feedback reports. err: %v", err)
+				i.log.Warnf(
+					"CCFB configured for TWCC, but failed to get TWCC header extension from outgoing packet."+
+						"Falling back to saving history for CCFB feedback reports. err: %v",
+					err,
+				)
 				if _, ok := i.ssrcToHistory[ssrc]; !ok {
 					i.ssrcToHistory[ssrc] = i.historyFactory(i.historySize)
 				}
@@ -174,6 +190,7 @@ func (i *Interceptor) BindLocalStream(info *interceptor.StreamInfo, writer inter
 		if err := i.ssrcToHistory[ssrc].add(seqNr, header.MarshalSize()+len(payload), i.timestamp()); err != nil {
 			return 0, err
 		}
+
 		return writer.Write(header, payload, attributes)
 	})
 }
@@ -226,6 +243,7 @@ func (i *Interceptor) BindRTCPReader(reader interceptor.RTCPReader) interceptor.
 			})
 		}
 		attr.Set(CCFBAttributesKey, res)
+
 		return n, attr, err
 	})
 }
