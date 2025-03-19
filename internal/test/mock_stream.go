@@ -134,6 +134,7 @@ func NewMockStream(info *interceptor.StreamInfo, i interceptor.Interceptor) *Moc
 			pkts, err := rtcp.Unmarshal(buf[:i])
 			if err != nil {
 				mockStream.rtcpInModified <- RTCPWithError{Attr: attr, Err: err}
+
 				return
 			}
 

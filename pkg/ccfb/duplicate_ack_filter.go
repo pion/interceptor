@@ -5,7 +5,7 @@ type DuplicateAckFilter struct {
 	highestAckedBySSRC map[uint32]int64
 }
 
-// NewDuplicateAckFilter creates a new DuplicateAckFilter
+// NewDuplicateAckFilter creates a new DuplicateAckFilter.
 func NewDuplicateAckFilter() *DuplicateAckFilter {
 	return &DuplicateAckFilter{
 		highestAckedBySSRC: make(map[uint32]int64),

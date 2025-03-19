@@ -23,10 +23,15 @@ func convertCCFB(ts time.Time, feedback *rtcp.CCFeedbackReport) (time.Time, map[
 	for _, rb := range feedback.ReportBlocks {
 		result[rb.MediaSSRC] = convertMetricBlock(referenceTime, rb.BeginSequence, rb.MetricBlocks)
 	}
+
 	return referenceTime, result
 }
 
-func convertMetricBlock(reference time.Time, seqNrOffset uint16, blocks []rtcp.CCFeedbackMetricBlock) []acknowledgement {
+func convertMetricBlock(
+	reference time.Time,
+	seqNrOffset uint16,
+	blocks []rtcp.CCFeedbackMetricBlock,
+) []acknowledgement {
 	reports := make([]acknowledgement, len(blocks))
 	for i, mb := range blocks {
 		if mb.Received {
@@ -55,5 +60,6 @@ func convertMetricBlock(reference time.Time, seqNrOffset uint16, blocks []rtcp.C
 			}
 		}
 	}
+
 	return reports
 }

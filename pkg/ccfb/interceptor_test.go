@@ -30,6 +30,7 @@ func (m *mockHistory) add(seqNr uint16, size int, departure time.Time) error {
 		size:      size,
 		departure: departure,
 	})
+
 	return nil
 }
 
@@ -38,6 +39,7 @@ func (m *mockHistory) getReportForAck(_ []acknowledgement) []PacketReport {
 	return m.report
 }
 
+// nolint
 func TestInterceptor(t *testing.T) {
 	mockTimestamp := time.Time{}.Add(17 * time.Second)
 	t.Run("writeRTP", func(t *testing.T) {
