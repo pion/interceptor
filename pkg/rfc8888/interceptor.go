@@ -169,7 +169,8 @@ func (s *SenderInterceptor) loop(writer interceptor.RTCPWriter) {
 			s.log.Tracef("got packet: %v", pkt)
 			s.recorder.AddPacket(pkt.arrival, pkt.ssrc, pkt.sequenceNumber, pkt.ecn)
 
-		case now := <-t.Ch():
+		case <-t.Ch():
+			now := s.now()
 			s.log.Tracef("report triggered at %v", now)
 			if writer == nil {
 				s.log.Trace("no writer added, continue")
