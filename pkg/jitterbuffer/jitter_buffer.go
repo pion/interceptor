@@ -68,6 +68,7 @@ type (
 type JitterBuffer struct {
 	packets       *PriorityQueue
 	minStartCount uint16
+	overflowLen   uint16
 	lastSequence  uint16
 	playoutHead   uint16
 	playoutReady  bool
@@ -96,6 +97,7 @@ func New(opts ...Option) *JitterBuffer {
 		state:         Buffering,
 		stats:         Stats{0, 0, 0},
 		minStartCount: 50,
+		overflowLen:   100,
 		packets:       NewQueue(),
 		listeners:     make(map[Event][]EventListener),
 	}
@@ -154,16 +156,20 @@ func (jb *JitterBuffer) updateStats(lastPktSeqNo uint16) {
 func (jb *JitterBuffer) Push(packet *rtp.Packet) {
 	jb.mutex.Lock()
 	defer jb.mutex.Unlock()
+
 	if jb.packets.Length() == 0 {
 		jb.emit(StartBuffering)
 	}
-	if jb.packets.Length() > 100 {
+
+	if jb.packets.Length() > jb.overflowLen {
 		jb.stats.overflowCount++
 		jb.emit(BufferOverflow)
 	}
+
 	if !jb.playoutReady && jb.packets.Length() == 0 {
 		jb.playoutHead = packet.SequenceNumber
 	}
+
 	jb.updateStats(packet.SequenceNumber)
 	jb.packets.Push(packet, packet.SequenceNumber)
 	jb.updateState()
@@ -282,6 +288,7 @@ func (jb *JitterBuffer) Clear(resetState bool) {
 	jb.mutex.Lock()
 	defer jb.mutex.Unlock()
 	jb.packets.Clear()
+
 	if resetState {
 		jb.lastSequence = 0
 		jb.state = Buffering
