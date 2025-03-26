@@ -53,12 +53,12 @@ func (i *Chain) UnbindLocalStream(ctx *StreamInfo) {
 // BindRemoteStream lets you modify any incoming RTP packets.
 // It is called once for per RemoteStream. The returned method
 // will be called once per rtp packet.
-func (i *Chain) BindRemoteStream(ctx *StreamInfo, reader RTPReader) RTPReader {
+func (i *Chain) BindRemoteStream(ctx *StreamInfo, processor RTPProcessor) RTPProcessor {
 	for _, interceptor := range i.interceptors {
-		reader = interceptor.BindRemoteStream(ctx, reader)
+		processor = interceptor.BindRemoteStream(ctx, processor)
 	}
 
-	return reader
+	return processor
 }
 
 // UnbindRemoteStream is called when the Stream is removed. It can be used to clean up any data related to that track.

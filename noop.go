@@ -31,8 +31,8 @@ func (i *NoOp) UnbindLocalStream(_ *StreamInfo) {}
 // BindRemoteStream lets you modify any incoming RTP packets.
 // It is called once for per RemoteStream. The returned method
 // will be called once per rtp packet.
-func (i *NoOp) BindRemoteStream(_ *StreamInfo, reader RTPReader) RTPReader {
-	return reader
+func (i *NoOp) BindRemoteStream(_ *StreamInfo, processor RTPProcessor) RTPProcessor {
+	return processor
 }
 
 // UnbindRemoteStream is called when the Stream is removed. It can be used to clean up any data related to that track.

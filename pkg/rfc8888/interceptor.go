@@ -96,10 +96,10 @@ func (s *SenderInterceptor) BindRTCPWriter(writer interceptor.RTCPWriter) interc
 // It is called once for per RemoteStream. The returned method
 // will be called once per rtp packet..
 func (s *SenderInterceptor) BindRemoteStream(
-	_ *interceptor.StreamInfo, reader interceptor.RTPReader,
-) interceptor.RTPReader {
-	return interceptor.RTPReaderFunc(func(b []byte, a interceptor.Attributes) (int, interceptor.Attributes, error) {
-		i, attr, err := reader.Read(b, a)
+	_ *interceptor.StreamInfo, processor interceptor.RTPProcessor,
+) interceptor.RTPProcessor {
+	return interceptor.RTPProcessorFunc(func(i int, b []byte, a interceptor.Attributes) (int, interceptor.Attributes, error) {
+		i, attr, err := processor.Process(i, b, a)
 		if err != nil {
 			return 0, nil, err
 		}

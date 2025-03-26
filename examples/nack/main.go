@@ -54,14 +54,20 @@ func receiveRoutine() {
 
 	// Create the writer just for a single SSRC stream
 	// this is a callback that is fired everytime a RTP packet is ready to be sent
-	streamReader := chain.BindRemoteStream(
+	streamReader := interceptor.RTPReaderFunc(
+		func(b []byte, _ interceptor.Attributes) (int, interceptor.Attributes, error) {
+			return len(b), nil, nil
+		},
+	)
+
+	streamProcessor := chain.BindRemoteStream(
 		&interceptor.StreamInfo{
 			SSRC:         ssrc,
 			RTCPFeedback: []interceptor.RTCPFeedback{{Type: "nack", Parameter: ""}},
 		},
-		interceptor.RTPReaderFunc(
-			func(b []byte, _ interceptor.Attributes) (int, interceptor.Attributes, error) {
-				return len(b), nil, nil
+		interceptor.RTPProcessorFunc(
+			func(i int, b []byte, _ interceptor.Attributes) (int, interceptor.Attributes, error) {
+				return i, nil, nil
 			},
 		),
 	)
@@ -75,6 +81,10 @@ func receiveRoutine() {
 		log.Println("Received RTP")
 
 		if _, _, err := streamReader.Read(buffer[:i], nil); err != nil {
+			panic(err)
+		}
+
+		if _, _, err = streamProcessor.Process(i, buffer[:i], nil); err != nil {
 			panic(err)
 		}
 

@@ -38,7 +38,7 @@ type Interceptor interface {
 	// BindRemoteStream lets you modify any incoming RTP packets.
 	// It is called once for per RemoteStream. The returned method
 	// will be called once per rtp packet.
-	BindRemoteStream(info *StreamInfo, reader RTPReader) RTPReader
+	BindRemoteStream(info *StreamInfo, processor RTPProcessor) RTPProcessor
 
 	// UnbindRemoteStream is called when the Stream is removed. It can be used to clean up any data related to that track.
 	UnbindRemoteStream(info *StreamInfo)
@@ -56,6 +56,12 @@ type RTPWriter interface {
 type RTPReader interface {
 	// Read a rtp packet
 	Read([]byte, Attributes) (int, Attributes, error)
+}
+
+// RTPProcessor is used by Interceptor.BindRemoteStream.
+type RTPProcessor interface {
+	// Process a rtp packet
+	Process(int, []byte, Attributes) (int, Attributes, error)
 }
 
 // RTCPWriter is used by Interceptor.BindRTCPWriter.
@@ -76,6 +82,9 @@ type RTPWriterFunc func(header *rtp.Header, payload []byte, attributes Attribute
 // RTPReaderFunc is an adapter for RTPReader interface.
 type RTPReaderFunc func([]byte, Attributes) (int, Attributes, error)
 
+// RTPProcessorFunc is an adapter for RTPReader interface.
+type RTPProcessorFunc func(int, []byte, Attributes) (int, Attributes, error)
+
 // RTCPWriterFunc is an adapter for RTCPWriter interface.
 type RTCPWriterFunc func(pkts []rtcp.Packet, attributes Attributes) (int, error)
 
@@ -90,6 +99,11 @@ func (f RTPWriterFunc) Write(header *rtp.Header, payload []byte, attributes Attr
 // Read a rtp packet.
 func (f RTPReaderFunc) Read(b []byte, a Attributes) (int, Attributes, error) {
 	return f(b, a)
+}
+
+// Process a rtp packet.
+func (f RTPProcessorFunc) Process(i int, b []byte, a Attributes) (int, Attributes, error) {
+	return f(i, b, a)
 }
 
 // Write a batch of rtcp packets.
