@@ -16,7 +16,7 @@ type Interceptor struct {
 	BindRTCPWriterFn     func(writer interceptor.RTCPWriter) interceptor.RTCPWriter
 	BindLocalStreamFn    func(i *interceptor.StreamInfo, writer interceptor.RTPWriter) interceptor.RTPWriter
 	UnbindLocalStreamFn  func(i *interceptor.StreamInfo)
-	BindRemoteStreamFn   func(i *interceptor.StreamInfo, reader interceptor.RTPReader) interceptor.RTPReader
+	BindRemoteStreamFn   func(i *interceptor.StreamInfo, processor interceptor.RTPProcessor) interceptor.RTPProcessor
 	UnbindRemoteStreamFn func(i *interceptor.StreamInfo)
 	CloseFn              func() error
 }
@@ -59,13 +59,13 @@ func (i *Interceptor) UnbindLocalStream(info *interceptor.StreamInfo) {
 
 // BindRemoteStream implements Interceptor.
 func (i *Interceptor) BindRemoteStream(
-	info *interceptor.StreamInfo, reader interceptor.RTPReader,
-) interceptor.RTPReader {
+	info *interceptor.StreamInfo, processor interceptor.RTPProcessor,
+) interceptor.RTPProcessor {
 	if i.BindRemoteStreamFn != nil {
-		return i.BindRemoteStreamFn(info, reader)
+		return i.BindRemoteStreamFn(info, processor)
 	}
 
-	return reader
+	return processor
 }
 
 // UnbindRemoteStream implements Interceptor.
@@ -99,9 +99,19 @@ type RTPReader struct {
 	ReadFn func([]byte, interceptor.Attributes) (int, interceptor.Attributes, error)
 }
 
+// RTPProcessor is a mock RTPProcessor.
+type RTPProcessor struct {
+	ProcessFn func(int, []byte, interceptor.Attributes) (int, interceptor.Attributes, error)
+}
+
 // Read implements RTPReader.
 func (r *RTPReader) Read(b []byte, attributes interceptor.Attributes) (int, interceptor.Attributes, error) {
 	return r.ReadFn(b, attributes)
+}
+
+// Process implements RTPReader.
+func (r *RTPProcessor) Process(i int, b []byte, attributes interceptor.Attributes) (int, interceptor.Attributes, error) {
+	return r.ProcessFn(i, b, attributes)
 }
 
 // RTCPWriter is a mock RTCPWriter.

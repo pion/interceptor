@@ -211,13 +211,13 @@ func (r *Interceptor) BindLocalStream(
 // BindRemoteStream lets you modify any incoming RTP packets. It is called once for per RemoteStream.
 // The returned method will be called once per rtp packet.
 func (r *Interceptor) BindRemoteStream(
-	info *interceptor.StreamInfo, reader interceptor.RTPReader,
-) interceptor.RTPReader {
+	info *interceptor.StreamInfo, processor interceptor.RTPProcessor,
+) interceptor.RTPProcessor {
 	recorder := r.getRecorder(info.SSRC, float64(info.ClockRate))
 
-	return interceptor.RTPReaderFunc(
-		func(bytes []byte, attributes interceptor.Attributes) (int, interceptor.Attributes, error) {
-			n, attributes, err := reader.Read(bytes, attributes)
+	return interceptor.RTPProcessorFunc(
+		func(n int, bytes []byte, attributes interceptor.Attributes) (int, interceptor.Attributes, error) {
+			n, attributes, err := processor.Process(n, bytes, attributes)
 			if err != nil {
 				return 0, nil, err
 			}

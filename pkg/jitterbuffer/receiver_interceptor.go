@@ -67,11 +67,12 @@ func NewInterceptor(opts ...ReceiverInterceptorOption) (*InterceptorFactory, err
 // BindRemoteStream lets you modify any incoming RTP packets. It is called once for per RemoteStream.
 // The returned method will be called once per rtp packet.
 func (i *ReceiverInterceptor) BindRemoteStream(
-	_ *interceptor.StreamInfo, reader interceptor.RTPReader,
-) interceptor.RTPReader {
-	return interceptor.RTPReaderFunc(func(b []byte, a interceptor.Attributes) (int, interceptor.Attributes, error) {
+	_ *interceptor.StreamInfo, processor interceptor.RTPProcessor,
+) interceptor.RTPProcessor {
+	return interceptor.RTPProcessorFunc(func(n int, b []byte, a interceptor.Attributes) (int, interceptor.Attributes, error) {
 		buf := make([]byte, len(b))
-		n, attr, err := reader.Read(buf, a)
+		copy(buf, b)
+		n, attr, err := processor.Process(n, buf, a)
 		if err != nil {
 			return n, attr, err
 		}
