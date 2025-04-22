@@ -12,6 +12,7 @@ import (
 	"github.com/pion/interceptor/pkg/twcc"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,13 +38,13 @@ func (m *mockTWCCResponder) Write(pkts []rtcp.Packet, attributes interceptor.Att
 // the congestion controller.
 type mockGCCWriteStream struct {
 	twccResponder *mockTWCCResponder
+	t             *testing.T
 }
 
 func (m *mockGCCWriteStream) Write(header *rtp.Header, payload []byte, _ interceptor.Attributes) (int, error) {
+	m.t.Helper()
 	pkt, err := (&rtp.Packet{Header: *header, Payload: payload}).Marshal()
-	if err != nil {
-		panic(err)
-	}
+	assert.NoError(m.t, err)
 
 	m.twccResponder.rtpChan <- pkt
 
@@ -63,10 +64,11 @@ func TestSendSideBWE(t *testing.T) {
 	require.NotNil(t, bwe)
 
 	gccMock := &mockGCCWriteStream{
-		&mockTWCCResponder{
+		twccResponder: &mockTWCCResponder{
 			bwe,
 			make(chan []byte, 500),
 		},
+		t: t,
 	}
 
 	twccSender, err := (&twcc.SenderInterceptorFactory{}).NewInterceptor("")
@@ -86,12 +88,10 @@ func TestSendSideBWE(t *testing.T) {
 	rtpWriter = twccWriter.BindLocalStream(streamInfo, rtpWriter)
 
 	for i := 0; i <= 100; i++ {
-		if _, err = rtpWriter.Write(&rtp.Header{SSRC: 1, Extensions: []rtp.Extension{}}, rtpPayload, nil); err != nil {
-			panic(err)
-		}
-		if _, _, err = twccInboundRTP.Read(buffer, nil); err != nil {
-			panic(err)
-		}
+		_, err = rtpWriter.Write(&rtp.Header{SSRC: 1, Extensions: []rtp.Extension{}}, rtpPayload, nil)
+		assert.NoError(t, err)
+		_, _, err = twccInboundRTP.Read(buffer, nil)
+		assert.NoError(t, err)
 	}
 
 	// Sending a stream with zero loss and no RTT should increase estimate

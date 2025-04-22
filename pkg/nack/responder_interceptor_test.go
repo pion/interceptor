@@ -15,6 +15,7 @@ import (
 	"github.com/pion/logging"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -64,7 +65,7 @@ func TestResponderInterceptor(t *testing.T) {
 				case p := <-stream.WrittenRTP():
 					require.Equal(t, seqNum, p.SequenceNumber)
 				case <-time.After(10 * time.Millisecond):
-					t.Fatal("written rtp packet not found")
+					assert.FailNow(t, "written rtp packet not found")
 				}
 			}
 
@@ -84,13 +85,13 @@ func TestResponderInterceptor(t *testing.T) {
 				case p := <-stream.WrittenRTP():
 					require.Equal(t, seqNum, p.SequenceNumber)
 				case <-time.After(10 * time.Millisecond):
-					t.Fatal("written rtp packet not found")
+					assert.Fail(t, "written rtp packet not found")
 				}
 			}
 
 			select {
 			case p := <-stream.WrittenRTP():
-				t.Errorf("no more rtp packets expected, found sequence number: %v", p.SequenceNumber)
+				assert.Fail(t, "no more rtp packets expected, found sequence number: %v", p.SequenceNumber)
 			case <-time.After(10 * time.Millisecond):
 			}
 		})
@@ -224,14 +225,14 @@ func TestResponderInterceptor_StreamFilter(t *testing.T) {
 		case p := <-streamWithoutNacks.WrittenRTP():
 			require.Equal(t, seqNum, p.SequenceNumber)
 		case <-time.After(10 * time.Millisecond):
-			t.Fatal("written rtp packet not found")
+			assert.Fail(t, "written rtp packet not found")
 		}
 
 		select {
 		case p := <-streamWithNacks.WrittenRTP():
 			require.Equal(t, seqNum, p.SequenceNumber)
 		case <-time.After(10 * time.Millisecond):
-			t.Fatal("written rtp packet not found")
+			assert.Fail(t, "written rtp packet not found")
 		}
 	}
 
@@ -258,12 +259,12 @@ func TestResponderInterceptor_StreamFilter(t *testing.T) {
 	select {
 	case <-streamWithNacks.WrittenRTP():
 	case <-time.After(10 * time.Millisecond):
-		t.Fatal("nack response expected")
+		assert.Fail(t, "nack response expected")
 	}
 
 	select {
 	case <-streamWithoutNacks.WrittenRTP():
-		t.Fatal("no nack response expected")
+		assert.Fail(t, "no nack response expected")
 	case <-time.After(10 * time.Millisecond):
 	}
 }
@@ -292,7 +293,7 @@ func TestResponderInterceptor_RFC4588(t *testing.T) {
 		case p := <-stream.WrittenRTP():
 			require.Equal(t, seqNum, p.SequenceNumber)
 		case <-time.After(10 * time.Millisecond):
-			t.Fatal("written rtp packet not found")
+			assert.Fail(t, "written rtp packet not found")
 		}
 	}
 
@@ -314,13 +315,13 @@ func TestResponderInterceptor_RFC4588(t *testing.T) {
 			require.Equal(t, uint8(2), p.PayloadType)
 			require.Equal(t, binary.BigEndian.Uint16(p.Payload), seqNum)
 		case <-time.After(10 * time.Millisecond):
-			t.Fatal("written rtp packet not found")
+			assert.Fail(t, "written rtp packet not found")
 		}
 	}
 
 	select {
 	case p := <-stream.WrittenRTP():
-		t.Errorf("no more rtp packets expected, found sequence number: %v", p.SequenceNumber)
+		assert.Fail(t, "no more rtp packets expected, found sequence number: %v", p.SequenceNumber)
 	case <-time.After(10 * time.Millisecond):
 	}
 }
@@ -355,7 +356,7 @@ func TestResponderInterceptor_BypassUnknownSSRCs(t *testing.T) {
 			require.Equal(t, seqNum, p.SequenceNumber)
 			require.Equal(t, uint32(1), p.SSRC)
 		case <-time.After(10 * time.Millisecond):
-			t.Fatal("written rtp packet not found")
+			assert.Fail(t, "written rtp packet not found")
 		}
 
 		select {
@@ -363,7 +364,7 @@ func TestResponderInterceptor_BypassUnknownSSRCs(t *testing.T) {
 			require.Equal(t, seqNum, p.SequenceNumber)
 			require.Equal(t, uint32(2), p.SSRC)
 		case <-time.After(10 * time.Millisecond):
-			t.Fatal("written rtp packet not found")
+			assert.Fail(t, "written rtp packet not found")
 		}
 	}
 
@@ -373,7 +374,7 @@ func TestResponderInterceptor_BypassUnknownSSRCs(t *testing.T) {
 	case p := <-stream.WrittenRTP():
 		require.Equal(t, uint16(13), p.SequenceNumber)
 	case <-time.After(10 * time.Millisecond):
-		t.Fatal("written rtp packet not found")
+		assert.Fail(t, "written rtp packet not found")
 	}
 
 	stream.ReceiveRTCP([]rtcp.Packet{
@@ -393,7 +394,7 @@ func TestResponderInterceptor_BypassUnknownSSRCs(t *testing.T) {
 			require.Equal(t, uint32(1), p.SSRC)
 			require.Equal(t, seqNum, p.SequenceNumber)
 		case <-time.After(10 * time.Millisecond):
-			t.Fatal("written rtp packet not found")
+			assert.Fail(t, "written rtp packet not found")
 		}
 	}
 }

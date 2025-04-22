@@ -124,7 +124,7 @@ func TestInterceptor(t *testing.T) {
 			case r := <-stream.ReadRTP():
 				assert.NoError(t, r.Err)
 			case <-time.After(10 * time.Millisecond):
-				t.Fatal("receiver rtp packet not found")
+				assert.Fail(t, "receiver rtp packet not found")
 			}
 		}
 		mTick.Tick(zero.Add(time.Second))
@@ -209,7 +209,7 @@ func TestInterceptor(t *testing.T) {
 			case r := <-stream.ReadRTP():
 				assert.NoError(t, r.Err)
 			case <-time.After(10 * time.Millisecond):
-				t.Fatal("receiver rtp packet not found")
+				assert.Fail(t, "receiver rtp packet not found")
 			}
 		}
 		mTick.Tick(zero.Add(time.Second))

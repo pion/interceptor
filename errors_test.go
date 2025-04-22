@@ -6,6 +6,8 @@ package interceptor
 import (
 	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestMultiError(t *testing.T) {
@@ -25,20 +27,13 @@ func TestMultiError(t *testing.T) {
 	})
 	str := "err1\nerr2\nerr3"
 
-	if errs.Error() != str {
-		t.Errorf("String representation doesn't match, expected: %s, got: %s", errs.Error(), str)
-	}
+	assert.Equal(t, str, errs.Error(), "String representation doesn't match")
 
 	errIs, ok := errs.(multiError) //nolint
-	if !ok {
-		t.Fatal("FlattenErrs returns non-multiError")
-	}
+	assert.True(t, ok, "FlattenErrs returns non-multiError")
+
 	for i := 0; i < 3; i++ {
-		if !errIs.Is(rawErrs[i]) {
-			t.Errorf("'%+v' should contains '%v'", errs, rawErrs[i])
-		}
+		assert.True(t, errIs.Is(rawErrs[i]), "Should contain error %d", i)
 	}
-	if errIs.Is(rawErrs[3]) {
-		t.Errorf("'%+v' should not contains '%v'", errs, rawErrs[3])
-	}
+	assert.False(t, errIs.Is(rawErrs[3]), "Should not contain error %d", 3)
 }
