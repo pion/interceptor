@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/pion/interceptor"
+	"github.com/stretchr/testify/require"
 )
 
 //nolint:cyclop
@@ -21,23 +22,15 @@ func TestInterceptor(t *testing.T) {
 	t.Run("Default", func(t *testing.T) {
 		testInterceptor := &Interceptor{}
 
-		if testInterceptor.BindRTCPWriter(dummyRTCPWriter) != dummyRTCPWriter {
-			t.Error("Default BindRTCPWriter should return given writer")
-		}
-		if testInterceptor.BindRTCPReader(dummyRTCPReader) != dummyRTCPReader {
-			t.Error("Default BindRTCPReader should return given reader")
-		}
-		if testInterceptor.BindLocalStream(dummyStreamInfo, dummyRTPWriter) != dummyRTPWriter {
-			t.Error("Default BindLocalStream should return given writer")
-		}
+		require.Equal(t, testInterceptor.BindRTCPWriter(dummyRTCPWriter), dummyRTCPWriter)
+		require.Equal(t, testInterceptor.BindRTCPReader(dummyRTCPReader), dummyRTCPReader)
+		require.Equal(t, testInterceptor.BindLocalStream(dummyStreamInfo, dummyRTPWriter), dummyRTPWriter)
+
 		testInterceptor.UnbindLocalStream(dummyStreamInfo)
-		if testInterceptor.BindRemoteStream(dummyStreamInfo, dummyRTPReader) != dummyRTPReader {
-			t.Error("Default BindRemoteStream should return given reader")
-		}
+		require.Equal(t, testInterceptor.BindRemoteStream(dummyStreamInfo, dummyRTPReader), dummyRTPReader)
+
 		testInterceptor.UnbindRemoteStream(dummyStreamInfo)
-		if testInterceptor.Close() != nil {
-			t.Error("Default Close should return nil")
-		}
+		require.NoError(t, testInterceptor.Close())
 	})
 	t.Run("Custom", func(t *testing.T) {
 		var (
@@ -83,44 +76,20 @@ func TestInterceptor(t *testing.T) {
 			},
 		}
 
-		if testInterceptor.BindRTCPWriter(dummyRTCPWriter) != dummyRTCPWriter {
-			t.Error("Mocked BindRTCPWriter should return given writer")
-		}
-		if testInterceptor.BindRTCPReader(dummyRTCPReader) != dummyRTCPReader {
-			t.Error("Mocked BindRTCPReader should return given reader")
-		}
-		if testInterceptor.BindLocalStream(dummyStreamInfo, dummyRTPWriter) != dummyRTPWriter {
-			t.Error("Mocked BindLocalStream should return given writer")
-		}
-		testInterceptor.UnbindLocalStream(dummyStreamInfo)
-		if testInterceptor.BindRemoteStream(dummyStreamInfo, dummyRTPReader) != dummyRTPReader {
-			t.Error("Mocked BindRemoteStream should return given reader")
-		}
+		require.Equal(t, testInterceptor.BindRTCPWriter(dummyRTCPWriter), dummyRTCPWriter)
+		require.Equal(t, testInterceptor.BindRTCPReader(dummyRTCPReader), dummyRTCPReader)
+		testInterceptor.BindLocalStream(dummyStreamInfo, dummyRTPWriter)
+		testInterceptor.BindRemoteStream(dummyStreamInfo, dummyRTPReader)
 		testInterceptor.UnbindRemoteStream(dummyStreamInfo)
-		if testInterceptor.Close() != nil {
-			t.Error("Mocked Close should return nil")
-		}
+		testInterceptor.UnbindLocalStream(dummyStreamInfo)
+		require.NoError(t, testInterceptor.Close())
 
-		if cnt := atomic.LoadUint32(&cntBindRTCPWriter); cnt != 1 {
-			t.Errorf("BindRTCPWriterFn is expected to be called once, but called %d times", cnt)
-		}
-		if cnt := atomic.LoadUint32(&cntBindRTCPReader); cnt != 1 {
-			t.Errorf("BindRTCPReaderFn is expected to be called once, but called %d times", cnt)
-		}
-		if cnt := atomic.LoadUint32(&cntBindLocalStream); cnt != 1 {
-			t.Errorf("BindLocalStreamFn is expected to be called once, but called %d times", cnt)
-		}
-		if cnt := atomic.LoadUint32(&cntUnbindLocalStream); cnt != 1 {
-			t.Errorf("UnbindLocalStreamFn is expected to be called once, but called %d times", cnt)
-		}
-		if cnt := atomic.LoadUint32(&cntBindRemoteStream); cnt != 1 {
-			t.Errorf("BindRemoteStreamFn is expected to be called once, but called %d times", cnt)
-		}
-		if cnt := atomic.LoadUint32(&cntUnbindRemoteStream); cnt != 1 {
-			t.Errorf("UnbindRemoteStreamFn is expected to be called once, but called %d times", cnt)
-		}
-		if cnt := atomic.LoadUint32(&cntClose); cnt != 1 {
-			t.Errorf("CloseFn is expected to be called once, but called %d times", cnt)
-		}
+		require.Equal(t, atomic.LoadUint32(&cntBindRTCPWriter), uint32(1))
+		require.Equal(t, atomic.LoadUint32(&cntBindRTCPReader), uint32(1))
+		require.Equal(t, atomic.LoadUint32(&cntBindLocalStream), uint32(1))
+		require.Equal(t, atomic.LoadUint32(&cntUnbindLocalStream), uint32(1))
+		require.Equal(t, atomic.LoadUint32(&cntBindRemoteStream), uint32(1))
+		require.Equal(t, atomic.LoadUint32(&cntUnbindRemoteStream), uint32(1))
+		require.Equal(t, atomic.LoadUint32(&cntClose), uint32(1))
 	})
 }

@@ -64,7 +64,7 @@ func TestResponderInterceptor(t *testing.T) {
 				case p := <-stream.WrittenRTP():
 					require.Equal(t, seqNum, p.SequenceNumber)
 				case <-time.After(10 * time.Millisecond):
-					t.Fatal("written rtp packet not found")
+					t.Fatal("written rtp packet not found") //nolint
 				}
 			}
 
@@ -84,7 +84,7 @@ func TestResponderInterceptor(t *testing.T) {
 				case p := <-stream.WrittenRTP():
 					require.Equal(t, seqNum, p.SequenceNumber)
 				case <-time.After(10 * time.Millisecond):
-					t.Fatal("written rtp packet not found")
+					t.Fatal("written rtp packet not found") //nolint
 				}
 			}
 
@@ -224,14 +224,14 @@ func TestResponderInterceptor_StreamFilter(t *testing.T) {
 		case p := <-streamWithoutNacks.WrittenRTP():
 			require.Equal(t, seqNum, p.SequenceNumber)
 		case <-time.After(10 * time.Millisecond):
-			t.Fatal("written rtp packet not found")
+			t.Fatal("written rtp packet not found") //nolint
 		}
 
 		select {
 		case p := <-streamWithNacks.WrittenRTP():
 			require.Equal(t, seqNum, p.SequenceNumber)
 		case <-time.After(10 * time.Millisecond):
-			t.Fatal("written rtp packet not found")
+			t.Fatal("written rtp packet not found") //nolint
 		}
 	}
 
