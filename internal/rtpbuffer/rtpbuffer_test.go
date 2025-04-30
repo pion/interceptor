@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/pion/rtp"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -35,14 +36,8 @@ func TestRTPBuffer(t *testing.T) {
 			for _, n := range nums {
 				seq := start + n
 				packet := sb.Get(seq)
-				if packet == nil {
-					t.Errorf("packet not found: %d", seq)
-
-					continue
-				}
-				if packet.Header().SequenceNumber != seq {
-					t.Errorf("packet for %d returned with incorrect SequenceNumber: %d", seq, packet.Header().SequenceNumber)
-				}
+				assert.NotNil(t, packet, "packet not found: %d", seq)
+				assert.Equal(t, seq, packet.Header().SequenceNumber, "packet for %d returned with incorrect SequenceNumber", seq)
 				packet.Release()
 			}
 		}
@@ -51,9 +46,7 @@ func TestRTPBuffer(t *testing.T) {
 			for _, n := range nums {
 				seq := start + n
 				packet := sb.Get(seq)
-				if packet != nil {
-					t.Errorf("packet found for %d: %d", seq, packet.Header().SequenceNumber)
-				}
+				assert.Nil(t, packet, "packet found for %d", seq)
 			}
 		}
 
@@ -99,17 +92,14 @@ func TestRTPBuffer_WithRTX(t *testing.T) {
 			for _, n := range nums {
 				seq := start + n
 				packet := sb.Get(seq)
-				if packet == nil {
-					t.Errorf("packet not found: %d", seq)
+				assert.NotNil(t, packet, "packet not found: %d", seq)
 
-					continue
-				}
-				if packet.Header().SSRC != 1 && packet.Header().PayloadType != 1 {
-					t.Errorf(
-						"packet for %d returned with incorrect SSRC : %d and PayloadType: %d",
-						seq, packet.Header().SSRC, packet.Header().PayloadType,
-					)
-				}
+				assert.True(
+					t,
+					packet.Header().SSRC == 1 && packet.Header().PayloadType == 1,
+					"packet for %d returned with incorrect SSRC : %d and PayloadType: %d",
+					seq, packet.Header().SSRC, packet.Header().PayloadType,
+				)
 				packet.Release()
 			}
 		}
@@ -118,9 +108,7 @@ func TestRTPBuffer_WithRTX(t *testing.T) {
 			for _, n := range nums {
 				seq := start + n
 				packet := sb.Get(seq)
-				if packet != nil {
-					t.Errorf("packet found for %d: %d", seq, packet.Header().SequenceNumber)
-				}
+				assert.Nil(t, packet, "packet found for %d", seq)
 			}
 		}
 

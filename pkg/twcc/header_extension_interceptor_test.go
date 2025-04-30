@@ -69,7 +69,7 @@ func TestHeaderExtensionInterceptor(t *testing.T) {
 							assert.Equal(t, seqNum, p.SequenceNumber)
 							ch <- p
 						case <-time.After(10 * time.Millisecond):
-							panic("written rtp packet not found")
+							assert.FailNow(t, "written rtp packet not found")
 						}
 					}
 				}(pChan, uint16(i+1)) //nolint:gosec // G115

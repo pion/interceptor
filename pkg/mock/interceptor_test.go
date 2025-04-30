@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/pion/interceptor"
+	"github.com/stretchr/testify/assert"
 )
 
 //nolint:cyclop
@@ -21,23 +22,25 @@ func TestInterceptor(t *testing.T) {
 	t.Run("Default", func(t *testing.T) {
 		testInterceptor := &Interceptor{}
 
-		if testInterceptor.BindRTCPWriter(dummyRTCPWriter) != dummyRTCPWriter {
-			t.Error("Default BindRTCPWriter should return given writer")
-		}
-		if testInterceptor.BindRTCPReader(dummyRTCPReader) != dummyRTCPReader {
-			t.Error("Default BindRTCPReader should return given reader")
-		}
-		if testInterceptor.BindLocalStream(dummyStreamInfo, dummyRTPWriter) != dummyRTPWriter {
-			t.Error("Default BindLocalStream should return given writer")
-		}
+		assert.Equal(
+			t, dummyRTCPWriter, testInterceptor.BindRTCPWriter(dummyRTCPWriter),
+			"Default BindRTCPWriter should return given writer",
+		)
+		assert.Equal(
+			t, dummyRTCPReader, testInterceptor.BindRTCPReader(dummyRTCPReader),
+			"Default BindRTCPReader should return given reader",
+		)
+		assert.Equal(
+			t, dummyRTPWriter, testInterceptor.BindLocalStream(dummyStreamInfo, dummyRTPWriter),
+			"Default BindLocalStream should return given writer",
+		)
 		testInterceptor.UnbindLocalStream(dummyStreamInfo)
-		if testInterceptor.BindRemoteStream(dummyStreamInfo, dummyRTPReader) != dummyRTPReader {
-			t.Error("Default BindRemoteStream should return given reader")
-		}
+		assert.Equal(
+			t, dummyRTPReader, testInterceptor.BindRemoteStream(dummyStreamInfo, dummyRTPReader),
+			"Default BindRemoteStream should return given writer",
+		)
 		testInterceptor.UnbindRemoteStream(dummyStreamInfo)
-		if testInterceptor.Close() != nil {
-			t.Error("Default Close should return nil")
-		}
+		assert.NoError(t, testInterceptor.Close(), "Default Close should return nil")
 	})
 	t.Run("Custom", func(t *testing.T) {
 		var (
@@ -83,44 +86,38 @@ func TestInterceptor(t *testing.T) {
 			},
 		}
 
-		if testInterceptor.BindRTCPWriter(dummyRTCPWriter) != dummyRTCPWriter {
-			t.Error("Mocked BindRTCPWriter should return given writer")
-		}
-		if testInterceptor.BindRTCPReader(dummyRTCPReader) != dummyRTCPReader {
-			t.Error("Mocked BindRTCPReader should return given reader")
-		}
-		if testInterceptor.BindLocalStream(dummyStreamInfo, dummyRTPWriter) != dummyRTPWriter {
-			t.Error("Mocked BindLocalStream should return given writer")
-		}
+		assert.Equal(
+			t, dummyRTCPWriter, testInterceptor.BindRTCPWriter(dummyRTCPWriter),
+			"Mocked BindRTCPWriter should return given writer",
+		)
+		assert.Equal(
+			t, dummyRTCPReader, testInterceptor.BindRTCPReader(dummyRTCPReader),
+			"Mocked BindRTCPReader should return given reader",
+		)
+		assert.Equal(
+			t, dummyRTPWriter, testInterceptor.BindLocalStream(dummyStreamInfo, dummyRTPWriter),
+			"Mocked BindLocalStream should return given writer",
+		)
 		testInterceptor.UnbindLocalStream(dummyStreamInfo)
-		if testInterceptor.BindRemoteStream(dummyStreamInfo, dummyRTPReader) != dummyRTPReader {
-			t.Error("Mocked BindRemoteStream should return given reader")
-		}
+		assert.Equal(
+			t, dummyRTPReader, testInterceptor.BindRemoteStream(dummyStreamInfo, dummyRTPReader),
+			"Mocked BindRemoteStream should return given writer",
+		)
 		testInterceptor.UnbindRemoteStream(dummyStreamInfo)
-		if testInterceptor.Close() != nil {
-			t.Error("Mocked Close should return nil")
-		}
+		assert.NoError(t, testInterceptor.Close(), "Mocked Close should return nil")
 
-		if cnt := atomic.LoadUint32(&cntBindRTCPWriter); cnt != 1 {
-			t.Errorf("BindRTCPWriterFn is expected to be called once, but called %d times", cnt)
-		}
-		if cnt := atomic.LoadUint32(&cntBindRTCPReader); cnt != 1 {
-			t.Errorf("BindRTCPReaderFn is expected to be called once, but called %d times", cnt)
-		}
-		if cnt := atomic.LoadUint32(&cntBindLocalStream); cnt != 1 {
-			t.Errorf("BindLocalStreamFn is expected to be called once, but called %d times", cnt)
-		}
-		if cnt := atomic.LoadUint32(&cntUnbindLocalStream); cnt != 1 {
-			t.Errorf("UnbindLocalStreamFn is expected to be called once, but called %d times", cnt)
-		}
-		if cnt := atomic.LoadUint32(&cntBindRemoteStream); cnt != 1 {
-			t.Errorf("BindRemoteStreamFn is expected to be called once, but called %d times", cnt)
-		}
-		if cnt := atomic.LoadUint32(&cntUnbindRemoteStream); cnt != 1 {
-			t.Errorf("UnbindRemoteStreamFn is expected to be called once, but called %d times", cnt)
-		}
-		if cnt := atomic.LoadUint32(&cntClose); cnt != 1 {
-			t.Errorf("CloseFn is expected to be called once, but called %d times", cnt)
-		}
+		assert.Equal(t, uint32(1), atomic.LoadUint32(&cntBindRTCPWriter), "BindRTCPWriterFn is expected to be called once")
+		assert.Equal(t, uint32(1), atomic.LoadUint32(&cntBindRTCPReader), "BindRTCPReaderFn is expected to be called once")
+		assert.Equal(t, uint32(1), atomic.LoadUint32(&cntBindLocalStream), "BindLocalStreamFn is expected to be called once")
+		assert.Equal(
+			t, uint32(1), atomic.LoadUint32(&cntUnbindLocalStream), "UnbindLocalStreamFn is expected to be called once",
+		)
+		assert.Equal(
+			t, uint32(1), atomic.LoadUint32(&cntBindRemoteStream), "BindRemoteStreamFn is expected to be called once",
+		)
+		assert.Equal(
+			t, uint32(1), atomic.LoadUint32(&cntUnbindRemoteStream), "UnbindRemoteStreamFn is expected to be called once",
+		)
+		assert.Equal(t, uint32(1), atomic.LoadUint32(&cntClose), "CloseFn is expected to be called once")
 	})
 }

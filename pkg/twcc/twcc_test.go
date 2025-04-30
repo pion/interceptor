@@ -17,9 +17,8 @@ func rtcpToTwcc(t *testing.T, in []rtcp.Packet) []*rtcp.TransportLayerCC {
 	out := make([]*rtcp.TransportLayerCC, len(in))
 	var ok bool
 	for i, pkt := range in {
-		if out[i], ok = pkt.(*rtcp.TransportLayerCC); !ok {
-			t.Fatal("Failed to cast")
-		}
+		out[i], ok = pkt.(*rtcp.TransportLayerCC)
+		assert.True(t, ok, "Expected TransportLayerCC, got %T", pkt)
 	}
 
 	return out
