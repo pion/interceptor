@@ -20,6 +20,7 @@ func TestGeneratorInterceptor(t *testing.T) {
 	f, err := NewGeneratorInterceptor(
 		GeneratorSize(64),
 		GeneratorSkipLastN(2),
+		GeneratorMaxNacksPerPacket(10),
 		GeneratorInterval(interval),
 		GeneratorLog(logging.NewDefaultLoggerFactory().NewLogger("test")),
 	)
