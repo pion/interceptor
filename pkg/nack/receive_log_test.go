@@ -145,6 +145,7 @@ func TestReceivedBuffer(t *testing.T) {
 
 			missing := all(335, 465)
 			if len(missing) > int(rl.size) {
+				assertLastConsecutive(missing[len(missing)-int(rl.size)])
 				assertMissing(0, missing[len(missing)-(int(rl.size-1)):])
 			} else {
 				assertMissing(0, all(335, 465))

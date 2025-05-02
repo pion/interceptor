@@ -178,6 +178,11 @@ func (n *GeneratorInterceptor) loop(rtcpWriter interceptor.RTCPWriter) {
 							}
 							n.nackCountLogs[ssrc][missingSeq]++
 						}
+
+						if c == 0 {
+							continue
+						}
+
 						nack = &rtcp.TransportLayerNack{
 							SenderSSRC: senderSSRC,
 							MediaSSRC:  ssrc,
@@ -203,10 +208,6 @@ func (n *GeneratorInterceptor) loop(rtcpWriter interceptor.RTCPWriter) {
 						if !isMissing {
 							delete(n.nackCountLogs[ssrc], nackSeq)
 						}
-					}
-
-					if len(filteredMissingPacket) == 0 {
-						continue
 					}
 
 					if _, err := rtcpWriter.Write([]rtcp.Packet{nack}, interceptor.Attributes{}); err != nil {
