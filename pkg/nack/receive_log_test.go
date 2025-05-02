@@ -61,7 +61,8 @@ func TestReceivedBuffer(t *testing.T) {
 			}
 			assertMissing := func(skipLastN uint16, nums []uint16) {
 				t.Helper()
-				missing := rl.missingSeqNumbers(skipLastN)
+				missingPacketSeqNums := make([]uint16, rl.size)
+				missing := rl.missingSeqNumbers(skipLastN, missingPacketSeqNums)
 				if missing == nil {
 					missing = []uint16{}
 				}
@@ -131,6 +132,24 @@ func TestReceivedBuffer(t *testing.T) {
 			assertGet(321)
 			assertMissing(0, all(330, 332))
 			assertLastConsecutive(329) // after adding a single missing packet, lastConsecutive should jump forward
+
+			add(all(330, 332)...)
+			assertMissing(0, []uint16{})
+			assertLastConsecutive(334)
+
+			// Add a packet beyond the current missing range to trigger buffer overflow behavior.
+			// Ensure that when the number of missing packets exceeds the buffer size,
+			// only the latest (rl.size - 1) entries are considered for NACKs.
+			add(466)
+			assertGet(466)
+
+			missing := all(335, 465)
+			if len(missing) > int(rl.size) {
+				assertLastConsecutive(missing[len(missing)-int(rl.size)])
+				assertMissing(0, missing[len(missing)-(int(rl.size-1)):])
+			} else {
+				assertMissing(0, all(335, 465))
+			}
 		})
 	}
 }
