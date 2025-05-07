@@ -18,3 +18,11 @@ func Log(log logging.LeveledLogger) ReceiverInterceptorOption {
 		return nil
 	}
 }
+
+func WithSkipMissingPackets() ReceiverInterceptorOption {
+	return func(d *ReceiverInterceptor) error {
+		d.skipMissingPackets = true
+
+		return nil
+	}
+}

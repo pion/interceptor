@@ -66,7 +66,7 @@ type (
 // order, and allows removing in either sequence number order or via a
 // provided timestamp.
 type JitterBuffer struct {
-	packets       *PriorityQueue
+	packets       *RBTree
 	minStartCount uint16
 	overflowLen   uint16
 	lastSequence  uint16
@@ -132,7 +132,15 @@ func (jb *JitterBuffer) PlayoutHead() uint16 {
 	return jb.playoutHead
 }
 
-// SetPlayoutHead allows you to manually specify the packet you wish to pop next
+// Length returns the current number of packets in the buffer.
+func (jb *JitterBuffer) Length() uint16 {
+	jb.mutex.Lock()
+	defer jb.mutex.Unlock()
+
+	return jb.packets.Length()
+}
+
+// SetPlayoutHead allows you to manually specify the packet you wish to pop next.
 // If you have encountered a packet that hasn't resolved you can skip it.
 func (jb *JitterBuffer) SetPlayoutHead(playoutHead uint16) {
 	jb.mutex.Lock()
@@ -171,7 +179,7 @@ func (jb *JitterBuffer) Push(packet *rtp.Packet) {
 	}
 
 	jb.updateStats(packet.SequenceNumber)
-	jb.packets.Push(packet, packet.SequenceNumber)
+	jb.packets.Push(packet)
 	jb.updateState()
 }
 
@@ -253,8 +261,6 @@ func (jb *JitterBuffer) PopAtSequence(sq uint16) (*rtp.Packet, error) {
 // PeekAtSequence will return an RTP packet from the jitter buffer at the specified Sequence
 // without removing it from the buffer.
 func (jb *JitterBuffer) PeekAtSequence(sq uint16) (*rtp.Packet, error) {
-	jb.mutex.Lock()
-	defer jb.mutex.Unlock()
 	packet, err := jb.packets.Find(sq)
 	if err != nil {
 		return nil, err
