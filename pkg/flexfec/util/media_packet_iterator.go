@@ -48,5 +48,9 @@ func (m *MediaPacketIterator) Next() *rtp.Packet {
 
 // First returns the first media packet to iterate through.
 func (m *MediaPacketIterator) First() *rtp.Packet {
+	if len(m.coveredIndices) == 0 {
+		return nil
+	}
+
 	return &m.mediaPackets[m.coveredIndices[0]]
 }
