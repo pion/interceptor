@@ -150,7 +150,7 @@ func extractMask1(mask util.BitArray) uint16 {
 func extractMask2(mask util.BitArray) uint32 {
 	// We remove the first 15 bits
 	mask2 := mask.Lo << 15
-	// We get the first 31 bits (64 - 31 -> shift by 33) and we shift once more for K field
+	// We get the first 31 bits (64 - 32 -> shift by 32) and we shift once more for K field
 	mask2 >>= 33
 
 	return uint32(mask2) //nolint:gosec

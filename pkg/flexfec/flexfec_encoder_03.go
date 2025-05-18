@@ -36,7 +36,7 @@ func NewFlexEncoder03(payloadType uint8, ssrc uint32) *FlexEncoder03 {
 }
 
 // EncodeFec returns a list of generated RTP packets with FEC payloads that protect the specified mediaPackets.
-// This method return nil in case of missing RTP packets in the mediaPackets array or packets passed out of order.
+// This method returns nil in case of missing RTP packets in the mediaPackets array or packets passed out of order.
 func (flex *FlexEncoder03) EncodeFec(mediaPackets []rtp.Packet, numFecPackets uint32) []rtp.Packet {
 	// Check if mediaPackets is empty
 	if len(mediaPackets) == 0 {
