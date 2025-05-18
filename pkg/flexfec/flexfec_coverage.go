@@ -119,29 +119,44 @@ func (p *ProtectionCoverage) GetCoveredBy(fecPacketIndex uint32) *util.MediaPack
 // ExtractMask1 returns the first section of the bitmask as defined by the FEC header.
 // https://datatracker.ietf.org/doc/html/rfc8627#section-4.2.2.1
 func (p *ProtectionCoverage) ExtractMask1(fecPacketIndex uint32) uint16 {
-	mask := p.packetMasks[fecPacketIndex]
+	return extractMask1(p.packetMasks[fecPacketIndex])
+}
+
+// ExtractMask2 returns the second section of the bitmask as defined by the FEC header.
+// https://datatracker.ietf.org/doc/html/rfc8627#section-4.2.2.1
+func (p *ProtectionCoverage) ExtractMask2(fecPacketIndex uint32) uint32 {
+	return extractMask2(p.packetMasks[fecPacketIndex])
+}
+
+// ExtractMask3 returns the third section of the bitmask as defined by the FEC header.
+// https://datatracker.ietf.org/doc/html/rfc8627#section-4.2.2.1
+func (p *ProtectionCoverage) ExtractMask3(fecPacketIndex uint32) uint64 {
+	return extractMask3(p.packetMasks[fecPacketIndex])
+}
+
+// ExtractMask3_03 returns the third section of the bitmask as defined by the FEC header.
+// https://datatracker.ietf.org/doc/html/draft-ietf-payload-flexible-fec-scheme-03#section-4.2
+func (p *ProtectionCoverage) ExtractMask3_03(fecPacketIndex uint32) uint64 {
+	return extractMask3_03(p.packetMasks[fecPacketIndex])
+}
+
+func extractMask1(mask util.BitArray) uint16 {
 	// We get the first 16 bits (64 - 16 -> shift by 48) and we shift once more for K field
 	mask1 := mask.Lo >> 49
 
 	return uint16(mask1) //nolint:gosec // G115
 }
 
-// ExtractMask2 returns the second section of the bitmask as defined by the FEC header.
-// https://datatracker.ietf.org/doc/html/rfc8627#section-4.2.2.1
-func (p *ProtectionCoverage) ExtractMask2(fecPacketIndex uint32) uint32 {
-	mask := p.packetMasks[fecPacketIndex]
+func extractMask2(mask util.BitArray) uint32 {
 	// We remove the first 15 bits
 	mask2 := mask.Lo << 15
 	// We get the first 31 bits (64 - 31 -> shift by 33) and we shift once more for K field
-	mask2 >>= 34
+	mask2 >>= 33
 
-	return uint32(mask2) //nolint:gosec // G115
+	return uint32(mask2) //nolint:gosec
 }
 
-// ExtractMask3 returns the third section of the bitmask as defined by the FEC header.
-// https://datatracker.ietf.org/doc/html/rfc8627#section-4.2.2.1
-func (p *ProtectionCoverage) ExtractMask3(fecPacketIndex uint32) uint64 {
-	mask := p.packetMasks[fecPacketIndex]
+func extractMask3(mask util.BitArray) uint64 {
 	// We remove the first 46 bits
 	maskLo := mask.Lo << 46
 	maskHi := mask.Hi >> 18
@@ -150,10 +165,7 @@ func (p *ProtectionCoverage) ExtractMask3(fecPacketIndex uint32) uint64 {
 	return mask3
 }
 
-// ExtractMask3_03 returns the third section of the bitmask as defined by the FEC header.
-// https://datatracker.ietf.org/doc/html/draft-ietf-payload-flexible-fec-scheme-03#section-4.2
-func (p *ProtectionCoverage) ExtractMask3_03(fecPacketIndex uint32) uint64 {
-	mask := p.packetMasks[fecPacketIndex]
+func extractMask3_03(mask util.BitArray) uint64 {
 	// We remove the first 46 bits
 	maskLo := mask.Lo << 46
 	maskHi := mask.Hi >> 18
