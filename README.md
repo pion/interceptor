@@ -3,7 +3,7 @@
   Pion Interceptor
   <br>
 </h1>
-<h4 align="center">RTCP and RTCP processors for building real time communications</h4>
+<h4 align="center">RTP and RTCP processors for building real time communications</h4>
 <p align="center">
   <a href="https://pion.ly"><img src="https://img.shields.io/badge/pion-interceptor-gray.svg?longCache=true&colorB=brightgreen" alt="Pion Interceptor"></a>
   <a href="https://discord.gg/PngbdqpFbt"><img src="https://img.shields.io/badge/join-us%20on%20discord-gray.svg?longCache=true&logo=discord&colorB=brightblue" alt="join us on Discord"></a> <a href="https://bsky.app/profile/pion.ly"><img src="https://img.shields.io/badge/follow-us%20on%20bluesky-gray.svg?longCache=true&logo=bluesky&colorB=brightblue" alt="Follow us on Bluesky"></a>
@@ -36,12 +36,12 @@ by anyone. With the following tenets in mind.
 * [Google Congestion Control](https://github.com/pion/interceptor/tree/master/pkg/gcc)
 * [Stats](https://github.com/pion/interceptor/tree/master/pkg/stats) A [webrtc-stats](https://www.w3.org/TR/webrtc-stats/) compliant statistics generation
 * [Interval PLI](https://github.com/pion/interceptor/tree/master/pkg/intervalpli) Generate PLI on a interval. Useful when no decoder is available.
+* [FlexFec](https://github.com/pion/interceptor/tree/master/pkg/flexfec) – [FlexFEC-03](https://datatracker.ietf.org/doc/html/draft-ietf-payload-flexible-fec-scheme-03) encoder implementation
 
 ### Planned Interceptors
 * Bandwidth Estimation
   - [NADA](https://tools.ietf.org/html/rfc8698)
 * JitterBuffer, re-order packets and wait for arrival
-* [FlexFec](https://tools.ietf.org/html/draft-ietf-payload-flexible-fec-scheme-20)
 * [RTCP Feedback for Congestion Control](https://datatracker.ietf.org/doc/html/rfc8888) the standardized alternative to TWCC.
 
 ### Interceptor Public API

@@ -72,7 +72,7 @@ func generatePackets(t *testing.T, seqs []uint16) ([]rtp.Packet, []rtp.Packet) {
 		mediaPackets = append(mediaPackets, packet)
 	}
 
-	encoder := NewFlexEncoder03(payloadType, ssrc)
+	encoder := FlexEncoder03Factory{}.NewEncoder(payloadType, ssrc)
 	fecPackets := encoder.EncodeFec(mediaPackets, 2)
 
 	return mediaPackets, fecPackets

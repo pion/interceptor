@@ -26,7 +26,15 @@ type FlexEncoder03 struct {
 	coverage    *ProtectionCoverage
 }
 
-// NewFlexEncoder03 returns a new FlexFecEncoder.
+// FlexEncoder03Factory is a factory for FlexFEC-03 encoders.
+type FlexEncoder03Factory struct{}
+
+// NewEncoder creates new FlexFEC-03 encoder.
+func (f FlexEncoder03Factory) NewEncoder(payloadType uint8, ssrc uint32) FlexEncoder {
+	return NewFlexEncoder03(payloadType, ssrc)
+}
+
+// NewFlexEncoder03 creates new FlexFEC-03 encoder.
 func NewFlexEncoder03(payloadType uint8, ssrc uint32) *FlexEncoder03 {
 	return &FlexEncoder03{
 		payloadType: payloadType,
