@@ -11,7 +11,7 @@ import (
 )
 
 func TestFlexEncoder03_EncodeFec_EmptyMediaPackets(t *testing.T) {
-	encoder := NewFlexEncoder03(96, 1234)
+	encoder := FlexEncoder03Factory{}.NewEncoder(96, 1234)
 	var mediaPackets []rtp.Packet
 
 	result := encoder.EncodeFec(mediaPackets, 1)
@@ -20,7 +20,7 @@ func TestFlexEncoder03_EncodeFec_EmptyMediaPackets(t *testing.T) {
 }
 
 func TestFlexEncoder03_EncodeFec_OutOfOrderPackets(t *testing.T) {
-	encoder := NewFlexEncoder03(96, 1234)
+	encoder := FlexEncoder03Factory{}.NewEncoder(96, 1234)
 	mediaPackets := []rtp.Packet{
 		{
 			Header: rtp.Header{
@@ -42,7 +42,7 @@ func TestFlexEncoder03_EncodeFec_OutOfOrderPackets(t *testing.T) {
 }
 
 func TestFlexEncoder03_EncodeFec_MissingPackets(t *testing.T) {
-	encoder := NewFlexEncoder03(96, 1234)
+	encoder := FlexEncoder03Factory{}.NewEncoder(96, 1234)
 	mediaPackets := []rtp.Packet{
 		{
 			Header: rtp.Header{
@@ -63,7 +63,7 @@ func TestFlexEncoder03_EncodeFec_MissingPackets(t *testing.T) {
 }
 
 func TestFlexEncoder03_EncodeFec_DifferentPayloadSizes(t *testing.T) {
-	encoder := NewFlexEncoder03(96, 1234)
+	encoder := FlexEncoder03Factory{}.NewEncoder(96, 1234)
 
 	smallPayload := []byte{1, 2, 3}
 	largePayload := []byte{1, 2, 3, 4, 5, 6, 7, 8}

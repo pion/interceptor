@@ -20,12 +20,17 @@ const (
 	BaseFecHeaderSize = 12
 )
 
+// EncoderFactory is an interface for generic FEC encoders.
+type EncoderFactory interface {
+	NewEncoder(payloadType uint8, ssrc uint32) FlexEncoder
+}
+
 // FlexEncoder is the interface that FecInterceptor uses to encode Fec packets.
 type FlexEncoder interface {
 	EncodeFec(mediaPackets []rtp.Packet, numFecPackets uint32) []rtp.Packet
 }
 
-// FlexEncoder20 implements the Fec encoding mechanism for the "Flex" variant of FlexFec.
+// FlexEncoder20 implementation is WIP, contains bugs and no tests. Check out FlexEncoder03.
 type FlexEncoder20 struct {
 	fecBaseSn   uint16
 	payloadType uint8
@@ -33,7 +38,8 @@ type FlexEncoder20 struct {
 	coverage    *ProtectionCoverage
 }
 
-// NewFlexEncoder returns a new FlexFecEncer.
+// NewFlexEncoder returns a new FlexEncoder20.
+// FlexEncoder20 implementation is WIP, contains bugs and no tests. Check out FlexEncoder03.
 func NewFlexEncoder(payloadType uint8, ssrc uint32) *FlexEncoder20 {
 	return &FlexEncoder20{
 		payloadType: payloadType,

@@ -4,20 +4,29 @@
 package flexfec
 
 import (
+	"errors"
+	"sync"
+
 	"github.com/pion/interceptor"
 	"github.com/pion/rtp"
 )
 
+// streamState holds the state for a single stream.
+type streamState struct {
+	mu             sync.Mutex
+	flexFecEncoder FlexEncoder
+	packetBuffer   []rtp.Packet
+}
+
 // FecInterceptor implements FlexFec.
 type FecInterceptor struct {
 	interceptor.NoOp
-	flexFecEncoder     FlexEncoder
-	packetBuffer       []rtp.Packet
-	minNumMediaPackets uint32
+	mu              sync.Mutex
+	streams         map[uint32]*streamState
+	numMediaPackets uint32
+	numFecPackets   uint32
+	encoderFactory  EncoderFactory
 }
-
-// FecOption can be used to set initial options on Fec encoder interceptors.
-type FecOption func(d *FecInterceptor) error
 
 // FecInterceptorFactory creates new FecInterceptors.
 type FecInterceptorFactory struct {
@@ -31,16 +40,28 @@ func NewFecInterceptor(opts ...FecOption) (*FecInterceptorFactory, error) {
 
 // NewInterceptor constructs a new FecInterceptor.
 func (r *FecInterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, error) {
-	// Hardcoded for now:
-	// Min num media packets to encode FEC -> 5
-	// Min num fec packets -> 1
-
 	interceptor := &FecInterceptor{
-		packetBuffer:       make([]rtp.Packet, 0),
-		minNumMediaPackets: 5,
+		streams:         make(map[uint32]*streamState),
+		numMediaPackets: 5,
+		numFecPackets:   2,
+		encoderFactory:  FlexEncoder03Factory{},
+	}
+
+	for _, opt := range r.opts {
+		if err := opt(interceptor); err != nil {
+			return nil, err
+		}
 	}
 
 	return interceptor, nil
+}
+
+// UnbindLocalStream removes the stream state for a specific SSRC.
+func (r *FecInterceptor) UnbindLocalStream(info *interceptor.StreamInfo) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	delete(r.streams, info.SSRC)
 }
 
 // BindLocalStream lets you modify any outgoing RTP packets. It is called once for per LocalStream. The returned method
@@ -48,37 +69,60 @@ func (r *FecInterceptorFactory) NewInterceptor(_ string) (interceptor.Intercepto
 func (r *FecInterceptor) BindLocalStream(
 	info *interceptor.StreamInfo, writer interceptor.RTPWriter,
 ) interceptor.RTPWriter {
-	// Chromium supports version flexfec-03 of existing draft, this is the one we will configure by default
-	// although we should support configuring the latest (flexfec-20) as well.
-	r.flexFecEncoder = NewFlexEncoder03(info.PayloadType, info.SSRC)
+	if info.PayloadTypeForwardErrorCorrection == 0 || info.SSRCForwardErrorCorrection == 0 {
+		return writer
+	}
+
+	mediaSSRC := info.SSRC
+
+	r.mu.Lock()
+	stream := &streamState{
+		// Chromium supports version flexfec-03 of existing draft, this is the one we will configure by default
+		// although we should support configuring the latest (flexfec-20) as well.
+		flexFecEncoder: r.encoderFactory.NewEncoder(info.PayloadTypeForwardErrorCorrection, info.SSRCForwardErrorCorrection),
+		packetBuffer:   make([]rtp.Packet, 0),
+	}
+	r.streams[mediaSSRC] = stream
+	r.mu.Unlock()
 
 	return interceptor.RTPWriterFunc(
 		func(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
-			r.packetBuffer = append(r.packetBuffer, rtp.Packet{
+			// Ignore non-media packets
+			if header.SSRC != mediaSSRC {
+				return writer.Write(header, payload, attributes)
+			}
+
+			var fecPackets []rtp.Packet
+			stream.mu.Lock()
+			stream.packetBuffer = append(stream.packetBuffer, rtp.Packet{
 				Header:  *header,
 				Payload: payload,
 			})
 
-			// Send the media RTP packet
-			result, err := writer.Write(header, payload, attributes)
-
-			// Send the FEC packets
-			var fecPackets []rtp.Packet
-			if len(r.packetBuffer) == int(r.minNumMediaPackets) {
-				fecPackets = r.flexFecEncoder.EncodeFec(r.packetBuffer, 2)
-
-				for i := range fecPackets {
-					fecResult, fecErr := writer.Write(&(fecPackets[i].Header), fecPackets[i].Payload, attributes)
-
-					if fecErr != nil && fecResult == 0 {
-						break
-					}
-				}
+			// Check if we have enough packets to generate FEC
+			if len(stream.packetBuffer) == int(r.numMediaPackets) {
+				fecPackets = stream.flexFecEncoder.EncodeFec(stream.packetBuffer, r.numFecPackets)
 				// Reset the packet buffer now that we've sent the corresponding FEC packets.
-				r.packetBuffer = nil
+				stream.packetBuffer = nil
+			}
+			stream.mu.Unlock()
+
+			var errs []error
+			result, err := writer.Write(header, payload, attributes)
+			if err != nil {
+				errs = append(errs, err)
 			}
 
-			return result, err
+			for _, packet := range fecPackets {
+				header := packet.Header
+
+				_, err = writer.Write(&header, packet.Payload, attributes)
+				if err != nil {
+					errs = append(errs, err)
+				}
+			}
+
+			return result, errors.Join(errs...)
 		},
 	)
 }
