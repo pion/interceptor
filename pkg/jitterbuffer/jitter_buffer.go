@@ -261,6 +261,9 @@ func (jb *JitterBuffer) PopAtSequence(sq uint16) (*rtp.Packet, error) {
 // PeekAtSequence will return an RTP packet from the jitter buffer at the specified Sequence
 // without removing it from the buffer.
 func (jb *JitterBuffer) PeekAtSequence(sq uint16) (*rtp.Packet, error) {
+	jb.mutex.Lock()
+	defer jb.mutex.Unlock()
+
 	packet, err := jb.packets.Find(sq)
 	if err != nil {
 		return nil, err
@@ -301,4 +304,11 @@ func (jb *JitterBuffer) Clear(resetState bool) {
 		jb.stats = Stats{0, 0, 0}
 		jb.minStartCount = 50
 	}
+}
+
+// State returns the current state of the jitter buffer.
+func (jb *JitterBuffer) State() State {
+	jb.mutex.Lock()
+	defer jb.mutex.Unlock()
+	return jb.state
 }

@@ -84,7 +84,7 @@ func (i *ReceiverInterceptor) BindRemoteStream(
 			return 0, nil, err
 		}
 		i.buffer.Push(packet)
-		if i.buffer.state == Emitting {
+		if i.buffer.State() == Emitting {
 			return i.playout(b, n, attr)
 		}
 
