@@ -98,7 +98,7 @@ func New(opts ...Option) *JitterBuffer {
 		stats:         Stats{0, 0, 0},
 		minStartCount: 50,
 		overflowLen:   100,
-		packets:       NewQueue(),
+		packets:       NewTree(),
 		listeners:     make(map[Event][]EventListener),
 	}
 
@@ -310,5 +310,6 @@ func (jb *JitterBuffer) Clear(resetState bool) {
 func (jb *JitterBuffer) State() State {
 	jb.mutex.Lock()
 	defer jb.mutex.Unlock()
+
 	return jb.state
 }
