@@ -205,7 +205,7 @@ func (d *PacketDumper) writeDumpedRTCP(dump *rtcpDump) error {
 
 	if d.rtcpFormat != nil {
 		if _, err := fmt.Fprint(d.rtcpStream, d.rtcpFormat(dump.packets, dump.attributes)); err != nil {
-			return fmt.Errorf("rtсp stream Fprint: %w", err)
+			return fmt.Errorf("rtcp stream Fprint: %w", err)
 		}
 	}
 
