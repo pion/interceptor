@@ -84,7 +84,7 @@ func (m *PacketFactoryCopy) NewPacket(
 		}
 	}
 
-	if rtxSsrc != 0 && rtxPayloadType != 0 {
+	if rtxSsrc != 0 && rtxPayloadType != 0 { //nolint:nestif
 		if payload == nil {
 			retainablePacket.buffer, ok = m.payloadPool.Get().(*[]byte)
 			if !ok {
@@ -105,6 +105,11 @@ func (m *PacketFactoryCopy) NewPacket(
 		if retainablePacket.header.Padding && retainablePacket.payload != nil && len(retainablePacket.payload) > 0 {
 			paddingLength := int(retainablePacket.payload[len(retainablePacket.payload)-1])
 			retainablePacket.header.Padding = false
+
+			if paddingLength > len(retainablePacket.payload) {
+				return nil, errPaddingOverflow
+			}
+
 			retainablePacket.payload = (*retainablePacket.buffer)[:len(retainablePacket.payload)-paddingLength]
 		}
 	}

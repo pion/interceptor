@@ -4,6 +4,7 @@
 package rtpbuffer
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/pion/rtp"
@@ -217,4 +218,51 @@ func TestRTPBuffer_Overridden_WithRTX_NILPayload(t *testing.T) {
 	require.Equal(t, 0, retrieved.count)
 
 	require.Nil(t, sb.Get(1))
+}
+
+func TestRTPBuffer_Padding(t *testing.T) {
+	pm := NewPacketFactoryCopy()
+	sb, err := NewRTPBuffer(1)
+	require.NoError(t, err)
+	require.Equal(t, uint16(1), sb.size)
+
+	t.Run("valid padding is stripped", func(t *testing.T) {
+		origPayload := []byte{116, 101, 115, 116}
+		expected := []byte{0, 1, 116, 101, 115, 116}
+
+		padLen := 120
+		padded := make([]byte, 0)
+		padded = append(padded, origPayload...)
+		padded = append(padded, bytes.Repeat([]byte{0}, padLen-1)...)
+		padded = append(padded, byte(padLen))
+
+		pkt, err := pm.NewPacket(&rtp.Header{
+			SequenceNumber: 1,
+			Padding:        true,
+		}, padded, 1, 1)
+		require.NoError(t, err)
+
+		sb.Add(pkt)
+
+		retrieved := sb.Get(1)
+		require.NotNil(t, retrieved)
+		defer retrieved.Release()
+
+		require.False(t, retrieved.Header().Padding, "P-bit should be cleared after trimming")
+
+		actual := retrieved.Payload()
+		require.Equal(t, len(expected), len(actual), "payload length after trimming")
+		require.Equal(t, expected, actual, "payload content after trimming")
+	})
+
+	t.Run("overflow padding returns io.ErrShortBuffer", func(t *testing.T) {
+		overflow := []byte{0, 1, 200}
+
+		_, err := pm.NewPacket(&rtp.Header{
+			SequenceNumber: 2,
+			Padding:        true,
+		}, overflow, 1, 1)
+
+		require.ErrorIs(t, err, errPaddingOverflow, "factory should reject invalid padding")
+	})
 }
