@@ -226,7 +226,7 @@ func TestRTPBuffer_Padding(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, uint16(1), sb.size)
 
-	t.Run("valid padding is stripped", func(t *testing.T) {
+	t.Run("valid padding in payload is stripped", func(t *testing.T) {
 		origPayload := []byte{116, 101, 115, 116}
 		expected := []byte{0, 1, 116, 101, 115, 116}
 
@@ -239,7 +239,32 @@ func TestRTPBuffer_Padding(t *testing.T) {
 		pkt, err := pm.NewPacket(&rtp.Header{
 			SequenceNumber: 1,
 			Padding:        true,
+			PaddingSize:    0,
 		}, padded, 1, 1)
+		require.NoError(t, err)
+
+		sb.Add(pkt)
+
+		retrieved := sb.Get(1)
+		require.NotNil(t, retrieved)
+		defer retrieved.Release()
+
+		require.False(t, retrieved.Header().Padding, "P-bit should be cleared after trimming")
+
+		actual := retrieved.Payload()
+		require.Equal(t, len(expected), len(actual), "payload length after trimming")
+		require.Equal(t, expected, actual, "payload content after trimming")
+	})
+
+	t.Run("valid paddingsize in header is cleared", func(t *testing.T) {
+		origPayload := []byte{116, 101, 115, 116}
+		expected := []byte{0, 1, 116, 101, 115, 116}
+
+		pkt, err := pm.NewPacket(&rtp.Header{
+			SequenceNumber: 1,
+			Padding:        true,
+			PaddingSize:    120,
+		}, origPayload, 1, 1)
 		require.NoError(t, err)
 
 		sb.Add(pkt)
