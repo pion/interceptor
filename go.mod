@@ -1,6 +1,6 @@
 module github.com/pion/interceptor
 
-go 1.20
+go 1.21
 
 require (
 	github.com/pion/logging v0.2.3
