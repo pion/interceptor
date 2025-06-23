@@ -46,7 +46,7 @@ func TestStatsRecorder(t *testing.T) {
 	}
 	type record struct {
 		ts      time.Time
-		content interface{}
+		content any
 	}
 	type input struct {
 		name string

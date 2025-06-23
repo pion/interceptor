@@ -120,7 +120,7 @@ func TestInterceptor(t *testing.T) {
 		expectedIncomingRTP := recordedIncomingRTP{
 			ts:   now,
 			buf:  buf,
-			attr: map[interface{}]interface{}{},
+			attr: map[any]any{},
 		}
 		assert.Equal(t, expectedIncomingRTP, riRTP)
 
@@ -129,7 +129,7 @@ func TestInterceptor(t *testing.T) {
 		expectedIncomingRTCP := recordedIncomingRTCP{
 			ts:   now,
 			buf:  buf,
-			attr: map[interface{}]interface{}{},
+			attr: map[any]any{},
 		}
 		assert.Equal(t, expectedIncomingRTCP, riRTCP)
 
@@ -137,14 +137,14 @@ func TestInterceptor(t *testing.T) {
 			ts:      now,
 			header:  &rtp.Header{},
 			payload: outgoingRTP.Payload,
-			attr:    map[interface{}]interface{}{},
+			attr:    map[any]any{},
 		}
 		assert.Equal(t, expectedOutgoingRTP, roRTP)
 
 		expectedOutgoingRTCP := recordedOutgoingRTCP{
 			ts:   now,
 			pkts: outgoingRTCP,
-			attr: map[interface{}]interface{}{},
+			attr: map[any]any{},
 		}
 		assert.Equal(t, expectedOutgoingRTCP, roRTCP)
 	})

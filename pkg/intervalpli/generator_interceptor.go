@@ -121,7 +121,7 @@ func (r *GeneratorInterceptor) loop(rtcpWriter interceptor.RTCPWriter) {
 		case <-tickerChan:
 			ssrcs := make([]uint32, 0)
 
-			r.streams.Range(func(k, _ interface{}) bool {
+			r.streams.Range(func(k, _ any) bool {
 				key, ok := k.(uint32)
 				if !ok {
 					return false

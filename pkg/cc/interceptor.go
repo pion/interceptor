@@ -25,7 +25,7 @@ type BandwidthEstimator interface {
 	WriteRTCP([]rtcp.Packet, interceptor.Attributes) error
 	GetTargetBitrate() int
 	OnTargetBitrateChange(f func(bitrate int))
-	GetStats() map[string]interface{}
+	GetStats() map[string]any
 	Close() error
 }
 

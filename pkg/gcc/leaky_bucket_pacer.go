@@ -57,7 +57,7 @@ func NewLeakyBucketPacer(initialBitrate int) *LeakyBucketPacer {
 		pool:           &sync.Pool{},
 	}
 	pacer.pool = &sync.Pool{
-		New: func() interface{} {
+		New: func() any {
 			b := make([]byte, 1460)
 
 			return &b

@@ -232,11 +232,11 @@ func (e *SendSideBWE) GetTargetBitrate() int {
 }
 
 // GetStats returns some internal statistics of the bandwidth estimator.
-func (e *SendSideBWE) GetStats() map[string]interface{} {
+func (e *SendSideBWE) GetStats() map[string]any {
 	e.lock.Lock()
 	defer e.lock.Unlock()
 
-	return map[string]interface{}{
+	return map[string]any{
 		"lossTargetBitrate":  e.latestStats.LossStats.TargetBitrate,
 		"averageLoss":        e.latestStats.AverageLoss,
 		"delayTargetBitrate": e.latestStats.DelayStats.TargetBitrate,
