@@ -5,7 +5,7 @@ go 1.20
 require (
 	github.com/pion/logging v0.2.4
 	github.com/pion/rtcp v1.2.15
-	github.com/pion/rtp v1.8.19
+	github.com/pion/rtp v1.8.20
 	github.com/pion/transport/v3 v3.0.7
 	github.com/stretchr/testify v1.10.0
 )
