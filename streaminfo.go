@@ -25,6 +25,7 @@ type StreamInfo struct {
 	Channels                          uint16
 	SDPFmtpLine                       string
 	RTCPFeedback                      []RTCPFeedback
+	Codecs                            []RTPCodecParameters
 }
 
 // RTCPFeedback signals the connection to use additional RTCP packet types.
@@ -38,4 +39,18 @@ type RTCPFeedback struct {
 	// The parameter value depends on the type.
 	// For example, type="nack" parameter="pli" will send Picture Loss Indicator packets.
 	Parameter string
+}
+
+// RTPCodecParameters is a sequence containing the media codecs that an RtpSender
+// will choose from, as well as entries for RTX, RED and FEC mechanisms. This also
+// includes the PayloadType that has been negotiated
+//
+// https://w3c.github.io/webrtc-pc/#rtcrtpcodecparameters
+type RTPCodecParameters struct {
+	MimeType     string
+	ClockRate    uint32
+	Channels     uint16
+	SDPFmtpLine  string
+	RTCPFeedback []RTCPFeedback
+	PayloadType  uint8
 }
