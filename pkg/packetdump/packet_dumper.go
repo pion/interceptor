@@ -20,13 +20,10 @@ var ErrBothBinaryAndDeprecatedFormat = fmt.Errorf("both binary and deprecated fo
 
 // PacketDumper dumps packet to a io.Writer.
 type PacketDumper struct {
+	packetLogger PacketLogger
+
+	// Default Logger Options
 	log logging.LeveledLogger
-
-	wg    sync.WaitGroup
-	close chan struct{}
-
-	rtpChan  chan *rtpDump
-	rtcpChan chan *rtcpDump
 
 	rtpStream  io.Writer
 	rtcpStream io.Writer
@@ -45,17 +42,14 @@ type PacketDumper struct {
 // NewPacketDumper creates a new PacketDumper.
 func NewPacketDumper(opts ...PacketDumperOption) (*PacketDumper, error) {
 	dumper := &PacketDumper{
+		packetLogger:     nil,
 		log:              logging.NewDefaultLoggerFactory().NewLogger("packet_dumper"),
-		wg:               sync.WaitGroup{},
-		close:            make(chan struct{}),
-		rtpChan:          make(chan *rtpDump),
-		rtcpChan:         make(chan *rtcpDump),
 		rtpStream:        os.Stdout,
 		rtcpStream:       os.Stdout,
-		rtpFormat:        nil,
-		rtcpFormat:       nil,
 		rtpFormatBinary:  nil,
 		rtcpFormatBinary: nil,
+		rtpFormat:        nil,
+		rtcpFormat:       nil,
 		rtpFilter: func(*rtp.Packet) bool {
 			return true
 		},
@@ -77,6 +71,12 @@ func NewPacketDumper(opts ...PacketDumperOption) (*PacketDumper, error) {
 		}
 	}
 
+	// If we get a custom packet logger, we don't need to set any default logger
+	// options.
+	if dumper.packetLogger != nil {
+		return dumper, nil
+	}
+
 	if dumper.rtpFormat == nil && dumper.rtpFormatBinary == nil {
 		dumper.rtpFormat = DefaultRTPFormatter
 	}
@@ -85,128 +85,40 @@ func NewPacketDumper(opts ...PacketDumperOption) (*PacketDumper, error) {
 		dumper.rtcpFormat = DefaultRTCPFormatter
 	}
 
-	dumper.wg.Add(1)
-	go dumper.loop()
+	dpl := &defaultPacketLogger{
+		log:                 dumper.log,
+		wg:                  sync.WaitGroup{},
+		close:               make(chan struct{}),
+		rtpChan:             make(chan *rtpDump),
+		rtcpChan:            make(chan *rtcpDump),
+		rtpStream:           dumper.rtpStream,
+		rtcpStream:          dumper.rtcpStream,
+		rtpFormatBinary:     dumper.rtpFormatBinary,
+		rtcpFormatBinary:    dumper.rtcpFormatBinary,
+		rtpFormat:           dumper.rtpFormat,
+		rtcpFormat:          dumper.rtcpFormat,
+		rtpFilter:           dumper.rtpFilter,
+		rtcpFilter:          dumper.rtcpFilter,
+		rtcpPerPacketFilter: dumper.rtcpPerPacketFilter,
+	}
+	dpl.run()
+	dumper.packetLogger = dpl
 
 	return dumper, nil
 }
 
 func (d *PacketDumper) logRTPPacket(header *rtp.Header, payload []byte, attributes interceptor.Attributes) {
-	select {
-	case d.rtpChan <- &rtpDump{
-		attributes: attributes,
-		packet: &rtp.Packet{
-			Header:  *header,
-			Payload: payload,
-		},
-	}:
-	case <-d.close:
-	}
+	d.packetLogger.LogRTPPacket(header, payload, attributes)
 }
 
 func (d *PacketDumper) logRTCPPackets(pkts []rtcp.Packet, attributes interceptor.Attributes) {
-	select {
-	case d.rtcpChan <- &rtcpDump{
-		attributes: attributes,
-		packets:    pkts,
-	}:
-	case <-d.close:
-	}
+	d.packetLogger.LogRTCPPackets(pkts, attributes)
 }
 
-// Close closes the PacketDumper.
 func (d *PacketDumper) Close() error {
-	defer d.wg.Wait()
-
-	if !d.isClosed() {
-		close(d.close)
-	}
-
-	return nil
-}
-
-func (d *PacketDumper) isClosed() bool {
-	select {
-	case <-d.close:
-		return true
-	default:
-		return false
-	}
-}
-
-func (d *PacketDumper) loop() {
-	defer d.wg.Done()
-
-	for {
-		select {
-		case <-d.close:
-			return
-		case dump := <-d.rtpChan:
-			err := d.writeDumpedRTP(dump)
-			if err != nil {
-				d.log.Errorf("could not dump RTP packet: %v", err)
-			}
-		case dump := <-d.rtcpChan:
-			err := d.writeDumpedRTCP(dump)
-			if err != nil {
-				d.log.Errorf("could not dump RTCP packets: %v", err)
-			}
-		}
-	}
-}
-
-func (d *PacketDumper) writeDumpedRTP(dump *rtpDump) error {
-	if !d.rtpFilter(dump.packet) {
-		return nil
-	}
-
-	if d.rtpFormatBinary != nil {
-		dumped, err := d.rtpFormatBinary(dump.packet, dump.attributes)
-		if err != nil {
-			return fmt.Errorf("rtp format binary: %w", err)
-		}
-		_, err = d.rtpStream.Write(dumped)
-		if err != nil {
-			return fmt.Errorf("rtp stream write: %w", err)
-		}
-	}
-
-	if d.rtpFormat != nil {
-		if _, err := fmt.Fprint(d.rtpStream, d.rtpFormat(dump.packet, dump.attributes)); err != nil {
-			return fmt.Errorf("rtp stream Fprint: %w", err)
-		}
-	}
-
-	return nil
-}
-
-func (d *PacketDumper) writeDumpedRTCP(dump *rtcpDump) error {
-	if !d.rtcpFilter(dump.packets) {
-		return nil
-	}
-
-	for _, pkt := range dump.packets {
-		if !d.rtcpPerPacketFilter(pkt) {
-			continue
-		}
-
-		if d.rtcpFormatBinary != nil {
-			dumped, err := d.rtcpFormatBinary(pkt, dump.attributes)
-			if err != nil {
-				return fmt.Errorf("rtcp format binary: %w", err)
-			}
-
-			_, err = d.rtcpStream.Write(dumped)
-			if err != nil {
-				return fmt.Errorf("rtcp stream write: %w", err)
-			}
-		}
-	}
-
-	if d.rtcpFormat != nil {
-		if _, err := fmt.Fprint(d.rtcpStream, d.rtcpFormat(dump.packets, dump.attributes)); err != nil {
-			return fmt.Errorf("rtcp stream Fprint: %w", err)
-		}
+	dpl, ok := d.packetLogger.(*defaultPacketLogger)
+	if ok {
+		return dpl.Close()
 	}
 
 	return nil

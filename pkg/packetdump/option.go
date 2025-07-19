@@ -21,7 +21,18 @@ func Log(log logging.LeveledLogger) PacketDumperOption {
 	}
 }
 
-// RTPWriter sets the io.Writer on which RTP packets will be dumped.
+// PacketLog sets the packet logger of a packet dumper. Use this to replace the
+// default logger with yout own logger implementation.
+func PacketLog(logger PacketLogger) PacketDumperOption {
+	return func(d *PacketDumper) error {
+		d.packetLogger = logger
+
+		return nil
+	}
+}
+
+// RTPWriter sets the io.Writer on which RTP packets will be dumped by the
+// default packet logger.
 func RTPWriter(w io.Writer) PacketDumperOption {
 	return func(d *PacketDumper) error {
 		d.rtpStream = w
@@ -30,7 +41,8 @@ func RTPWriter(w io.Writer) PacketDumperOption {
 	}
 }
 
-// RTCPWriter sets the io.Writer on which RTCP packets will be dumped.
+// RTCPWriter sets the io.Writer on which RTCP packets will be dumped by the
+// default packet logger.
 func RTCPWriter(w io.Writer) PacketDumperOption {
 	return func(d *PacketDumper) error {
 		d.rtcpStream = w
@@ -39,7 +51,7 @@ func RTCPWriter(w io.Writer) PacketDumperOption {
 	}
 }
 
-// RTPFormatter sets the RTP format
+// RTPFormatter sets the RTP format used by the default packet logger.
 // Deprecated: prefer RTPBinaryFormatter.
 func RTPFormatter(f RTPFormatCallback) PacketDumperOption {
 	return func(d *PacketDumper) error {
@@ -49,7 +61,7 @@ func RTPFormatter(f RTPFormatCallback) PacketDumperOption {
 	}
 }
 
-// RTCPFormatter sets the RTCP format
+// RTCPFormatter sets the RTCP format used by the default packet logger.
 // Deprecated: prefer RTCPBinaryFormatter.
 func RTCPFormatter(f RTCPFormatCallback) PacketDumperOption {
 	return func(d *PacketDumper) error {
@@ -59,7 +71,8 @@ func RTCPFormatter(f RTCPFormatCallback) PacketDumperOption {
 	}
 }
 
-// RTPBinaryFormatter sets the RTP binary formatter.
+// RTPBinaryFormatter sets the RTP binary formatter used by the default packet
+// logger.
 func RTPBinaryFormatter(f RTPBinaryFormatCallback) PacketDumperOption {
 	return func(d *PacketDumper) error {
 		d.rtpFormatBinary = f
@@ -68,7 +81,8 @@ func RTPBinaryFormatter(f RTPBinaryFormatCallback) PacketDumperOption {
 	}
 }
 
-// RTCPBinaryFormatter sets the RTCP binary formatter.
+// RTCPBinaryFormatter sets the RTCP binary formatter used by the default packet
+// logger.
 func RTCPBinaryFormatter(f RTCPBinaryFormatCallback) PacketDumperOption {
 	return func(d *PacketDumper) error {
 		d.rtcpFormatBinary = f
@@ -77,7 +91,7 @@ func RTCPBinaryFormatter(f RTCPBinaryFormatCallback) PacketDumperOption {
 	}
 }
 
-// RTPFilter sets the RTP filter.
+// RTPFilter sets the RTP filter used by the default packet logger.
 func RTPFilter(callback RTPFilterCallback) PacketDumperOption {
 	return func(d *PacketDumper) error {
 		d.rtpFilter = callback
@@ -86,7 +100,7 @@ func RTPFilter(callback RTPFilterCallback) PacketDumperOption {
 	}
 }
 
-// RTCPFilter sets the RTCP filter.
+// RTCPFilter sets the RTCP filter used by the default packet logger.
 // Deprecated: prefer RTCPPerPacketFilter.
 func RTCPFilter(callback RTCPFilterCallback) PacketDumperOption {
 	return func(d *PacketDumper) error {
@@ -96,7 +110,8 @@ func RTCPFilter(callback RTCPFilterCallback) PacketDumperOption {
 	}
 }
 
-// RTCPPerPacketFilter sets the RTCP per-packet filter.
+// RTCPPerPacketFilter sets the RTCP per-packet filter used by the default
+// packet logger.
 func RTCPPerPacketFilter(callback RTCPPerPacketFilterCallback) PacketDumperOption {
 	return func(d *PacketDumper) error {
 		d.rtcpPerPacketFilter = callback
