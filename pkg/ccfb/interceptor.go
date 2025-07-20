@@ -97,7 +97,7 @@ func NewInterceptor(opts ...Option) (*InterceptorFactory, error) {
 func (f *InterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, error) {
 	in := &Interceptor{
 		NoOp:          interceptor.NoOp{},
-		lock:          sync.Mutex{},
+		lock:          sync.RWMutex{},
 		log:           logging.NewDefaultLoggerFactory().NewLogger("ccfb_interceptor"),
 		timestamp:     time.Now,
 		convertCCFB:   convertCCFB,
@@ -128,7 +128,7 @@ func (f *InterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, 
 // contains a single entry with SSRC=0 if TWCC is used.
 type Interceptor struct {
 	interceptor.NoOp
-	lock           sync.Mutex
+	lock           sync.RWMutex
 	log            logging.LeveledLogger
 	timestamp      func() time.Time
 	convertCCFB    func(ts time.Time, feedback *rtcp.CCFeedbackReport) (time.Time, map[uint32][]acknowledgement)
@@ -165,8 +165,8 @@ func (i *Interceptor) BindLocalStream(
 
 	// nolint
 	return interceptor.RTPWriterFunc(func(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
-		i.lock.Lock()
-		defer i.lock.Unlock()
+		i.lock.RLock()
+		defer i.lock.RUnlock()
 
 		// If we are using TWCC, we use the sequence number from the TWCC header
 		// extension and save all TWCC sequence numbers with the same SSRC (0).
@@ -182,9 +182,13 @@ func (i *Interceptor) BindLocalStream(
 						"Falling back to saving history for CCFB feedback reports. err: %v",
 					err,
 				)
+				i.lock.RUnlock()
+				i.lock.Lock()
 				if _, ok := i.ssrcToHistory[ssrc]; !ok {
 					i.ssrcToHistory[ssrc] = i.historyFactory(i.historySize)
 				}
+				i.lock.Unlock()
+				i.lock.RLock()
 			} else {
 				seqNr = twccHdrExt.TransportSequence
 				ssrc = 0
@@ -220,6 +224,9 @@ func (i *Interceptor) BindRTCPReader(reader interceptor.RTCPReader) interceptor.
 		if err != nil {
 			return n, attr, err
 		}
+
+		i.lock.RLock()
+		defer i.lock.RUnlock()
 		for _, pkt := range pkts {
 			var reportLists map[uint32][]acknowledgement
 			var reportDeparture time.Time
@@ -230,15 +237,7 @@ func (i *Interceptor) BindRTCPReader(reader interceptor.RTCPReader) interceptor.
 				reportDeparture, reportLists = i.convertTWCC(fb)
 			default:
 			}
-			ssrcToPrl := map[uint32][]PacketReport{}
-			for ssrc, reportList := range reportLists {
-				prl := i.ssrcToHistory[ssrc].getReportForAck(reportList)
-				if _, ok := ssrcToPrl[ssrc]; !ok {
-					ssrcToPrl[ssrc] = prl
-				} else {
-					ssrcToPrl[ssrc] = append(ssrcToPrl[ssrc], prl...)
-				}
-			}
+			ssrcToPrl := i.mapAckToHistory(reportLists)
 			res = append(res, Report{
 				Arrival:             now,
 				Departure:           reportDeparture,
@@ -249,4 +248,24 @@ func (i *Interceptor) BindRTCPReader(reader interceptor.RTCPReader) interceptor.
 
 		return n, attr, err
 	})
+}
+
+func (i *Interceptor) mapAckToHistory(reportLists map[uint32][]acknowledgement) map[uint32][]PacketReport {
+	ssrcToPrl := map[uint32][]PacketReport{}
+	for ssrc, reportList := range reportLists {
+		hist, ok := i.ssrcToHistory[ssrc]
+		if !ok {
+			i.log.Warnf("dropping report for unknown SSRC: %v", ssrc)
+
+			continue
+		}
+		prl := hist.getReportForAck(reportList)
+		if _, ok := ssrcToPrl[ssrc]; !ok {
+			ssrcToPrl[ssrc] = prl
+		} else {
+			ssrcToPrl[ssrc] = append(ssrcToPrl[ssrc], prl...)
+		}
+	}
+
+	return ssrcToPrl
 }
