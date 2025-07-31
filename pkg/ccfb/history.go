@@ -18,7 +18,7 @@ var errSequenceNumberWentBackwards = errors.New("sequence number went backwards"
 // PacketReport contains departure and arrival information about an acknowledged
 // packet.
 type PacketReport struct {
-	SeqNr     int64
+	SeqNr     uint64
 	Size      int
 	Departure time.Time
 	Arrived   bool
@@ -100,7 +100,7 @@ func (h *historyList) getReportForAck(acks []acknowledgement) []PacketReport {
 		if ok {
 			if ack, ok := ent.Value.(sentPacket); ok {
 				reports = append(reports, PacketReport{
-					SeqNr:     sn,
+					SeqNr:     uint64(sn), // nolint:gosec
 					Size:      ack.size,
 					Departure: ack.departure,
 					Arrived:   pr.arrived,
