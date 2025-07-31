@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
-// Package rfc8888 provides an interceptor that generates congestion control
+// Package ccfb provides an interceptor that generates congestion control
 // feedback reports as defined by RFC 8888.
-package rfc8888
+package ccfb
 
 import (
 	"errors"
@@ -52,7 +52,7 @@ func (s *SenderInterceptorFactory) NewInterceptor(_ string) (interceptor.Interce
 		senderInterceptor.loggerFactory = logging.NewDefaultLoggerFactory()
 	}
 	if senderInterceptor.log == nil {
-		senderInterceptor.log = senderInterceptor.loggerFactory.NewLogger("rfc8888_interceptor")
+		senderInterceptor.log = senderInterceptor.loggerFactory.NewLogger("ccfb_interceptor")
 	}
 
 	return senderInterceptor, nil
