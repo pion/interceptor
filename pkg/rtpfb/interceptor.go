@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 // Package ccfb implements feedback aggregation for CCFB and TWCC packets.
-package ccfb
+package rtpfb
 
 import (
 	"sync"
