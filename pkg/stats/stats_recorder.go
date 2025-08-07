@@ -32,6 +32,7 @@ type internalStats struct {
 
 	inboundLastArrivalInitialized bool
 	inboundLastArrival            time.Time
+	inboundLastArrivalRTP         uint32
 	inboundLastTransit            int
 
 	remoteInboundFirstSequenceNumberInitialized bool
@@ -137,17 +138,21 @@ func (r *recorder) recordIncomingRTP(latestStats internalStats, incoming *incomi
 
 	if !latestStats.inboundLastArrivalInitialized {
 		latestStats.inboundLastArrival = incoming.ts
+		latestStats.inboundLastArrivalRTP = incoming.header.Timestamp
 		latestStats.inboundLastArrivalInitialized = true
 	} else {
-		arrival := int(incoming.ts.Sub(latestStats.inboundLastArrival).Seconds() * r.clockRate)
-		transit := arrival - int(incoming.header.Timestamp)
+		rtpUnitsSinceLastArrival := incoming.ts.Sub(latestStats.inboundLastArrival).Seconds() * r.clockRate
+		arrival := latestStats.inboundLastArrivalRTP + uint32(rtpUnitsSinceLastArrival)
+		transit := int(arrival) - int(incoming.header.Timestamp)
 		d := transit - latestStats.inboundLastTransit
-		latestStats.inboundLastTransit = transit
 		if d < 0 {
 			d = -d
 		}
-		latestStats.InboundRTPStreamStats.Jitter += (1.0 / 16.0) * (float64(d) - latestStats.InboundRTPStreamStats.Jitter)
+		dSec := float64(d) / r.clockRate
+		latestStats.inboundLastTransit = transit
+		latestStats.InboundRTPStreamStats.Jitter += (1.0 / 16.0) * (dSec - latestStats.InboundRTPStreamStats.Jitter)
 		latestStats.inboundLastArrival = incoming.ts
+		latestStats.inboundLastArrivalRTP = incoming.header.Timestamp
 	}
 
 	latestStats.LastPacketReceivedTimestamp = incoming.ts
