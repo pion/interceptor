@@ -210,7 +210,7 @@ func (e *SendSideBWE) WriteRTCP(pkts []rtcp.Packet, _ interceptor.Attributes) er
 			}
 			pendingTime := feedbackSentTime.Sub(ack.Arrival)
 			rtt := now.Sub(ack.Departure) - pendingTime
-			feedbackMinRTT = time.Duration(minInt(int(rtt), int(feedbackMinRTT)))
+			feedbackMinRTT = time.Duration(min(int(rtt), int(feedbackMinRTT)))
 		}
 		if feedbackMinRTT < math.MaxInt {
 			e.delayController.updateRTT(feedbackMinRTT)
@@ -283,7 +283,7 @@ func (e *SendSideBWE) onDelayUpdate(delayStats DelayStats) {
 
 	lossStats := e.lossController.getEstimate(delayStats.TargetBitrate)
 	bitrateChanged := false
-	bitrate := minInt(delayStats.TargetBitrate, lossStats.TargetBitrate)
+	bitrate := min(delayStats.TargetBitrate, lossStats.TargetBitrate)
 	if bitrate != e.latestBitrate {
 		bitrateChanged = true
 		e.latestBitrate = bitrate

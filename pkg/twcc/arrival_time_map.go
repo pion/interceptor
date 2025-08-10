@@ -136,7 +136,7 @@ func (m *packetArrivalTimeMap) EraseTo(sequenceNumber int64) {
 // RemoveOldPackets removes packets from the beginning of the map as long as they are before
 // sequenceNumber and with an age older than arrivalTimeLimit.
 func (m *packetArrivalTimeMap) RemoveOldPackets(sequenceNumber int64, arrivalTimeLimit int64) {
-	checkTo := min64(sequenceNumber, m.endSequenceNumber)
+	checkTo := min(sequenceNumber, m.endSequenceNumber)
 	for m.beginSequenceNumber < checkTo && m.get(m.beginSequenceNumber) <= arrivalTimeLimit {
 		m.beginSequenceNumber++
 	}
