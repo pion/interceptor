@@ -66,7 +66,7 @@ func (a *adaptiveThreshold) compare(estimate, _ time.Duration) (usage, time.Dura
 	if a.numDeltas < 2 {
 		return usageNormal, estimate, a.max
 	}
-	t := time.Duration(minInt(a.numDeltas, maxDeltas)) * estimate
+	t := time.Duration(min(a.numDeltas, maxDeltas)) * estimate
 	use := usageNormal
 	if t > a.thresh {
 		use = usageOver
@@ -96,7 +96,7 @@ func (a *adaptiveThreshold) update(estimate time.Duration) {
 	}
 	maxTimeDelta := 100 * time.Millisecond
 	timeDelta := time.Duration(
-		minInt(int(now.Sub(a.lastUpdate).Milliseconds()), int(maxTimeDelta.Milliseconds())),
+		min(int(now.Sub(a.lastUpdate).Milliseconds()), int(maxTimeDelta.Milliseconds())),
 	) * time.Millisecond
 	d := absEstimate - a.thresh
 	add := k * float64(d.Milliseconds()) * float64(timeDelta.Milliseconds())
