@@ -104,13 +104,13 @@ func (m *packetArrivalTimeMap) EndSequenceNumber() int64 {
 }
 
 // FindNextAtOrAfter returns the sequence number and timestamp of the first received packet that has a sequence number
-// greator or equal to sequenceNumber.
+// greater or equal to sequenceNumber.
 func (m *packetArrivalTimeMap) FindNextAtOrAfter(sequenceNumber int64) (
-	foundSequenceNumber int64, arrivalTime int64, ok bool,
+	int64, int64, bool,
 ) {
-	for sequenceNumber = m.Clamp(sequenceNumber); sequenceNumber < m.endSequenceNumber; sequenceNumber++ {
-		if t := m.get(sequenceNumber); t >= 0 {
-			return sequenceNumber, t, true
+	for seq := m.Clamp(sequenceNumber); seq < m.endSequenceNumber; seq++ {
+		if arrivalTime := m.get(seq); arrivalTime >= 0 {
+			return seq, arrivalTime, true
 		}
 	}
 
