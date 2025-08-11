@@ -95,7 +95,7 @@ func TestStatsRecorder(t *testing.T) {
 				ReceivedRTPStreamStats: ReceivedRTPStreamStats{
 					PacketsReceived: 3,
 					PacketsLost:     2,
-					Jitter:          90000 / 16,
+					Jitter:          0,
 				},
 				LastPacketReceivedTimestamp: now.Add(2 * time.Second),
 				HeaderBytesReceived:         36,
@@ -788,6 +788,48 @@ func TestStatsRecorder(t *testing.T) {
 				HeaderBytesReceived:         36,
 				BytesReceived:               36,
 				FIRCount:                    0,
+			},
+		},
+		{
+			name: "incomingRTPWithJitter",
+			records: []record{
+				{
+					ts: now,
+					content: incomingRTP{
+						header: rtp.Header{
+							SequenceNumber: 7,
+							Timestamp:      0,
+						},
+					},
+				},
+				{
+					ts: now.Add(1 * time.Second),
+					content: incomingRTP{
+						header: rtp.Header{
+							SequenceNumber: 8,
+							Timestamp:      90000,
+						},
+					},
+				},
+				{
+					ts: now.Add(2*time.Second + 100*time.Millisecond),
+					content: incomingRTP{
+						header: rtp.Header{
+							SequenceNumber: 9,
+							Timestamp:      2 * 90000,
+						},
+					},
+				},
+			},
+			expectedInboundRTPStreamStats: InboundRTPStreamStats{
+				ReceivedRTPStreamStats: ReceivedRTPStreamStats{
+					PacketsReceived: 3,
+					PacketsLost:     0,
+					Jitter:          0.00625,
+				},
+				LastPacketReceivedTimestamp: now.Add(2*time.Second + 100*time.Millisecond),
+				HeaderBytesReceived:         36,
+				BytesReceived:               36,
 			},
 		},
 	} {
