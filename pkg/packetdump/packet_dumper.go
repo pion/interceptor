@@ -115,6 +115,7 @@ func (d *PacketDumper) logRTCPPackets(pkts []rtcp.Packet, attributes interceptor
 	d.packetLogger.LogRTCPPackets(pkts, attributes)
 }
 
+// Close the packetdumper.
 func (d *PacketDumper) Close() error {
 	dpl, ok := d.packetLogger.(*defaultPacketLogger)
 	if ok {

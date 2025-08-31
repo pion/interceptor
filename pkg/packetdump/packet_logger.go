@@ -9,6 +9,7 @@ import (
 	"github.com/pion/rtp"
 )
 
+// PacketLogger logs RTP and RTCP Packets.
 type PacketLogger interface {
 	LogRTPPacket(header *rtp.Header, payload []byte, attributes interceptor.Attributes)
 	LogRTCPPackets(pkts []rtcp.Packet, attributes interceptor.Attributes)
