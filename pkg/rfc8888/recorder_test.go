@@ -4,6 +4,7 @@
 package rfc8888
 
 import (
+	"math/rand"
 	"testing"
 	"time"
 
@@ -142,21 +143,49 @@ func TestRecorder(t *testing.T) {
 		}, report.ReportBlocks[0])
 	})
 
-	t.Run("MaxreportsPerStream", func(t *testing.T) {
+	t.Run("MaxreportsPerStream 3 streams", func(t *testing.T) {
 		recorder := NewRecorder()
 		now := time.Time{}
+		maxSize := 1200
 
-		// Add 1000 packets on 10 different streams
-		for i := 0; i < 10; i++ {
-			for j := 0; j < 100; j++ {
-				recorder.AddPacket(now, uint32(i), uint16(j), 0) //nolint:gosec // G115
+		streams := 3
+		packets := 1000
+		// Add 1000 packets on 3 different streams
+		for i := 0; i < streams; i++ {
+			ssrc := rand.Uint32() //nolint:gosec
+			for j := 0; j < packets; j++ {
+				recorder.AddPacket(now, ssrc, uint16(j), 0) //nolint:gosec // G115
 			}
 		}
-		reports := recorder.BuildReport(time.Time{}, 1380)
+		reports := recorder.BuildReport(time.Time{}, maxSize)
 
-		for i := 0; i < 10; i++ {
-			assert.Greater(t, 72, len(reports.ReportBlocks[i].MetricBlocks))
-			assert.Less(t, 3, len(reports.ReportBlocks[i].MetricBlocks))
+		blocks := 0
+		for i := 0; i < streams; i++ {
+			blocks += len(reports.ReportBlocks[i].MetricBlocks)
 		}
+		assert.Less(t, blocks*2, maxSize)
+	})
+
+	t.Run("MaxreportsPerStream 10 streams", func(t *testing.T) {
+		recorder := NewRecorder()
+		now := time.Time{}
+		maxSize := 1300
+
+		streams := 10
+		packets := 1000
+		// Add 1000 packets on 10 different streams
+		for i := 0; i < streams; i++ {
+			ssrc := rand.Uint32() //nolint:gosec
+			for j := 0; j < packets; j++ {
+				recorder.AddPacket(now, ssrc, uint16(j), 0) //nolint:gosec // G115
+			}
+		}
+		reports := recorder.BuildReport(time.Time{}, maxSize)
+
+		blocks := 0
+		for i := 0; i < streams; i++ {
+			blocks += len(reports.ReportBlocks[i].MetricBlocks)
+		}
+		assert.Less(t, blocks*2, maxSize)
 	})
 }
