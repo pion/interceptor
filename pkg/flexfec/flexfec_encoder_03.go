@@ -141,7 +141,7 @@ func (flex *FlexEncoder03) encodeFlexFecPacket(fecPacketIndex uint32, mediaBaseS
 	// Find the maximum payload size among all media packets
 	maxPayloadSize := 0
 	for mediaPackets.HasNext() {
-		maxPayloadSize = maxInt(maxPayloadSize, mediaPackets.Next().MarshalSize()-BaseRTPHeaderSize)
+		maxPayloadSize = max(maxPayloadSize, mediaPackets.Next().MarshalSize()-BaseRTPHeaderSize)
 	}
 	mediaPackets.Reset()
 
@@ -238,12 +238,4 @@ func (flex *FlexEncoder03) encodeFlexFecPacket(fecPacketIndex uint32, mediaBaseS
 	flex.fecBaseSn++
 
 	return packet, true
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-
-	return b
 }
