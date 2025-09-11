@@ -278,8 +278,8 @@ func (t *RBTree) deleteNode(node *rbnode) {
 // fixDelete restores red-black properties after deletion.
 func (t *RBTree) fixDelete(node *rbnode, parent *rbnode) {
 	for node != t.root && (node == nil || node.color == black) {
-		switch {
-		case parent == nil:
+		switch parent {
+		case nil:
 			return
 		default:
 			if !t.fixDeleteCase(&node, &parent) {
