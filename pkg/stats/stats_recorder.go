@@ -4,6 +4,7 @@
 package stats
 
 import (
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -291,13 +292,7 @@ func (r *recorder) recordIncomingXR(latestStats internalStats, pkt *rtcp.Extende
 }
 
 func contains(ls []uint32, e uint32) bool {
-	for _, x := range ls {
-		if x == e {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(ls, e)
 }
 
 func (r *recorder) recordIncomingRTCP(latestStats internalStats, incoming *incomingRTCP) internalStats {
