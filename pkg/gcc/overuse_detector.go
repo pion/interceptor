@@ -49,13 +49,17 @@ func (d *overuseDetector) onDelayStats(ds DelayStats) {
 		} else {
 			d.increasingDuration += delta
 		}
+
 		d.increasingCounter++
-		if d.increasingDuration > d.overuseTime && d.increasingCounter > 1 {
+
+		if (d.overuseTime == 0 && d.increasingCounter > 1) ||
+			(d.increasingDuration > d.overuseTime && d.increasingCounter > 1) {
 			if estimate > d.lastEstimate {
 				use = usageOver
 			}
 		}
 	}
+
 	if thresholdUse == usageUnder {
 		d.increasingCounter = 0
 		d.increasingDuration = 0
@@ -67,6 +71,7 @@ func (d *overuseDetector) onDelayStats(ds DelayStats) {
 		d.increasingCounter = 0
 		use = usageNormal
 	}
+
 	d.lastEstimate = estimate
 
 	d.dsWriter(DelayStats{
