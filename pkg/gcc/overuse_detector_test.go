@@ -4,6 +4,7 @@
 package gcc
 
 import (
+	"runtime"
 	"testing"
 	"time"
 
@@ -99,7 +100,12 @@ func TestOveruseDetectorWithoutDelay(t *testing.T) {
 				defer close(out)
 				for _, e := range tc.estimates {
 					od.onDelayStats(e)
-					time.Sleep(tc.delay)
+					if tc.delay == 0 {
+						// avoid time.Sleep(0) since it's broken on windows.
+						runtime.Gosched()
+					} else {
+						time.Sleep(tc.delay)
+					}
 				}
 			}()
 			received := []usage{}
