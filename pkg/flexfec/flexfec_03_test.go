@@ -60,7 +60,6 @@ func generatePackets(t *testing.T, seqs []uint16) ([]rtp.Packet, []rtp.Packet) {
 				SequenceNumber: seq,
 				Timestamp:      3653407706,
 				SSRC:           protectedStreamSSRC,
-				CSRC:           []uint32{},
 			},
 			Payload: payload,
 		}
