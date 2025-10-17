@@ -29,7 +29,6 @@ func TestAttributesGetRTPHeader(t *testing.T) {
 				SequenceNumber:   0,
 				Timestamp:        0,
 				SSRC:             0,
-				CSRC:             []uint32{},
 				ExtensionProfile: 0,
 				Extensions:       nil,
 			},
@@ -50,7 +49,6 @@ func TestAttributesGetRTPHeader(t *testing.T) {
 			SequenceNumber:   0,
 			Timestamp:        0,
 			SSRC:             0,
-			CSRC:             []uint32{},
 			ExtensionProfile: 0,
 			Extensions:       nil,
 		}
@@ -72,7 +70,6 @@ func TestAttributesGetRTPHeader(t *testing.T) {
 			SequenceNumber:   0,
 			Timestamp:        0,
 			SSRC:             0,
-			CSRC:             []uint32{},
 			ExtensionProfile: 0,
 			Extensions:       nil,
 		}, Payload: make([]byte, 1000)}

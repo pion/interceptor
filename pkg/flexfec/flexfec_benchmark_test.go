@@ -33,7 +33,6 @@ func generateMediaPackets(n int, startSeq uint16) []rtp.Packet {
 				SequenceNumber: startSeq + uint16(i), //nolint:gosec // G115
 				Timestamp:      3653407706,
 				SSRC:           protectedStreamSSRC,
-				CSRC:           []uint32{},
 			},
 			Payload: payload,
 		}
@@ -68,7 +67,6 @@ func generateMediaPacketsWithSizes(n int, startSeq uint16, minSize, maxSize int)
 				SequenceNumber: startSeq + uint16(i), //nolint:gosec // G115
 				Timestamp:      3653407706,
 				SSRC:           protectedStreamSSRC,
-				CSRC:           []uint32{},
 			},
 			Payload: payload,
 		}
