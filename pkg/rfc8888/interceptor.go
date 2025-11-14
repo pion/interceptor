@@ -114,10 +114,10 @@ func (s *SenderInterceptor) BindRemoteStream(
 
 		var ecn rtcp.ECN
 		if e, hasECN := attr["ECN"]; hasECN {
-			if ecnT, ok := e.(rtcp.ECN); ok {
-				ecn = ecnT
+			if ecnT, ok := e.(byte); ok {
+				ecn = rtcp.ECN(ecnT)
 			} else {
-				s.log.Error("ECN entry in attributes map is not of rtcp.ECN type")
+				s.log.Error("ECN entry in attributes map is not of type byte")
 			}
 		}
 
