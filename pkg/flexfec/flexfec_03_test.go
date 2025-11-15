@@ -44,6 +44,12 @@ func checkAnyPacketCanBeRecovered(t *testing.T, mediaPackets []rtp.Packet, fecPa
 func generatePackets(t *testing.T, seqs []uint16) ([]rtp.Packet, []rtp.Packet) {
 	t.Helper()
 
+	return generatePacketsWithFecCount(t, seqs, 2)
+}
+
+func generatePacketsWithFecCount(t *testing.T, seqs []uint16, fecCount uint32) ([]rtp.Packet, []rtp.Packet) {
+	t.Helper()
+
 	mediaPackets := make([]rtp.Packet, 0)
 	for i, seq := range seqs {
 		payload := []byte{
@@ -72,9 +78,23 @@ func generatePackets(t *testing.T, seqs []uint16) ([]rtp.Packet, []rtp.Packet) {
 	}
 
 	encoder := FlexEncoder03Factory{}.NewEncoder(payloadType, ssrc)
-	fecPackets := encoder.EncodeFec(mediaPackets, 2)
+	fecPackets := encoder.EncodeFec(mediaPackets, fecCount)
 
 	return mediaPackets, fecPackets
+}
+
+func runEncoderDecoderParityTest(t *testing.T, seqStart uint16, seqLen int, fecCount uint32) {
+	t.Helper()
+
+	seqs := make([]uint16, seqLen)
+	for i := 0; i < seqLen; i++ {
+		seqs[i] = seqStart + uint16(i) //nolint:gosec // G115
+	}
+
+	mediaPackets, fecPackets := generatePacketsWithFecCount(t, seqs, fecCount)
+	require.Len(t, mediaPackets, len(seqs))
+	require.Len(t, fecPackets, int(fecCount))
+	checkAnyPacketCanBeRecovered(t, mediaPackets, fecPackets)
 }
 
 func TestFlexFec03_SimpleRoundTrip(t *testing.T) {
@@ -115,4 +135,24 @@ func TestFlexFec03_WholeRangeRoundTrip(t *testing.T) {
 	mediaPackets, fecPackets := generatePackets(t, seqs)
 	require.Len(t, mediaPackets, len(seqs))
 	checkAnyPacketCanBeRecovered(t, mediaPackets, fecPackets)
+}
+
+func TestFlexFec03_EncoderDecoderParitySingleFECShortWindow(t *testing.T) {
+	runEncoderDecoderParityTest(t, 42, 8, 1)
+}
+
+func TestFlexFec03_EncoderDecoderParityDualFECMask2Coverage(t *testing.T) {
+	runEncoderDecoderParityTest(t, 5, 40, 2)
+}
+
+func TestFlexFec03_EncoderDecoderParityTripleFECMask3Coverage(t *testing.T) {
+	runEncoderDecoderParityTest(t, 120, 90, 3)
+}
+
+func TestFlexFec03_EncoderDecoderParityWrapAroundSequences(t *testing.T) {
+	runEncoderDecoderParityTest(t, 65510, 60, 4)
+}
+
+func TestFlexFec03_EncoderDecoderParityHighMediaCount(t *testing.T) {
+	runEncoderDecoderParityTest(t, 41000, 100, 10)
 }
