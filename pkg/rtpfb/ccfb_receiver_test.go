@@ -23,6 +23,12 @@ func TestConvertCCFB(t *testing.T) {
 	}{
 		{},
 		{
+			ts:             timeZero.Add(2 * time.Second),
+			feedback:       &rtcp.CCFeedbackReport{},
+			expect:         map[uint32][]acknowledgement{},
+			expectAckDelay: 0,
+		},
+		{
 			ts: timeZero.Add(2 * time.Second),
 			feedback: &rtcp.CCFeedbackReport{
 				SenderSSRC: 1,
