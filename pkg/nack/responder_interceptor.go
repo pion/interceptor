@@ -126,10 +126,10 @@ func (n *ResponderInterceptor) BindLocalStream(
 			if err != nil {
 				return 0, err
 			}
-			stream.rtpBufferMutex.Lock()
-			defer stream.rtpBufferMutex.Unlock()
 
-			rtpBuffer.Add(pkt)
+			stream.rtpBufferMutex.Lock()
+			stream.rtpBuffer.Add(pkt)
+			stream.rtpBufferMutex.Unlock()
 
 			return writer.Write(header, payload, attributes)
 		},
@@ -153,10 +153,13 @@ func (n *ResponderInterceptor) resendPackets(nack *rtcp.TransportLayerNack) {
 
 	for i := range nack.Nacks {
 		nack.Nacks[i].Range(func(seq uint16) bool {
+			// save the packet under the buffer lock
 			stream.rtpBufferMutex.Lock()
-			defer stream.rtpBufferMutex.Unlock()
+			p := stream.rtpBuffer.Get(seq)
+			stream.rtpBufferMutex.Unlock()
 
-			if p := stream.rtpBuffer.Get(seq); p != nil {
+			if p != nil {
+				// send without holding rtpBufferMutex
 				if _, err := stream.rtpWriter.Write(p.Header(), p.Payload(), interceptor.Attributes{}); err != nil {
 					n.log.Warnf("failed resending nacked packet: %+v", err)
 				}

@@ -179,3 +179,85 @@ func TestGeneratorInterceptor_UnbindRemovesCorrespondingSSRC(t *testing.T) {
 	_, ok = gen.nackCountLogs[ssrc]
 	assert.False(t, ok, "ssrc should not be present in nackCountLogs")
 }
+
+// reentrantRTCPWriter tries to re-acquire GeneratorInterceptor.receiveLogsMu
+// inside Write. If loop() calls Write while holding that mutex, this will
+// cause a deadlock.
+type reentrantRTCPWriter struct {
+	n      *GeneratorInterceptor
+	called chan struct{}
+}
+
+func (w *reentrantRTCPWriter) Write(pkts []rtcp.Packet, attrs interceptor.Attributes) (int, error) {
+	// signal to the test that Write was entered.
+	select {
+	case <-w.called:
+		// already closed
+	default:
+		close(w.called)
+	}
+
+	// re-enter the interceptor's lock
+	w.n.receiveLogsMu.Lock()
+	defer w.n.receiveLogsMu.Unlock()
+
+	return len(pkts), nil
+}
+
+// this fails if loop() calls rtcpWriter.Write while holding receiveLogsMu
+// but will pass if Write is called after releasing receiveLogsMu.
+func TestGeneratorInterceptor_NoDeadlockWithReentrantRTCPWriter(t *testing.T) {
+	const interval = time.Millisecond * 5
+
+	f, err := NewGeneratorInterceptor(
+		GeneratorSize(64),
+		GeneratorInterval(interval),
+	)
+	assert.NoError(t, err)
+
+	i, err := f.NewInterceptor("")
+	assert.NoError(t, err)
+	gen, ok := i.(*GeneratorInterceptor)
+	assert.True(t, ok, "expected *GeneratorInterceptor, got %T", i)
+
+	writer := &reentrantRTCPWriter{
+		n:      gen,
+		called: make(chan struct{}),
+	}
+	_ = gen.BindRTCPWriter(writer)
+
+	// set receiveLog with a gap so that missingSeqNumbers()
+	// returns something and causes a NACK -> Write() call.
+	rl, err := newReceiveLog(gen.size)
+	assert.NoError(t, err)
+
+	gen.receiveLogsMu.Lock()
+	gen.receiveLogs[1] = rl
+	gen.receiveLogsMu.Unlock()
+
+	// 100 and 102 received -> 101 is missing.
+	rl.add(100)
+	rl.add(102)
+
+	// wait until the writer was actually called at least once.
+	select {
+	case <-writer.called:
+		// good: generator loop attempted to send a NACK
+	case <-time.After(time.Second):
+		assert.Fail(t, "generator did not call RTCP writer")
+	}
+
+	// verify that Close() does not deadlock.
+	done := make(chan struct{})
+	go func() {
+		_ = gen.Close()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// no deadlock with reentrant writer
+	case <-time.After(time.Second):
+		assert.Fail(t, "GeneratorInterceptor.Close deadlocked with reentrant RTCP writer")
+	}
+}
