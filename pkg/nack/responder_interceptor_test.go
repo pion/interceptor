@@ -398,3 +398,87 @@ func TestResponderInterceptor_BypassUnknownSSRCs(t *testing.T) {
 		}
 	}
 }
+
+// reentrantRTPWriter tries to re-acquire localStream.rtpBufferMutex inside Write.
+// If BindLocalStream's wrapper calls writer.Write while holding that mutex, this
+// will deadlock.
+type reentrantRTPWriter struct {
+	stream *localStream
+	called chan struct{}
+}
+
+func (w *reentrantRTPWriter) Write(header *rtp.Header, payload []byte, attrs interceptor.Attributes) (int, error) {
+	// signal to the test that Write was entered.
+	if w.called != nil {
+		select {
+		case <-w.called:
+			// already closed
+		default:
+			close(w.called)
+		}
+	}
+
+	// re-enter the same mutex.
+	w.stream.rtpBufferMutex.Lock()
+	defer w.stream.rtpBufferMutex.Unlock()
+
+	return len(payload), nil
+}
+
+// this fails if writer.Write is called while holding rtpBufferMutex and
+// will pass when the mutex is released before calling writer.Write.
+func TestResponderInterceptor_NoDeadlockWithReentrantRTPWriter(t *testing.T) {
+	f, err := NewResponderInterceptor(
+		ResponderSize(8),
+		ResponderLog(logging.NewDefaultLoggerFactory().NewLogger("test")),
+	)
+	require.NoError(t, err)
+
+	i, err := f.NewInterceptor("")
+	require.NoError(t, err)
+
+	resp, ok := i.(*ResponderInterceptor)
+	require.True(t, ok, "expected *ResponderInterceptor, got %T", i)
+
+	info := &interceptor.StreamInfo{
+		SSRC:         1,
+		RTCPFeedback: []interceptor.RTCPFeedback{{Type: "nack"}},
+	}
+
+	writer := &reentrantRTPWriter{
+		called: make(chan struct{}),
+	}
+
+	// BindLocalStream wraps the writer and stores a localStream in resp.streams.
+	wrapped := resp.BindLocalStream(info, writer)
+
+	// fill the writer with the actual localStream instance.
+	resp.streamsMu.Lock()
+	writer.stream = resp.streams[info.SSRC]
+	resp.streamsMu.Unlock()
+	require.NotNil(t, writer.stream, "localStream should not be nil")
+
+	header := &rtp.Header{SSRC: 1, SequenceNumber: 1}
+	payload := []byte{0x01}
+
+	done := make(chan struct{})
+	go func() {
+		_, _ = wrapped.Write(header, payload, interceptor.Attributes{})
+		close(done)
+	}()
+
+	// make sure the reentrant writer was actually invoked.
+	select {
+	case <-writer.called:
+		// good: reentrant path hit
+	case <-time.After(time.Second):
+		assert.Fail(t, "wrapped writer was never called")
+	}
+
+	select {
+	case <-done:
+		// no deadlock with reentrant writer
+	case <-time.After(time.Second):
+		assert.Fail(t, "ResponderInterceptor.Write deadlocked with reentrant RTP writer")
+	}
+}
