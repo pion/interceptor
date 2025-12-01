@@ -124,6 +124,8 @@ func (n *GeneratorInterceptor) BindRemoteStream(
 func (n *GeneratorInterceptor) UnbindRemoteStream(info *interceptor.StreamInfo) {
 	n.receiveLogsMu.Lock()
 	delete(n.receiveLogs, info.SSRC)
+	// the count logs must also be dropped for the specific SSRC.
+	delete(n.nackCountLogs, info.SSRC)
 	n.receiveLogsMu.Unlock()
 }
 
@@ -202,6 +204,11 @@ func (n *GeneratorInterceptor) loop(rtcpWriter interceptor.RTCPWriter) {
 						if !isMissing {
 							delete(n.nackCountLogs[ssrc], nackSeq)
 						}
+					}
+
+					// clean up the count log for the ssrc if it's empty
+					if len(n.nackCountLogs[ssrc]) == 0 {
+						delete(n.nackCountLogs, ssrc)
 					}
 
 					if _, err := rtcpWriter.Write([]rtcp.Packet{nack}, interceptor.Attributes{}); err != nil {

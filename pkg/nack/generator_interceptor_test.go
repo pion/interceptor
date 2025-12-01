@@ -135,3 +135,47 @@ func TestGeneratorInterceptor_StreamFilter(t *testing.T) {
 		}
 	}
 }
+
+func TestGeneratorInterceptor_UnbindRemovesCorrespondingSSRC(t *testing.T) {
+	f, err := NewGeneratorInterceptor(
+		GeneratorSize(64),
+	)
+	assert.NoError(t, err)
+
+	i, err := f.NewInterceptor("")
+	assert.NoError(t, err)
+	gen, ok := i.(*GeneratorInterceptor)
+	assert.True(t, ok, "expected *GeneratorInterceptor, got %T", i)
+
+	const ssrc = uint32(1234)
+
+	info := &interceptor.StreamInfo{
+		SSRC:         ssrc,
+		RTCPFeedback: []interceptor.RTCPFeedback{{Type: "nack"}},
+	}
+
+	rl, err := newReceiveLog(gen.size)
+	assert.NoError(t, err)
+
+	// make the receive log and count logs non-empty
+	gen.receiveLogsMu.Lock()
+	gen.receiveLogs[ssrc] = rl
+	gen.nackCountLogs[ssrc] = map[uint16]uint16{
+		10: 1,
+		20: 2,
+	}
+	gen.receiveLogsMu.Unlock()
+
+	// unbind the stream
+	gen.UnbindRemoteStream(info)
+
+	// compare them and ensure that ssrc isn't there
+	gen.receiveLogsMu.Lock()
+	defer gen.receiveLogsMu.Unlock()
+
+	_, ok = gen.receiveLogs[ssrc]
+	assert.False(t, ok, "ssrc should not be present in receiveLogs")
+
+	_, ok = gen.nackCountLogs[ssrc]
+	assert.False(t, ok, "ssrc should not be present in nackCountLogs")
+}
