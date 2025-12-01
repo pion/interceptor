@@ -17,15 +17,21 @@ func convertCCFB(ts time.Time, feedback *rtcp.CCFeedbackReport) (time.Duration, 
 	result := map[uint32][]acknowledgement{}
 	referenceTime := ntp.ToTime32(feedback.ReportTimestamp, ts)
 	latestArrival := time.Time{}
+	foundLatestArrival := false
 	for _, rb := range feedback.ReportBlocks {
 		var la time.Time
 		la, result[rb.MediaSSRC] = convertMetricBlock(referenceTime, rb.BeginSequence, rb.MetricBlocks)
 		if la.After(latestArrival) {
 			latestArrival = la
+			foundLatestArrival = true
 		}
 	}
+	ackDelay := time.Duration(0)
+	if foundLatestArrival {
+		ackDelay = referenceTime.Sub(latestArrival)
+	}
 
-	return referenceTime.Sub(latestArrival), result
+	return ackDelay, result
 }
 
 func convertMetricBlock(
