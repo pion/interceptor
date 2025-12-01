@@ -44,7 +44,7 @@ func convertMetricBlock(
 			// the RTS field, then an ATO value of 0x1FFF MUST be reported for
 			// the packet. In that case, we set a zero time.Time value.
 			if mb.ArrivalTimeOffset != 0x1FFF {
-				delta := time.Duration((float64(mb.ArrivalTimeOffset) / 1024.0) * float64(time.Second))
+				delta := time.Duration(mb.ArrivalTimeOffset) * time.Second / 1024
 				arrival = reference.Add(-delta)
 				if arrival.After(latestArrival) {
 					latestArrival = arrival
