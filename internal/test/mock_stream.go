@@ -103,7 +103,6 @@ func NewMockStream(info *interceptor.StreamInfo, i interceptor.Interceptor) *Moc
 				if !ok {
 					return 0, nil, io.EOF
 				}
-
 				marshaled, err := p.Marshal()
 				if err != nil {
 					return 0, nil, io.EOF
