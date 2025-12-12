@@ -832,6 +832,100 @@ func TestStatsRecorder(t *testing.T) {
 				BytesReceived:               36,
 			},
 		},
+		{
+			name: "PacketsReceivedUnderflow",
+			records: []record{
+				// Initialize remote inbound first sequence number = 1000 via outgoing RTP.
+				{
+					ts: now,
+					content: outgoingRTP{
+						header: rtp.Header{
+							SequenceNumber: 1000,
+						},
+					},
+				},
+				// RR: highest seq still 1000, but TotalLost > expected (1), should clamp received to 0.
+				{
+					ts: now.Add(10 * time.Millisecond),
+					content: incomingRTCP{
+						pkts: []rtcp.Packet{
+							&rtcp.ReceiverReport{
+								SSRC: 0,
+								Reports: []rtcp.ReceptionReport{{
+									SSRC:               0,
+									FractionLost:       0,
+									TotalLost:          10,
+									LastSequenceNumber: 1000,
+									Jitter:             0,
+								}},
+							},
+							cname,
+						},
+					},
+				},
+			},
+			expectedOutboundRTPStreamStats: OutboundRTPStreamStats{
+				SentRTPStreamStats: SentRTPStreamStats{
+					PacketsSent: 1,
+					BytesSent:   12,
+				},
+				HeaderBytesSent: 12,
+			},
+			expectedRemoteInboundRTPStreamStats: RemoteInboundRTPStreamStats{
+				ReceivedRTPStreamStats: ReceivedRTPStreamStats{
+					PacketsReceived: 0,
+					PacketsLost:     10,
+					Jitter:          0,
+				},
+			},
+		},
+		{
+			name: "PacketsReceivedBoundaryZero",
+			records: []record{
+				// Initialize remote inbound first sequence number = 1000 via outgoing RTP.
+				{
+					ts: now,
+					content: outgoingRTP{
+						header: rtp.Header{
+							SequenceNumber: 1000,
+						},
+					},
+				},
+				// RR: last seq = 999 -> expected = 0, TotalLost = 0, received should be 0.
+				{
+					ts: now.Add(10 * time.Millisecond),
+					content: incomingRTCP{
+						pkts: []rtcp.Packet{
+							&rtcp.ReceiverReport{
+								SSRC: 0,
+								Reports: []rtcp.ReceptionReport{{
+									SSRC:               0,
+									FractionLost:       0,
+									TotalLost:          0,
+									LastSequenceNumber: 999,
+									Jitter:             0,
+								}},
+							},
+							cname,
+						},
+					},
+				},
+			},
+			expectedOutboundRTPStreamStats: OutboundRTPStreamStats{
+				SentRTPStreamStats: SentRTPStreamStats{
+					PacketsSent: 1,
+					BytesSent:   12,
+				},
+				HeaderBytesSent: 12,
+			},
+			expectedRemoteInboundRTPStreamStats: RemoteInboundRTPStreamStats{
+				ReceivedRTPStreamStats: ReceivedRTPStreamStats{
+					PacketsReceived: 0,
+					PacketsLost:     0,
+					Jitter:          0,
+				},
+			},
+		},
 	} {
 		t.Run(fmt.Sprintf("%v:%v", i, cc.name), func(t *testing.T) {
 			recorder := newRecorder(0, 90_000)

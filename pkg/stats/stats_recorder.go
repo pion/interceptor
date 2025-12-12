@@ -243,8 +243,10 @@ func (r *recorder) recordIncomingRR(latestStats internalStats, pkt *rtcp.Receive
 			nr := uint64(report.LastSequenceNumber & 0x0000FFFF)
 			highest := cycles*(0xFFFF+1) + nr
 			//nolint:gosec // G115
-			latestStats.RemoteInboundRTPStreamStats.PacketsReceived = highest - uint64(report.TotalLost) -
-				uint64(latestStats.remoteInboundFirstSequenceNumber) + 1
+			expected := int64(highest) - latestStats.remoteInboundFirstSequenceNumber + 1
+			received := max(expected-int64(report.TotalLost), 0)
+			//nolint:gosec // G115
+			latestStats.RemoteInboundRTPStreamStats.PacketsReceived = uint64(received)
 		}
 		latestStats.RemoteInboundRTPStreamStats.PacketsLost = int64(report.TotalLost)
 		latestStats.RemoteInboundRTPStreamStats.Jitter = float64(report.Jitter) / r.clockRate
