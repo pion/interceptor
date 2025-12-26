@@ -37,7 +37,7 @@ func (r *ResponderInterceptorFactory) NewInterceptor(_ string) (interceptor.Inte
 		responderInterceptor.packetFactory = rtpbuffer.NewPacketFactoryCopy()
 	}
 
-	if _, err := rtpbuffer.NewRTPBuffer(responderInterceptor.size); err != nil {
+	if err := rtpbuffer.IsBufferSizeValid(responderInterceptor.size); err != nil {
 		return nil, err
 	}
 
