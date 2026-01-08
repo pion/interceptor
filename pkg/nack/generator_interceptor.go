@@ -30,13 +30,19 @@ func (g *GeneratorInterceptorFactory) NewInterceptor(_ string) (interceptor.Inte
 		receiveLogs:       map[uint32]*receiveLog{},
 		nackCountLogs:     map[uint32]map[uint16]uint16{},
 		close:             make(chan struct{}),
-		log:               logging.NewDefaultLoggerFactory().NewLogger("nack_generator"),
 	}
 
 	for _, opt := range g.opts {
 		if err := opt(generatorInterceptor); err != nil {
 			return nil, err
 		}
+	}
+
+	if generatorInterceptor.loggerFactory == nil {
+		generatorInterceptor.loggerFactory = logging.NewDefaultLoggerFactory()
+	}
+	if generatorInterceptor.log == nil {
+		generatorInterceptor.log = generatorInterceptor.loggerFactory.NewLogger("nack_generator")
 	}
 
 	if _, err := newReceiveLog(generatorInterceptor.size); err != nil {
@@ -58,6 +64,7 @@ type GeneratorInterceptor struct {
 	wg                sync.WaitGroup
 	close             chan struct{}
 	log               logging.LeveledLogger
+	loggerFactory     logging.LoggerFactory
 	nackCountLogs     map[uint32]map[uint16]uint16
 
 	receiveLogs   map[uint32]*receiveLog

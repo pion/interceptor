@@ -22,7 +22,7 @@ func TestGeneratorInterceptor(t *testing.T) {
 		GeneratorSkipLastN(2),
 		GeneratorMaxNacksPerPacket(10),
 		GeneratorInterval(interval),
-		GeneratorLog(logging.NewDefaultLoggerFactory().NewLogger("test")),
+		WithGeneratorLoggerFactory(logging.NewDefaultLoggerFactory()),
 	)
 	assert.NoError(t, err)
 

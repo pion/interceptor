@@ -9,6 +9,7 @@ import (
 
 	"github.com/pion/interceptor"
 	"github.com/pion/interceptor/internal/test"
+	"github.com/pion/logging"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 	"github.com/stretchr/testify/assert"
@@ -17,7 +18,7 @@ import (
 //nolint:cyclop
 func TestInterceptor(t *testing.T) {
 	t.Run("before any packets", func(t *testing.T) {
-		f, err := NewInterceptor()
+		f, err := NewInterceptor(WithLoggerFactory(logging.NewDefaultLoggerFactory()))
 		assert.NoError(t, err)
 		statsCh := make(chan Getter)
 		f.OnNewPeerConnection(func(_ string, g Getter) {

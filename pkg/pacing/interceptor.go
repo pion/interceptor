@@ -52,6 +52,15 @@ func Interval(interval time.Duration) Option {
 	}
 }
 
+// WithLoggerFactory sets a logger factory for the interceptor.
+func WithLoggerFactory(loggerFactory logging.LoggerFactory) Option {
+	return func(i *Interceptor) error {
+		i.loggerFactory = loggerFactory
+
+		return nil
+	}
+}
+
 func setPacerFactory(f pacerFactory) Option {
 	return func(i *Interceptor) error {
 		i.pacerFactory = f
@@ -102,7 +111,6 @@ func (f *InterceptorFactory) NewInterceptor(id string) (interceptor.Interceptor,
 
 	interceptor := &Interceptor{
 		NoOp:        interceptor.NoOp{},
-		log:         logging.NewDefaultLoggerFactory().NewLogger("pacer_interceptor"),
 		initialRate: 1_000_000,
 		interval:    5 * time.Millisecond,
 		queueSize:   1_000_000,
@@ -121,6 +129,10 @@ func (f *InterceptorFactory) NewInterceptor(id string) (interceptor.Interceptor,
 			return nil, err
 		}
 	}
+	if interceptor.loggerFactory == nil {
+		interceptor.loggerFactory = logging.NewDefaultLoggerFactory()
+	}
+	interceptor.log = interceptor.loggerFactory.NewLogger("pacer_interceptor")
 	interceptor.limit = interceptor.pacerFactory(
 		interceptor.initialRate,
 		burst(interceptor.initialRate, interceptor.interval),
@@ -142,7 +154,8 @@ func (f *InterceptorFactory) NewInterceptor(id string) (interceptor.Interceptor,
 // packets at a fixed interval.
 type Interceptor struct {
 	interceptor.NoOp
-	log logging.LeveledLogger
+	log           logging.LeveledLogger
+	loggerFactory logging.LoggerFactory
 
 	// config
 	initialRate  int

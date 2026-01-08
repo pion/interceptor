@@ -10,6 +10,7 @@ import (
 
 	"github.com/pion/interceptor"
 	"github.com/pion/interceptor/pkg/twcc"
+	"github.com/pion/logging"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 	"github.com/stretchr/testify/assert"
@@ -59,7 +60,7 @@ func TestSendSideBWE(t *testing.T) {
 		RTPHeaderExtensions: []interceptor.RTPHeaderExtension{{URI: transportCCURI, ID: 1}},
 	}
 
-	bwe, err := NewSendSideBWE()
+	bwe, err := NewSendSideBWE(WithLoggerFactory(logging.NewDefaultLoggerFactory()))
 	require.NoError(t, err)
 	require.NotNil(t, bwe)
 

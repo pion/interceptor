@@ -28,7 +28,7 @@ func TestResponderInterceptor(t *testing.T) {
 			name: "with copy",
 			opts: []ResponderOption{
 				ResponderSize(8),
-				ResponderLog(logging.NewDefaultLoggerFactory().NewLogger("test")),
+				WithResponderLoggerFactory(logging.NewDefaultLoggerFactory()),
 			},
 		},
 		{

@@ -22,7 +22,7 @@ func TestReceiverInterceptor(t *testing.T) {
 		mt := test.MockTime{}
 		f, err := NewReceiverInterceptor(
 			ReceiverInterval(time.Millisecond*50),
-			ReceiverLog(logging.NewDefaultLoggerFactory().NewLogger("test")),
+			WithReceiverLoggerFactory(logging.NewDefaultLoggerFactory()),
 			ReceiverNow(mt.Now),
 		)
 		assert.NoError(t, err)

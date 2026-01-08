@@ -12,6 +12,7 @@ import (
 	"github.com/pion/interceptor"
 	"github.com/pion/interceptor/internal/cc"
 	"github.com/pion/interceptor/internal/ntp"
+	"github.com/pion/logging"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 )
@@ -57,6 +58,8 @@ type SendSideBWE struct {
 
 	close     chan struct{}
 	closeLock sync.RWMutex
+
+	loggerFactory logging.LoggerFactory
 }
 
 // Option configures a bandwidth estimator.
@@ -98,6 +101,15 @@ func SendSideBWEPacer(p Pacer) Option {
 	}
 }
 
+// WithLoggerFactory sets the logger factory for the bandwidth estimator.
+func WithLoggerFactory(factory logging.LoggerFactory) Option {
+	return func(e *SendSideBWE) error {
+		e.loggerFactory = factory
+
+		return nil
+	}
+}
+
 // NewSendSideBWE creates a new sender side bandwidth estimator.
 func NewSendSideBWE(opts ...Option) (*SendSideBWE, error) {
 	send := &SendSideBWE{
@@ -118,16 +130,19 @@ func NewSendSideBWE(opts ...Option) (*SendSideBWE, error) {
 			return nil, err
 		}
 	}
-	if send.pacer == nil {
-		send.pacer = NewLeakyBucketPacer(send.latestBitrate)
+	if send.loggerFactory == nil {
+		send.loggerFactory = logging.NewDefaultLoggerFactory()
 	}
-	send.lossController = newLossBasedBWE(send.latestBitrate)
+	if send.pacer == nil {
+		send.pacer = newLeakyBucketPacer(send.latestBitrate, send.loggerFactory)
+	}
+	send.lossController = newLossBasedBWE(send.latestBitrate, send.loggerFactory)
 	send.delayController = newDelayController(delayControllerConfig{
 		nowFn:          time.Now,
 		initialBitrate: send.latestBitrate,
 		minBitrate:     send.minBitrate,
 		maxBitrate:     send.maxBitrate,
-	})
+	}, send.loggerFactory)
 
 	send.delayController.onUpdate(send.onDelayUpdate)
 

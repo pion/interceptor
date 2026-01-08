@@ -23,7 +23,6 @@ func (r *ResponderInterceptorFactory) NewInterceptor(_ string) (interceptor.Inte
 	responderInterceptor := &ResponderInterceptor{
 		streamsFilter: streamSupportNack,
 		size:          1024,
-		log:           logging.NewDefaultLoggerFactory().NewLogger("nack_responder"),
 		streams:       map[uint32]*localStream{},
 	}
 
@@ -33,6 +32,12 @@ func (r *ResponderInterceptorFactory) NewInterceptor(_ string) (interceptor.Inte
 		}
 	}
 
+	if responderInterceptor.loggerFactory == nil {
+		responderInterceptor.loggerFactory = logging.NewDefaultLoggerFactory()
+	}
+	if responderInterceptor.log == nil {
+		responderInterceptor.log = responderInterceptor.loggerFactory.NewLogger("nack_responder")
+	}
 	if responderInterceptor.packetFactory == nil {
 		responderInterceptor.packetFactory = rtpbuffer.NewPacketFactoryCopy()
 	}
@@ -50,6 +55,7 @@ type ResponderInterceptor struct {
 	streamsFilter func(info *interceptor.StreamInfo) bool
 	size          uint16
 	log           logging.LeveledLogger
+	loggerFactory logging.LoggerFactory
 	packetFactory rtpbuffer.PacketFactory
 
 	streams   map[uint32]*localStream

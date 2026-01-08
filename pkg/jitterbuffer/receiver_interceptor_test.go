@@ -20,7 +20,7 @@ func TestBufferStart(t *testing.T) {
 	buf := bytes.Buffer{}
 
 	factory, err := NewInterceptor(
-		Log(logging.NewDefaultLoggerFactory().NewLogger("test")),
+		WithLoggerFactory(logging.NewDefaultLoggerFactory()),
 	)
 	assert.NoError(t, err)
 

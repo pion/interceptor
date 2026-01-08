@@ -21,8 +21,17 @@ func Log(log logging.LeveledLogger) PacketDumperOption {
 	}
 }
 
+// WithLoggerFactory sets a logger factory for the interceptor.
+func WithLoggerFactory(loggerFactory logging.LoggerFactory) PacketDumperOption {
+	return func(d *PacketDumper) error {
+		d.loggerFactory = loggerFactory
+
+		return nil
+	}
+}
+
 // PacketLog sets the packet logger of a packet dumper. Use this to replace the
-// default logger with yout own logger implementation.
+// default logger with your own logger implementation.
 func PacketLog(logger PacketLogger) PacketDumperOption {
 	return func(d *PacketDumper) error {
 		d.packetLogger = logger

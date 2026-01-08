@@ -23,7 +23,8 @@ type PacketDumper struct {
 	packetLogger PacketLogger
 
 	// Default Logger Options
-	log logging.LeveledLogger
+	log           logging.LeveledLogger
+	loggerFactory logging.LoggerFactory
 
 	rtpStream  io.Writer
 	rtcpStream io.Writer
@@ -40,10 +41,9 @@ type PacketDumper struct {
 }
 
 // NewPacketDumper creates a new PacketDumper.
-func NewPacketDumper(opts ...PacketDumperOption) (*PacketDumper, error) {
+func NewPacketDumper(opts ...PacketDumperOption) (*PacketDumper, error) { //nolint:cyclop
 	dumper := &PacketDumper{
 		packetLogger:     nil,
-		log:              logging.NewDefaultLoggerFactory().NewLogger("packet_dumper"),
 		rtpStream:        os.Stdout,
 		rtcpStream:       os.Stdout,
 		rtpFormatBinary:  nil,
@@ -69,6 +69,14 @@ func NewPacketDumper(opts ...PacketDumperOption) (*PacketDumper, error) {
 		if err := opt(dumper); err != nil {
 			return nil, err
 		}
+	}
+
+	if dumper.loggerFactory == nil {
+		dumper.loggerFactory = logging.NewDefaultLoggerFactory()
+	}
+
+	if dumper.log == nil {
+		dumper.log = dumper.loggerFactory.NewLogger("packet_dumper")
 	}
 
 	// If we get a custom packet logger, we don't need to set any default logger

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/pion/interceptor"
+	"github.com/pion/logging"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 	"github.com/stretchr/testify/assert"
@@ -41,7 +42,7 @@ func TestCustomLogger(t *testing.T) {
 		rtpLog:  make(chan rtpDump, 1),
 		rtcpLog: make(chan rtcpDump, 1),
 	}
-	dumper, err := NewPacketDumper(PacketLog(cl))
+	dumper, err := NewPacketDumper(PacketLog(cl), WithLoggerFactory(logging.NewDefaultLoggerFactory()))
 	assert.NoError(t, err)
 	dumper.logRTPPacket(&rtp.Header{}, []byte{1, 2, 3, 4}, nil)
 	dumper.logRTCPPackets([]rtcp.Packet{
