@@ -9,6 +9,7 @@ import (
 
 	"github.com/pion/interceptor"
 	"github.com/pion/interceptor/internal/test"
+	"github.com/pion/logging"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 	transportTest "github.com/pion/transport/v3/test"
@@ -18,7 +19,7 @@ import (
 //nolint:maintidx
 func TestSenderInterceptor(t *testing.T) {
 	t.Run("before any packets", func(t *testing.T) {
-		f, err := NewSenderInterceptor()
+		f, err := NewSenderInterceptor(WithLoggerFactory(logging.NewDefaultLoggerFactory()))
 		assert.NoError(t, err)
 
 		i, err := f.NewInterceptor("")

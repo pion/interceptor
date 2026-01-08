@@ -21,7 +21,7 @@ func TestSenderInterceptor(t *testing.T) {
 		mt := &test.MockTime{}
 		f, err := NewSenderInterceptor(
 			SenderInterval(time.Millisecond*50),
-			SenderLog(logging.NewDefaultLoggerFactory().NewLogger("test")),
+			WithSenderLoggerFactory(logging.NewDefaultLoggerFactory()),
 			SenderNow(mt.Now),
 		)
 		assert.NoError(t, err)

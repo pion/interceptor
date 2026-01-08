@@ -17,7 +17,7 @@ import (
 func TestPLIGeneratorInterceptor_Unsupported(t *testing.T) {
 	i, err := NewGeneratorInterceptor(
 		GeneratorInterval(time.Millisecond*10),
-		GeneratorLog(logging.NewDefaultLoggerFactory().NewLogger("test")),
+		WithLoggerFactory(logging.NewDefaultLoggerFactory()),
 	)
 	assert.Nil(t, err)
 

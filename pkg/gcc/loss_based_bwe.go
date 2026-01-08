@@ -42,7 +42,7 @@ type lossBasedBandwidthEstimator struct {
 	log            logging.LeveledLogger
 }
 
-func newLossBasedBWE(initialBitrate int) *lossBasedBandwidthEstimator {
+func newLossBasedBWE(initialBitrate int, loggerFactory logging.LoggerFactory) *lossBasedBandwidthEstimator {
 	return &lossBasedBandwidthEstimator{
 		lock:           sync.Mutex{},
 		maxBitrate:     100_000_000, // 100 mbit
@@ -52,7 +52,7 @@ func newLossBasedBWE(initialBitrate int) *lossBasedBandwidthEstimator {
 		lastLossUpdate: time.Time{},
 		lastIncrease:   time.Time{},
 		lastDecrease:   time.Time{},
-		log:            logging.NewDefaultLoggerFactory().NewLogger("gcc_loss_controller"),
+		log:            loggerFactory.NewLogger("gcc_loss_controller"),
 	}
 }
 

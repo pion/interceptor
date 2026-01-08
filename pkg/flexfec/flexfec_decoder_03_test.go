@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"testing"
 
+	"github.com/pion/logging"
 	"github.com/pion/rtp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,7 +19,7 @@ const (
 )
 
 func TestFECDecoderInsertPacketRemovesOldFEC(t *testing.T) {
-	decoder := newFECDecoder(testDecoderSSRC, testProtectedStreamSSRC)
+	decoder := newFECDecoder(testDecoderSSRC, testProtectedStreamSSRC, logging.NewDefaultLoggerFactory())
 	decoder.receivedFECPackets = []fecPacketState{
 		newFecPacketState(1),
 		newFecPacketState(500),
@@ -42,7 +43,7 @@ func TestFECDecoderInsertPacketRemovesOldFEC(t *testing.T) {
 }
 
 func TestFECDecoderInsertPacketKeepsRecentFEC(t *testing.T) {
-	decoder := newFECDecoder(testDecoderSSRC, testProtectedStreamSSRC)
+	decoder := newFECDecoder(testDecoderSSRC, testProtectedStreamSSRC, logging.NewDefaultLoggerFactory())
 	initialStates := []fecPacketState{
 		newFecPacketState(1),
 		newFecPacketState(500),

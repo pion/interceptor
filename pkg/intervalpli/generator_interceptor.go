@@ -38,9 +38,10 @@ type GeneratorInterceptor struct {
 	streams            sync.Map
 	immediatePLINeeded chan []uint32
 
-	log logging.LeveledLogger
-	m   sync.Mutex
-	wg  sync.WaitGroup
+	log           logging.LeveledLogger
+	loggerFactory logging.LoggerFactory
+	m             sync.Mutex
+	wg            sync.WaitGroup
 
 	close chan struct{}
 }
@@ -49,7 +50,6 @@ type GeneratorInterceptor struct {
 func NewGeneratorInterceptor(opts ...GeneratorOption) (*GeneratorInterceptor, error) {
 	generatorInterceptor := &GeneratorInterceptor{
 		interval:           3 * time.Second,
-		log:                logging.NewDefaultLoggerFactory().NewLogger("pli_generator"),
 		immediatePLINeeded: make(chan []uint32, 1),
 		close:              make(chan struct{}),
 	}
@@ -58,6 +58,13 @@ func NewGeneratorInterceptor(opts ...GeneratorOption) (*GeneratorInterceptor, er
 		if err := opt(generatorInterceptor); err != nil {
 			return nil, err
 		}
+	}
+
+	if generatorInterceptor.loggerFactory == nil {
+		generatorInterceptor.loggerFactory = logging.NewDefaultLoggerFactory()
+	}
+	if generatorInterceptor.log == nil {
+		generatorInterceptor.log = generatorInterceptor.loggerFactory.NewLogger("pli_generator")
 	}
 
 	return generatorInterceptor, nil

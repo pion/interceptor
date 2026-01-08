@@ -18,3 +18,12 @@ func Log(log logging.LeveledLogger) ReceiverInterceptorOption {
 		return nil
 	}
 }
+
+// WithLoggerFactory sets a logger factory for the interceptor.
+func WithLoggerFactory(loggerFactory logging.LoggerFactory) ReceiverInterceptorOption {
+	return func(d *ReceiverInterceptor) error {
+		d.loggerFactory = loggerFactory
+
+		return nil
+	}
+}

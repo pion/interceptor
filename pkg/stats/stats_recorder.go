@@ -90,9 +90,9 @@ type recorder struct {
 	running     uint32
 }
 
-func newRecorder(ssrc uint32, clockRate float64) *recorder {
+func newRecorder(ssrc uint32, clockRate float64, loggerFactory logging.LoggerFactory) *recorder {
 	return &recorder{
-		logger:                        logging.NewDefaultLoggerFactory().NewLogger("stats_recorder"),
+		logger:                        loggerFactory.NewLogger("stats_recorder"),
 		ssrc:                          ssrc,
 		clockRate:                     clockRate,
 		maxLastSenderReports:          5,
