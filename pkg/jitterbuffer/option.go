@@ -18,3 +18,13 @@ func Log(log logging.LeveledLogger) ReceiverInterceptorOption {
 		return nil
 	}
 }
+
+// WithSkipMissingPackets returns a ReceiverInterceptorOption that configures the jitter buffer
+// to skip missing packets instead of waiting for them.
+func WithSkipMissingPackets() ReceiverInterceptorOption {
+	return func(d *ReceiverInterceptor) error {
+		d.skipMissingPackets = true
+
+		return nil
+	}
+}
