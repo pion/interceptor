@@ -4,9 +4,7 @@
 // Package rtpbuffer provides a buffer for storing RTP packets
 package rtpbuffer
 
-import (
-	"fmt"
-)
+import "fmt"
 
 const (
 	// Uint16SizeHalf is half of a math.Uint16.
@@ -26,25 +24,30 @@ type RTPBuffer struct {
 
 // NewRTPBuffer constructs a new RTPBuffer.
 func NewRTPBuffer(size uint16) (*RTPBuffer, error) {
-	allowedSizes := make([]uint16, 0)
-	correctSize := false
-	for i := 0; i < 16; i++ {
-		if size == 1<<i {
-			correctSize = true
-
-			break
-		}
-		allowedSizes = append(allowedSizes, 1<<i)
-	}
-
-	if !correctSize {
-		return nil, fmt.Errorf("%w: %d is not a valid size, allowed sizes: %v", ErrInvalidSize, size, allowedSizes)
+	if err := IsBufferSizeValid(size); err != nil {
+		return nil, err
 	}
 
 	return &RTPBuffer{
 		packets: make([]*RetainablePacket, size),
 		size:    size,
 	}, nil
+}
+
+func IsBufferSizeValid(size uint16) error {
+	for i := 0; i < 16; i++ {
+		if size == 1<<i {
+			return nil
+		}
+	}
+
+	// Only build allowedSizes if we actually need the error
+	allowedSizes := make([]uint16, 0)
+	for i := 0; i < 16; i++ {
+		allowedSizes = append(allowedSizes, 1<<i)
+	}
+
+	return fmt.Errorf("%w: %d is not a valid size, allowed sizes: %v", ErrInvalidSize, size, allowedSizes)
 }
 
 // Add places the RetainablePacket in the RTPBuffer.

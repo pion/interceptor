@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/pion/interceptor"
+	"github.com/pion/interceptor/internal/rtpbuffer"
 	"github.com/pion/logging"
 	"github.com/pion/rtcp"
 )
@@ -39,7 +40,7 @@ func (g *GeneratorInterceptorFactory) NewInterceptor(_ string) (interceptor.Inte
 		}
 	}
 
-	if _, err := newReceiveLog(generatorInterceptor.size); err != nil {
+	if err := rtpbuffer.IsBufferSizeValid(generatorInterceptor.size); err != nil {
 		return nil, err
 	}
 
