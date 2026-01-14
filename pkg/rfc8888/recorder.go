@@ -12,7 +12,7 @@ import (
 
 type packetReport struct {
 	arrivalTime time.Time
-	ecn         uint8
+	ecn         rtcp.ECN
 }
 
 // Recorder records incoming RTP packets and their arrival times. Recorder can
@@ -30,7 +30,7 @@ func NewRecorder() *Recorder {
 }
 
 // AddPacket writes a packet to the underlying stream.
-func (r *Recorder) AddPacket(ts time.Time, ssrc uint32, seq uint16, ecn uint8) {
+func (r *Recorder) AddPacket(ts time.Time, ssrc uint32, seq uint16, ecn rtcp.ECN) {
 	stream, ok := r.streams[ssrc]
 	if !ok {
 		stream = newStreamLog(ssrc)
