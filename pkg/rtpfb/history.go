@@ -4,6 +4,7 @@
 package rtpfb
 
 import (
+	"sync"
 	"time"
 
 	"github.com/pion/rtcp"
@@ -22,6 +23,7 @@ type ssrcSequenceNumber struct {
 // report. buildReport can be used to create a new report including all packets
 // from nextReport to highestAcked.
 type history struct {
+	lock               sync.RWMutex
 	counter            uint64
 	twccToCounter      map[uint16]uint64
 	ssrcSeqNrToCounter map[ssrcSequenceNumber]uint64
@@ -35,12 +37,14 @@ type history struct {
 
 func newHistory() *history {
 	return &history{
+		lock:               sync.RWMutex{},
 		counter:            0,
 		twccToCounter:      map[uint16]uint64{},
 		ssrcSeqNrToCounter: map[ssrcSequenceNumber]uint64{},
 		packets:            make(map[uint64]*PacketReport),
 		highestAcked:       0,
 		nextReport:         0,
+		cleanUntil:         0,
 	}
 }
 
@@ -52,21 +56,20 @@ func (h *history) addOutgoing(
 	size int,
 	departure time.Time,
 ) {
-	count := h.counter
-	h.counter++
+	h.lock.Lock()
+	defer h.lock.Unlock()
 
 	if isTWCC {
-		h.twccToCounter[twccSequenceNumber] = count
+		h.twccToCounter[twccSequenceNumber] = h.counter
 	} else {
 		h.ssrcSeqNrToCounter[ssrcSequenceNumber{
 			ssrc:           ssrc,
 			sequenceNumber: rtpSequenceNumber,
-		}] = count
+		}] = h.counter
 	}
-
-	h.packets[count] = &PacketReport{
+	h.packets[h.counter] = &PacketReport{
 		SSRC:               ssrc,
-		SequenceNumber:     count,
+		SequenceNumber:     h.counter,
 		RTPSequenceNumber:  rtpSequenceNumber,
 		TWCCSequenceNumber: twccSequenceNumber,
 		Size:               size,
@@ -75,15 +78,22 @@ func (h *history) addOutgoing(
 		Arrival:            time.Time{},
 		ECN:                rtcp.ECNNonECT,
 	}
+	h.counter++
 }
 
+// onFeedback maps an incoming ack for counter to the PacketReport stored when
+// the packet was sent. If the packet cannot be found, the ack is ignored.
+//
+// onFeedback must be called while holding the lock for reading.
+// onFeedback returns the time between ts and the time the packet was sent.
 func (h *history) onFeedback(ts time.Time, counter uint64, ack acknowledgement) (time.Duration, bool) {
 	p, ok := h.packets[counter]
 	if !ok {
+		// ignore ack for unknown packet
 		return 0, false
 	}
 	p.Arrived = ack.arrived
-	if p.Arrived {
+	if p.Arrived && h.highestAcked < p.SequenceNumber {
 		h.highestAcked = p.SequenceNumber
 	}
 	p.Arrival = ack.arrival
@@ -92,7 +102,12 @@ func (h *history) onFeedback(ts time.Time, counter uint64, ack acknowledgement) 
 	return ts.Sub(p.Departure), true
 }
 
+// onTWCCFeedback maps an acknowledgement to the counter by TWCC sequence number
+// and then calls onFeedback.
 func (h *history) onTWCCFeedback(ts time.Time, ack acknowledgement) (time.Duration, bool) {
+	h.lock.RLock()
+	defer h.lock.RUnlock()
+
 	counter, ok := h.twccToCounter[ack.sequenceNumber]
 	if !ok {
 		// ignore ack for unknown packet
@@ -102,7 +117,12 @@ func (h *history) onTWCCFeedback(ts time.Time, ack acknowledgement) (time.Durati
 	return h.onFeedback(ts, counter, ack)
 }
 
+// onCCFBFeedback maps an acknowledgement to the counter by ssrc and sequence
+// number and then calls onFeedback.
 func (h *history) onCCFBFeedback(ts time.Time, ssrc uint32, ack acknowledgement) (time.Duration, bool) {
+	h.lock.RLock()
+	defer h.lock.RUnlock()
+
 	counter, ok := h.ssrcSeqNrToCounter[ssrcSequenceNumber{
 		ssrc:           ssrc,
 		sequenceNumber: ack.sequenceNumber,
@@ -124,6 +144,9 @@ func (h *history) onCCFBFeedback(ts time.Time, ssrc uint32, ack acknowledgement)
 //
 //nolint:godox
 func (h *history) buildReport() []PacketReport {
+	h.lock.Lock()
+	defer h.lock.Unlock()
+
 	if h.nextReport > h.highestAcked {
 		return nil
 	}
@@ -145,6 +168,8 @@ func (h *history) buildReport() []PacketReport {
 	return res
 }
 
+// delete removes p from the history. It must be called while holding the lock
+// for writing.
 func (h *history) delete(p *PacketReport) {
 	if p.IsTWCC {
 		delete(h.twccToCounter, p.TWCCSequenceNumber)
@@ -155,6 +180,9 @@ func (h *history) delete(p *PacketReport) {
 	})
 }
 
+// cleanBefore removes all entries in the interval [h.cleanBefore, counter).
+// cleanBefore must be called while holding the lock for writing, because it
+// calls out to delete.
 func (h *history) cleanBefore(counter uint64) {
 	for i := h.cleanUntil; i < counter; i++ {
 		if p, ok := h.packets[i]; ok {
