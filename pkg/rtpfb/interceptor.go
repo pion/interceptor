@@ -6,7 +6,6 @@ package rtpfb
 
 import (
 	"math"
-	"sync"
 	"time"
 
 	"github.com/pion/interceptor"
@@ -72,7 +71,6 @@ func NewInterceptor(opts ...Option) (*InterceptorFactory, error) {
 func (f *InterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, error) {
 	in := &Interceptor{
 		NoOp:      interceptor.NoOp{},
-		lock:      sync.RWMutex{},
 		log:       logging.NewDefaultLoggerFactory().NewLogger("ccfb_interceptor"),
 		timestamp: time.Now,
 		history:   newHistory(),
@@ -94,7 +92,6 @@ func (f *InterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, 
 // report, a PacketReport will be added to the ccfb.Report.
 type Interceptor struct {
 	interceptor.NoOp
-	lock      sync.RWMutex
 	log       logging.LeveledLogger
 	timestamp func() time.Time
 
@@ -108,9 +105,6 @@ func (i *Interceptor) bindTWCCStream(twccHdrExtID uint8, writer interceptor.RTPW
 		attributes interceptor.Attributes,
 	) (int, error) {
 		ts := i.timestamp()
-
-		i.lock.Lock()
-		defer i.lock.Unlock()
 
 		var twccHdrExt rtp.TransportCCExtension
 		if err := twccHdrExt.Unmarshal(header.GetExtension(twccHdrExtID)); err != nil {
@@ -144,9 +138,6 @@ func (i *Interceptor) bindCCFBStream(writer interceptor.RTPWriter) interceptor.R
 		attributes interceptor.Attributes,
 	) (int, error) {
 		ts := i.timestamp()
-
-		i.lock.Lock()
-		defer i.lock.Unlock()
 
 		i.history.addOutgoing(
 			header.SSRC,
@@ -217,9 +208,6 @@ func (i *Interceptor) BindRTCPReader(reader interceptor.RTCPReader) interceptor.
 
 //nolint:cyclop
 func (i *Interceptor) processFeedback(ts time.Time, pkts []rtcp.Packet) (time.Duration, []PacketReport) {
-	i.lock.Lock()
-	defer i.lock.Unlock()
-
 	shortestRTT := time.Duration(math.MaxInt64)
 	var ackDelay time.Duration
 
