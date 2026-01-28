@@ -39,6 +39,14 @@ type packetLog interface {
 // Option can be used to set initial options on CCFB interceptors.
 type Option func(*Interceptor) error
 
+func WithLoggerFactory(lf logging.LoggerFactory) Option {
+	return func(i *Interceptor) error {
+		i.logFactory = lf
+
+		return nil
+	}
+}
+
 func timeFactory(f func() time.Time) Option {
 	return func(i *Interceptor) error {
 		i.timestamp = f
@@ -70,16 +78,18 @@ func NewInterceptor(opts ...Option) (*InterceptorFactory, error) {
 // NewInterceptor returns a new ccfb.Interceptor.
 func (f *InterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, error) {
 	in := &Interceptor{
-		NoOp:      interceptor.NoOp{},
-		log:       logging.NewDefaultLoggerFactory().NewLogger("ccfb_interceptor"),
-		timestamp: time.Now,
-		history:   newHistory(),
+		NoOp:       interceptor.NoOp{},
+		logFactory: logging.NewDefaultLoggerFactory(),
+		log:        nil,
+		timestamp:  time.Now,
+		history:    newHistory(),
 	}
 	for _, opt := range f.opts {
 		if err := opt(in); err != nil {
 			return nil, err
 		}
 	}
+	in.log = in.logFactory.NewLogger("ccfb_interceptor")
 
 	return in, nil
 }
@@ -92,8 +102,9 @@ func (f *InterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, 
 // report, a PacketReport will be added to the ccfb.Report.
 type Interceptor struct {
 	interceptor.NoOp
-	log       logging.LeveledLogger
-	timestamp func() time.Time
+	logFactory logging.LoggerFactory
+	log        logging.LeveledLogger
+	timestamp  func() time.Time
 
 	history packetLog
 }
