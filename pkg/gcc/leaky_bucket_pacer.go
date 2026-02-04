@@ -24,6 +24,9 @@ type item struct {
 }
 
 // LeakyBucketPacer implements a leaky bucket pacing algorithm.
+//
+// Deprecated: Use the pacer interceptor directly (see also comment on
+// SendSideBWE).
 type LeakyBucketPacer struct {
 	log logging.LeveledLogger
 
@@ -44,6 +47,8 @@ type LeakyBucketPacer struct {
 }
 
 // NewLeakyBucketPacer initializes a new LeakyBucketPacer.
+//
+// Deprecated: See comment on LeakyBucketPacer.
 func NewLeakyBucketPacer(initialBitrate int) *LeakyBucketPacer {
 	return newLeakyBucketPacer(initialBitrate, logging.NewDefaultLoggerFactory())
 }
@@ -74,6 +79,8 @@ func newLeakyBucketPacer(initialBitrate int, loggerFactory logging.LoggerFactory
 }
 
 // AddStream adds a new stream and its corresponding writer to the pacer.
+//
+// Deprecated: See comment on LeakyBucketPacer.
 func (p *LeakyBucketPacer) AddStream(ssrc uint32, writer interceptor.RTPWriter) {
 	p.writerLock.Lock()
 	defer p.writerLock.Unlock()
@@ -82,6 +89,8 @@ func (p *LeakyBucketPacer) AddStream(ssrc uint32, writer interceptor.RTPWriter) 
 
 // SetTargetBitrate updates the target bitrate at which the pacer is allowed to
 // send packets. The pacer may exceed this limit by p.f.
+//
+// Deprecated: See comment on LeakyBucketPacer.
 func (p *LeakyBucketPacer) SetTargetBitrate(rate int) {
 	p.targetBitrateLock.Lock()
 	defer p.targetBitrateLock.Unlock()
@@ -97,6 +106,8 @@ func (p *LeakyBucketPacer) getTargetBitrate() int {
 
 // Write sends a packet with header and payload the a previously registered
 // stream.
+//
+// Deprecated: See comment on LeakyBucketPacer.
 func (p *LeakyBucketPacer) Write(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
 	buf, ok := p.pool.Get().(*[]byte)
 	if !ok {
@@ -119,6 +130,8 @@ func (p *LeakyBucketPacer) Write(header *rtp.Header, payload []byte, attributes 
 }
 
 // Run starts the LeakyBucketPacer.
+//
+// Deprecated: See comment on LeakyBucketPacer.
 func (p *LeakyBucketPacer) Run() {
 	ticker := time.NewTicker(p.pacingInterval)
 	defer ticker.Stop()
@@ -168,6 +181,8 @@ func (p *LeakyBucketPacer) Run() {
 }
 
 // Close closes the LeakyBucketPacer.
+//
+// Deprecated: See comment on LeakyBucketPacer.
 func (p *LeakyBucketPacer) Close() error {
 	close(p.done)
 
