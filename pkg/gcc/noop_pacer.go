@@ -14,15 +14,21 @@ import (
 
 // ErrUnknownStream is returned when trying to send a packet with a SSRC that
 // was never registered with any stream.
+//
+// Deprecated: See comment on SendSideBWE.
 var ErrUnknownStream = errors.New("unknown ssrc")
 
 // NoOpPacer implements a pacer that always immediately sends incoming packets.
+//
+// Deprecated: See comment on SendSideBWE.
 type NoOpPacer struct {
 	lock         sync.Mutex
 	ssrcToWriter map[uint32]interceptor.RTPWriter
 }
 
 // NewNoOpPacer initializes a new NoOpPacer.
+//
+// Deprecated: See comment on SendSideBWE.
 func NewNoOpPacer() *NoOpPacer {
 	return &NoOpPacer{
 		lock:         sync.Mutex{},
@@ -32,10 +38,14 @@ func NewNoOpPacer() *NoOpPacer {
 
 // SetTargetBitrate sets the bitrate at which the pacer sends data. NoOp for
 // NoOp pacer.
+//
+// Deprecated: See comment on SendSideBWE.
 func (p *NoOpPacer) SetTargetBitrate(int) {
 }
 
 // AddStream adds a stream and corresponding writer to the p.
+//
+// Deprecated: See comment on SendSideBWE.
 func (p *NoOpPacer) AddStream(ssrc uint32, writer interceptor.RTPWriter) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -43,6 +53,8 @@ func (p *NoOpPacer) AddStream(ssrc uint32, writer interceptor.RTPWriter) {
 }
 
 // Write sends a packet with header and payload to a previously added stream.
+//
+// Deprecated: See comment on SendSideBWE.
 func (p *NoOpPacer) Write(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -55,6 +67,8 @@ func (p *NoOpPacer) Write(header *rtp.Header, payload []byte, attributes interce
 }
 
 // Close closes p.
+//
+// Deprecated: See comment on SendSideBWE.
 func (p *NoOpPacer) Close() error {
 	return nil
 }
