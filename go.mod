@@ -6,7 +6,7 @@ require (
 	github.com/pion/logging v0.2.4
 	github.com/pion/rtcp v1.2.16
 	github.com/pion/rtp v1.10.1
-	github.com/pion/transport/v3 v3.1.1
+	github.com/pion/transport/v4 v4.0.1
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/time v0.14.0
 )
