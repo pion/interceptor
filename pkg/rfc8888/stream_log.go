@@ -32,7 +32,7 @@ func newStreamLog(ssrc uint32) *streamLog {
 	}
 }
 
-func (l *streamLog) add(ts time.Time, sequenceNumber uint16, ecn uint8) {
+func (l *streamLog) add(ts time.Time, sequenceNumber uint16, ecn rtcp.ECN) {
 	unwrappedSequenceNumber := l.sequence.Unwrap(sequenceNumber)
 	if !l.init {
 		l.init = true
@@ -68,7 +68,7 @@ func (l *streamLog) metricsAfter(reference time.Time, maxReportBlocks int64) rtc
 	gapDetected := false
 	for i := offset; i <= l.lastSequenceNumberReceived; i++ { //nolint:varnamelen // i int64
 		received := false
-		ecn := uint8(0)
+		ecn := rtcp.ECNNonECT
 		ato := uint16(0)
 		if report, ok := l.log[i]; ok {
 			received = true
@@ -77,7 +77,7 @@ func (l *streamLog) metricsAfter(reference time.Time, maxReportBlocks int64) rtc
 		}
 		metricBlocks[i-offset] = rtcp.CCFeedbackMetricBlock{
 			Received:          received,
-			ECN:               rtcp.ECN(ecn),
+			ECN:               ecn,
 			ArrivalTimeOffset: ato,
 		}
 
