@@ -77,3 +77,57 @@ func TestRateControllerRun(t *testing.T) {
 		})
 	}
 }
+
+func TestRateController_StateTransition(t *testing.T) {
+	tcs := []struct {
+		name       string
+		delayStats []DelayStats
+		wantStates []state
+	}{
+		{
+			name:       "overuse-normal",
+			delayStats: []DelayStats{{Usage: usageOver}, {Usage: usageNormal}},
+			wantStates: []state{stateDecrease, stateHold},
+		},
+		{
+			name:       "overuse-underuse",
+			delayStats: []DelayStats{{Usage: usageOver}, {Usage: usageUnder}},
+			wantStates: []state{stateDecrease, stateHold},
+		},
+		{
+			name:       "normal",
+			delayStats: []DelayStats{{Usage: usageNormal}},
+			wantStates: []state{stateIncrease},
+		},
+		{
+			name:       "under-over",
+			delayStats: []DelayStats{{Usage: usageUnder}, {Usage: usageOver}},
+			wantStates: []state{stateHold, stateDecrease},
+		},
+		{
+			name:       "under-normal",
+			delayStats: []DelayStats{{Usage: usageUnder}, {Usage: usageNormal}},
+			wantStates: []state{stateHold, stateIncrease},
+		},
+		{
+			name:       "under-under",
+			delayStats: []DelayStats{{Usage: usageUnder}, {Usage: usageUnder}},
+			wantStates: []state{stateHold, stateHold},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			rc := newRateController(time.Now, 500_000, 100_000, 1_000_000, func(DelayStats) {})
+			// Call it once to initialize the rate controller
+			rc.onDelayStats(DelayStats{})
+
+			for i, ds := range tc.delayStats {
+				rc.onDelayStats(ds)
+				if rc.lastState != tc.wantStates[i] {
+					t.Errorf("expected lastState to be %v but got %v", tc.wantStates[i], rc.lastState)
+				}
+			}
+		})
+	}
+}
