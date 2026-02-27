@@ -12,7 +12,7 @@ import (
 	"github.com/pion/logging"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
-	transportTest "github.com/pion/transport/v3/test"
+	transportTest "github.com/pion/transport/v4/test"
 	"github.com/stretchr/testify/assert"
 )
 
