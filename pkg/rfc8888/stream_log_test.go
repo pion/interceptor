@@ -193,7 +193,7 @@ func TestStreamLogAdd(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			sl := newStreamLog(0)
 			for _, input := range test.inputs {
-				sl.add(input.ts, input.nr, input.ecn)
+				sl.add(input.ts, input.nr, rtcp.ECN(input.ecn))
 			}
 			assert.Equal(t, test.expectedNext, sl.nextSequenceNumberToReport)
 			assert.Equal(t, test.expectedLast, sl.lastSequenceNumberReceived)
@@ -552,7 +552,7 @@ func TestStreamLogMetricsAfter(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			sl := newStreamLog(0)
 			for _, input := range test.inputs {
-				sl.add(input.ts, input.nr, input.ecn)
+				sl.add(input.ts, input.nr, rtcp.ECN(input.ecn))
 			}
 
 			assert.Equal(t, test.expectedNextBefore, sl.nextSequenceNumberToReport)
@@ -572,11 +572,11 @@ func TestStreamLogMetricsAfter(t *testing.T) {
 
 func TestRemoveOldestPackets(t *testing.T) {
 	sl := newStreamLog(0)
-	sl.add(time.Time{}.Add(time.Second), 1, 0)
+	sl.add(time.Time{}.Add(time.Second), 1, rtcp.ECN(0))
 	now := time.Now().Add(10 * time.Second)
 	for i := 2; i < 16386; i++ {
 		now = now.Add(10 * time.Millisecond)
-		sl.add(now, uint16(i), 0) //nolint:gosec // G115
+		sl.add(now, uint16(i), rtcp.ECN(0)) //nolint:gosec // G115
 	}
 	metrics := sl.metricsAfter(now, maxReportsPerReportBlock)
 	assert.Equal(t, uint16(2), metrics.BeginSequence)
