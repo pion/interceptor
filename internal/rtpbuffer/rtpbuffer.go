@@ -47,6 +47,15 @@ func NewRTPBuffer(size uint16) (*RTPBuffer, error) {
 	}, nil
 }
 
+// Reset clears the RTPBuffer of all packets and resets its state.
+func (r *RTPBuffer) Reset() {
+	for i := range r.packets {
+		r.packets[i] = nil
+	}
+	r.highestAdded = 0
+	r.started = false
+}
+
 // Add places the RetainablePacket in the RTPBuffer.
 func (r *RTPBuffer) Add(packet *RetainablePacket) {
 	seq := packet.sequenceNumber
