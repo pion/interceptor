@@ -81,6 +81,17 @@ func (r *RTPBuffer) Add(packet *RetainablePacket) {
 	r.packets[idx] = packet
 }
 
+// Clear releases all retained packets in the buffer.
+func (r *RTPBuffer) Clear() {
+	for i, pkt := range r.packets {
+		if pkt != nil {
+			pkt.Release()
+			r.packets[i] = nil
+		}
+	}
+	r.started = false
+}
+
 // Get returns the RetainablePacket for the requested sequence number.
 func (r *RTPBuffer) Get(seq uint16) *RetainablePacket {
 	diff := r.highestAdded - seq
