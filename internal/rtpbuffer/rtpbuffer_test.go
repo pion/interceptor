@@ -220,6 +220,90 @@ func TestRTPBuffer_Overridden_WithRTX_NILPayload(t *testing.T) {
 	require.Nil(t, sb.Get(1))
 }
 
+func TestRTPBuffer_Clear(t *testing.T) {
+	pm := NewPacketFactoryCopy()
+	sb, err := NewRTPBuffer(8)
+	require.NoError(t, err)
+
+	// Add packets and verify they exist
+	for i := uint16(0); i < 8; i++ {
+		pkt, pktErr := pm.NewPacket(&rtp.Header{SequenceNumber: i}, []byte("payload"), 0, 0)
+		require.NoError(t, pktErr)
+		sb.Add(pkt)
+	}
+
+	// Verify packets are in buffer
+	for i := uint16(0); i < 8; i++ {
+		pkt := sb.Get(i)
+		require.NotNil(t, pkt, "packet %d should exist before Clear", i)
+		pkt.Release()
+	}
+
+	// Clear the buffer
+	sb.Clear()
+
+	// Verify all slots are nil
+	for _, pkt := range sb.packets {
+		require.Nil(t, pkt, "all packets should be nil after Clear")
+	}
+
+	// Verify buffer can be reused after Clear
+	pkt, err := pm.NewPacket(&rtp.Header{SequenceNumber: 100}, []byte("new"), 0, 0)
+	require.NoError(t, err)
+	sb.Add(pkt)
+
+	got := sb.Get(100)
+	require.NotNil(t, got, "buffer should be usable after Clear")
+	got.Release()
+}
+
+func TestRTPBuffer_ClearReleasesPacketsToPool(t *testing.T) {
+	pm := NewPacketFactoryCopy()
+	sb, err := NewRTPBuffer(4)
+	require.NoError(t, err)
+
+	// Add packets and track their ref counts
+	packets := make([]*RetainablePacket, 4)
+	for i := uint16(0); i < 4; i++ {
+		pkt, err := pm.NewPacket(&rtp.Header{SequenceNumber: i}, []byte("data"), 0, 0)
+		require.NoError(t, err)
+		packets[i] = pkt
+		sb.Add(pkt)
+	}
+
+	// All packets should have count 1
+	for i, pkt := range packets {
+		require.Equal(t, 1, pkt.count, "packet %d should have count 1 before Clear", i)
+	}
+
+	sb.Clear()
+
+	// All packets should have count 0 (released)
+	for i, pkt := range packets {
+		require.Equal(t, 0, pkt.count, "packet %d should have count 0 after Clear", i)
+	}
+}
+
+func TestRTPBuffer_ClearPartiallyFilled(t *testing.T) {
+	pm := NewPacketFactoryCopy()
+	sb, err := NewRTPBuffer(8)
+	require.NoError(t, err)
+
+	// Only add 3 packets to an 8-slot buffer
+	for i := uint16(0); i < 3; i++ {
+		pkt, err := pm.NewPacket(&rtp.Header{SequenceNumber: i}, []byte("data"), 0, 0)
+		require.NoError(t, err)
+		sb.Add(pkt)
+	}
+
+	// Should not panic with nil slots
+	sb.Clear()
+
+	for _, pkt := range sb.packets {
+		require.Nil(t, pkt)
+	}
+}
+
 func TestRTPBuffer_Padding(t *testing.T) {
 	pm := NewPacketFactoryCopy()
 	sb, err := NewRTPBuffer(1)

@@ -399,6 +399,144 @@ func TestResponderInterceptor_BypassUnknownSSRCs(t *testing.T) {
 	}
 }
 
+func TestResponderInterceptor_UnbindReleasesBufferedPackets(t *testing.T) {
+	f, err := NewResponderInterceptor(
+		ResponderSize(8),
+		ResponderLog(logging.NewDefaultLoggerFactory().NewLogger("test")),
+	)
+	require.NoError(t, err)
+
+	i, err := f.NewInterceptor("")
+	require.NoError(t, err)
+
+	resp, ok := i.(*ResponderInterceptor)
+	require.True(t, ok)
+
+	info := &interceptor.StreamInfo{
+		SSRC:         1,
+		RTCPFeedback: []interceptor.RTCPFeedback{{Type: "nack"}},
+	}
+
+	writer := resp.BindLocalStream(info, interceptor.RTPWriterFunc(
+		func(header *rtp.Header, payload []byte, _ interceptor.Attributes) (int, error) {
+			return len(payload), nil
+		},
+	))
+
+	// Send some packets to fill the buffer
+	for seqNum := uint16(0); seqNum < 5; seqNum++ {
+		_, err := writer.Write(&rtp.Header{SequenceNumber: seqNum, SSRC: 1}, []byte("payload"), interceptor.Attributes{})
+		require.NoError(t, err)
+	}
+
+	// Get a reference to the stream's buffer to check after unbind
+	resp.streamsMu.Lock()
+	stream := resp.streams[info.SSRC]
+	resp.streamsMu.Unlock()
+	require.NotNil(t, stream)
+
+	// Grab references to the packets before unbind
+	stream.rtpBufferMutex.RLock()
+	var packets []*rtpbuffer.RetainablePacket
+	for seqNum := uint16(0); seqNum < 5; seqNum++ {
+		pkt := stream.rtpBuffer.Get(seqNum)
+		if pkt != nil {
+			packets = append(packets, pkt)
+		}
+	}
+	stream.rtpBufferMutex.RUnlock()
+	require.NotEmpty(t, packets, "should have buffered packets")
+
+	// Release our Get() references
+	for _, pkt := range packets {
+		pkt.Release()
+	}
+
+	// Unbind should release all buffered packets
+	resp.UnbindLocalStream(info)
+
+	// Verify stream was removed
+	resp.streamsMu.Lock()
+	_, exists := resp.streams[info.SSRC]
+	resp.streamsMu.Unlock()
+	require.False(t, exists, "stream should be removed after UnbindLocalStream")
+
+	// Verify packets were released (Retain should fail)
+	for _, pkt := range packets {
+		err := pkt.Retain()
+		require.Error(t, err, "packet should be released after UnbindLocalStream")
+	}
+}
+
+func TestResponderInterceptor_CloseReleasesAllStreams(t *testing.T) {
+	f, err := NewResponderInterceptor(
+		ResponderSize(8),
+		ResponderLog(logging.NewDefaultLoggerFactory().NewLogger("test")),
+	)
+	require.NoError(t, err)
+
+	i, err := f.NewInterceptor("")
+	require.NoError(t, err)
+
+	resp, ok := i.(*ResponderInterceptor)
+	require.True(t, ok)
+
+	// Bind two streams
+	var allPackets []*rtpbuffer.RetainablePacket
+	for ssrc := uint32(1); ssrc <= 2; ssrc++ {
+		info := &interceptor.StreamInfo{
+			SSRC:         ssrc,
+			RTCPFeedback: []interceptor.RTCPFeedback{{Type: "nack"}},
+		}
+
+		writer := resp.BindLocalStream(info, interceptor.RTPWriterFunc(
+			func(header *rtp.Header, payload []byte, _ interceptor.Attributes) (int, error) {
+				return len(payload), nil
+			},
+		))
+
+		for seqNum := uint16(0); seqNum < 4; seqNum++ {
+			_, err := writer.Write(&rtp.Header{SequenceNumber: seqNum, SSRC: ssrc}, []byte("data"), interceptor.Attributes{})
+			require.NoError(t, err)
+		}
+
+		// Get references to packets to verify release later
+		resp.streamsMu.Lock()
+		stream := resp.streams[ssrc]
+		resp.streamsMu.Unlock()
+
+		stream.rtpBufferMutex.RLock()
+		for seqNum := uint16(0); seqNum < 4; seqNum++ {
+			pkt := stream.rtpBuffer.Get(seqNum)
+			if pkt != nil {
+				allPackets = append(allPackets, pkt)
+			}
+		}
+		stream.rtpBufferMutex.RUnlock()
+	}
+
+	// Release our Get() references
+	for _, pkt := range allPackets {
+		pkt.Release()
+	}
+
+	require.NotEmpty(t, allPackets, "should have packets from both streams")
+
+	// Close should release all
+	require.NoError(t, resp.Close())
+
+	// All streams should be gone
+	resp.streamsMu.Lock()
+	require.Empty(t, resp.streams, "streams map should be empty after Close")
+	resp.streamsMu.Unlock()
+
+	// All packets should be released
+	for _, pkt := range allPackets {
+		err := pkt.Retain()
+		require.Error(t, err, "packet should be released after Close")
+	}
+}
+
 // reentrantRTPWriter tries to re-acquire localStream.rtpBufferMutex inside Write.
 // If BindLocalStream's wrapper calls writer.Write while holding that mutex, this
 // will deadlock.
