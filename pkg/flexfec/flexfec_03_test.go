@@ -21,7 +21,7 @@ const (
 func checkAnyPacketCanBeRecovered(t *testing.T, mediaPackets []rtp.Packet, fecPackets []rtp.Packet) {
 	t.Helper()
 
-	for lost := 0; lost < len(mediaPackets); lost++ {
+	for lost := range mediaPackets {
 		decoder := newFECDecoder(ssrc, protectedStreamSSRC, logging.NewDefaultLoggerFactory())
 		recoveredPackets := make([]rtp.Packet, 0)
 		// lose one packet
@@ -88,7 +88,7 @@ func runEncoderDecoderParityTest(t *testing.T, seqStart uint16, seqLen int, fecC
 	t.Helper()
 
 	seqs := make([]uint16, seqLen)
-	for i := 0; i < seqLen; i++ {
+	for i := range seqLen {
 		seqs[i] = seqStart + uint16(i) //nolint:gosec // G115
 	}
 
@@ -129,7 +129,7 @@ func TestFlexFec03_SimpleRoundTrip(t *testing.T) {
 func TestFlexFec03_WholeRangeRoundTrip(t *testing.T) {
 	var seqs []uint16
 	const maxFlexFEC03MediaPackets = 109
-	for i := 0; i < maxFlexFEC03MediaPackets; i++ {
+	for i := range maxFlexFEC03MediaPackets {
 		seqs = append(seqs, uint16(i)) //nolint:gosec
 	}
 

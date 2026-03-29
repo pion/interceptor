@@ -71,7 +71,7 @@ func TestSenderInterceptor(t *testing.T) {
 			assert.NoError(t, stream.Close())
 		}()
 
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			assert.NoError(t, stream.WriteRTP(&rtp.Packet{
 				Header:  rtp.Header{SequenceNumber: uint16(i)}, //nolint:gosec // G115
 				Payload: []byte("\x00\x00"),
@@ -113,7 +113,7 @@ func TestSenderInterceptor(t *testing.T) {
 		}()
 
 		// Write several packets
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			assert.NoError(t, stream.WriteRTP(&rtp.Packet{
 				Header: rtp.Header{
 					SequenceNumber: uint16(i), //nolint:gosec // G115
@@ -176,7 +176,7 @@ func TestSenderInterceptor(t *testing.T) {
 		}()
 
 		// Write several packets
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			assert.NoError(t, stream.WriteRTP(&rtp.Packet{
 				Header: rtp.Header{
 					SequenceNumber: uint16(i), //nolint:gosec // G115
@@ -247,7 +247,7 @@ func TestSenderInterceptor(t *testing.T) {
 		}()
 
 		<-loopStarted
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			advanceTicker()
 			pkts := <-stream.WrittenRTCP()
 			assert.Equal(t, len(pkts), 1)

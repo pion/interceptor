@@ -119,7 +119,7 @@ func TestReceiverCustomBinaryFormatter(t *testing.T) {
 		Log(logging.NewDefaultLoggerFactory().NewLogger("test")),
 		// custom binary formatter to dump only seqno mod 256
 		RTPBinaryFormatter(func(p *rtp.Packet, _ interceptor.Attributes) ([]byte, error) {
-			return []byte{byte(p.SequenceNumber)}, nil
+			return []byte{byte(p.SequenceNumber & 0xFF)}, nil
 		}),
 		// custom binary formatter to dump only DestinationSSRCs mod 256
 		RTCPBinaryFormatter(func(p rtcp.Packet, _ interceptor.Attributes) ([]byte, error) {

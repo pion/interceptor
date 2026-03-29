@@ -42,7 +42,6 @@ func TestResponderInterceptor(t *testing.T) {
 	}
 
 	for _, item := range tests {
-		item := item
 		t.Run(item.name, func(t *testing.T) {
 			f, err := NewResponderInterceptor(item.opts...)
 			require.NoError(t, err)
@@ -137,7 +136,7 @@ func TestResponderInterceptor_Race(t *testing.T) {
 		RTCPFeedback: []interceptor.RTCPFeedback{{Type: "nack"}},
 	}, i)
 
-	for seqNum := uint16(0); seqNum < 500; seqNum++ {
+	for seqNum := range uint16(500) {
 		require.NoError(t, stream.WriteRTP(&rtp.Packet{Header: rtp.Header{SequenceNumber: seqNum}}))
 
 		// 25% packet loss
@@ -171,14 +170,14 @@ func TestResponderInterceptor_RaceConcurrentStreams(t *testing.T) {
 	require.NoError(t, err)
 
 	var wg sync.WaitGroup
-	for j := 0; j < 5; j++ {
+	for range 5 {
 		stream := test.NewMockStream(&interceptor.StreamInfo{
 			SSRC:         1,
 			RTCPFeedback: []interceptor.RTCPFeedback{{Type: "nack"}},
 		}, i)
 		wg.Add(1)
 		go func() {
-			for seqNum := uint16(0); seqNum < 500; seqNum++ {
+			for seqNum := range uint16(500) {
 				require.NoError(t, stream.WriteRTP(&rtp.Packet{Header: rtp.Header{SequenceNumber: seqNum}}))
 			}
 			wg.Done()
@@ -424,7 +423,7 @@ func TestResponderInterceptor_UnbindReleasesBufferedPackets(t *testing.T) {
 	))
 
 	// Send some packets to fill the buffer
-	for seqNum := uint16(0); seqNum < 5; seqNum++ {
+	for seqNum := range uint16(5) {
 		_, err := writer.Write(&rtp.Header{SequenceNumber: seqNum, SSRC: 1}, []byte("payload"), interceptor.Attributes{})
 		require.NoError(t, err)
 	}
@@ -438,7 +437,7 @@ func TestResponderInterceptor_UnbindReleasesBufferedPackets(t *testing.T) {
 	// Grab references to the packets before unbind
 	stream.rtpBufferMutex.RLock()
 	var packets []*rtpbuffer.RetainablePacket
-	for seqNum := uint16(0); seqNum < 5; seqNum++ {
+	for seqNum := range uint16(5) {
 		pkt := stream.rtpBuffer.Get(seqNum)
 		if pkt != nil {
 			packets = append(packets, pkt)
@@ -495,7 +494,7 @@ func TestResponderInterceptor_CloseReleasesAllStreams(t *testing.T) {
 			},
 		))
 
-		for seqNum := uint16(0); seqNum < 4; seqNum++ {
+		for seqNum := range uint16(4) {
 			_, err := writer.Write(&rtp.Header{SequenceNumber: seqNum, SSRC: ssrc}, []byte("data"), interceptor.Attributes{})
 			require.NoError(t, err)
 		}
@@ -506,7 +505,7 @@ func TestResponderInterceptor_CloseReleasesAllStreams(t *testing.T) {
 		resp.streamsMu.Unlock()
 
 		stream.rtpBufferMutex.RLock()
-		for seqNum := uint16(0); seqNum < 4; seqNum++ {
+		for seqNum := range uint16(4) {
 			pkt := stream.rtpBuffer.Get(seqNum)
 			if pkt != nil {
 				allPackets = append(allPackets, pkt)

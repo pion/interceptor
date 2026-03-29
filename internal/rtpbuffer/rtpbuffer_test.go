@@ -18,8 +18,6 @@ func TestRTPBuffer(t *testing.T) {
 		0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 511, 512, 513, 32767, 32768, 32769,
 		65527, 65528, 65529, 65530, 65531, 65532, 65533, 65534, 65535,
 	} {
-		start := start
-
 		sb, err := NewRTPBuffer(8)
 		require.NoError(t, err)
 
@@ -74,8 +72,6 @@ func TestRTPBuffer_WithRTX(t *testing.T) {
 		0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 511, 512, 513, 32767, 32768, 32769,
 		65527, 65528, 65529, 65530, 65531, 65532, 65533, 65534, 65535,
 	} {
-		start := start
-
 		sb, err := NewRTPBuffer(8)
 		require.NoError(t, err)
 
@@ -226,14 +222,14 @@ func TestRTPBuffer_Clear(t *testing.T) {
 	require.NoError(t, err)
 
 	// Add packets and verify they exist
-	for i := uint16(0); i < 8; i++ {
+	for i := range uint16(8) {
 		pkt, pktErr := pm.NewPacket(&rtp.Header{SequenceNumber: i}, []byte("payload"), 0, 0)
 		require.NoError(t, pktErr)
 		sb.Add(pkt)
 	}
 
 	// Verify packets are in buffer
-	for i := uint16(0); i < 8; i++ {
+	for i := range uint16(8) {
 		pkt := sb.Get(i)
 		require.NotNil(t, pkt, "packet %d should exist before Clear", i)
 		pkt.Release()
@@ -264,7 +260,7 @@ func TestRTPBuffer_ClearReleasesPacketsToPool(t *testing.T) {
 
 	// Add packets and track their ref counts
 	packets := make([]*RetainablePacket, 4)
-	for i := uint16(0); i < 4; i++ {
+	for i := range uint16(4) {
 		pkt, err := pm.NewPacket(&rtp.Header{SequenceNumber: i}, []byte("data"), 0, 0)
 		require.NoError(t, err)
 		packets[i] = pkt
@@ -290,7 +286,7 @@ func TestRTPBuffer_ClearPartiallyFilled(t *testing.T) {
 	require.NoError(t, err)
 
 	// Only add 3 packets to an 8-slot buffer
-	for i := uint16(0); i < 3; i++ {
+	for i := range uint16(3) {
 		pkt, err := pm.NewPacket(&rtp.Header{SequenceNumber: i}, []byte("data"), 0, 0)
 		require.NoError(t, err)
 		sb.Add(pkt)

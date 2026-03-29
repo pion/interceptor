@@ -128,7 +128,7 @@ func BenchmarkSendSideBWE_WriteRTCP(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				// nolint:gosec
 				seqs := rand.Intn(count/2) + count // [count, count * 1.5)
-				for j := 0; j < seqs; j++ {
+				for range seqs {
 					seq++
 
 					if rand.Intn(5) != 0 { //nolint:gosec

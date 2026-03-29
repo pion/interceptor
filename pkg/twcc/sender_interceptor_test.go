@@ -60,7 +60,7 @@ func TestSenderInterceptor(t *testing.T) {
 			assert.NoError(t, stream.Close())
 		}()
 
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			hdr := rtp.Header{}
 			//nolint:gosec // G115
 			tcc, err := (&rtp.TransportCCExtension{TransportSequence: uint16(i)}).Marshal()

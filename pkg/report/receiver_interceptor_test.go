@@ -76,7 +76,7 @@ func TestReceiverInterceptor(t *testing.T) {
 			assert.NoError(t, stream.Close())
 		}()
 
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			stream.ReceiveRTP(&rtp.Packet{Header: rtp.Header{
 				SequenceNumber: uint16(i), //nolint:gosec // G115
 			}})
@@ -118,7 +118,7 @@ func TestReceiverInterceptor(t *testing.T) {
 			assert.NoError(t, stream.Close())
 		}()
 
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			stream.ReceiveRTP(&rtp.Packet{Header: rtp.Header{
 				SequenceNumber: uint16(i), //nolint:gosec // G115
 			}})

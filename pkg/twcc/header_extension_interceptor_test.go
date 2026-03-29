@@ -49,7 +49,7 @@ func TestHeaderExtensionInterceptor(t *testing.T) {
 			var wg sync.WaitGroup
 			num := 10
 			wg.Add(num)
-			for i := 0; i < num; i++ {
+			for i := range num {
 				go func(ch chan *rtp.Packet, id uint16) {
 					stream := test.NewMockStream(&interceptor.StreamInfo{RTPHeaderExtensions: []interceptor.RTPHeaderExtension{
 						{

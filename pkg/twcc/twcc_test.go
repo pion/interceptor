@@ -28,7 +28,7 @@ func Test_chunk_add(t *testing.T) {
 	t.Run("fill with not received", func(t *testing.T) {
 		testChunk := &chunk{}
 
-		for i := 0; i < maxRunLengthCap; i++ {
+		for i := range maxRunLengthCap {
 			assert.True(t, testChunk.canAdd(rtcp.TypeTCCPacketNotReceived), i)
 			testChunk.add(rtcp.TypeTCCPacketNotReceived)
 		}
@@ -50,7 +50,7 @@ func Test_chunk_add(t *testing.T) {
 	t.Run("fill with small delta", func(t *testing.T) {
 		testChunk := &chunk{}
 
-		for i := 0; i < maxOneBitCap; i++ {
+		for i := range maxOneBitCap {
 			assert.True(t, testChunk.canAdd(rtcp.TypeTCCPacketReceivedSmallDelta), i)
 			testChunk.add(rtcp.TypeTCCPacketReceivedSmallDelta)
 		}
@@ -72,7 +72,7 @@ func Test_chunk_add(t *testing.T) {
 	t.Run("fill with large delta", func(t *testing.T) {
 		testChunk := &chunk{}
 
-		for i := 0; i < maxTwoBitCap; i++ {
+		for i := range maxTwoBitCap {
 			assert.True(t, testChunk.canAdd(rtcp.TypeTCCPacketReceivedLargeDelta), i)
 			testChunk.add(rtcp.TypeTCCPacketReceivedLargeDelta)
 		}
@@ -263,7 +263,7 @@ func Test_feedback(t *testing.T) {
 		deltaUS := int64(200)
 		f.setBase(5, base)
 
-		for i := int64(0); i < 5; i++ {
+		for i := range int64(5) {
 			got := f.addReceived(5+uint16(i+1), base+deltaUS*i) //nolint:gosec // G115
 			assert.True(t, got)
 		}
@@ -388,8 +388,6 @@ func Test_feedback(t *testing.T) {
 			{1000, 2, 15, 2},
 		}
 		for _, tt := range testcases {
-			tt := tt
-
 			t.Run("set correct base seq and time", func(t *testing.T) {
 				f := newFeedback(0, 0, 0)
 				f.setBase(tt.sequenceNumber, tt.arrivalTS*1000)

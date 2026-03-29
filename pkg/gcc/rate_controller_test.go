@@ -44,7 +44,6 @@ func TestRateControllerRun(t *testing.T) {
 		return t0
 	}
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			out := make(chan DelayStats)
 			dc := newRateController(mockNoFn, 100_000, 1_000, 50_000_000, func(ds DelayStats) {

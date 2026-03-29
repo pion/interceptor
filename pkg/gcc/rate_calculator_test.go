@@ -77,7 +77,6 @@ func TestRateCalculator(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			rc := newRateCalculator(500 * time.Millisecond)
 			in := make(chan []cc.Acknowledgment)
@@ -106,7 +105,7 @@ func TestRateCalculator(t *testing.T) {
 func getACKStream(length int, size int, interval time.Duration) []cc.Acknowledgment {
 	res := []cc.Acknowledgment{}
 	t0 := time.Now()
-	for i := 0; i < length; i++ {
+	for range length {
 		res = append(res, cc.Acknowledgment{
 			Size:    size,
 			Arrival: t0,
