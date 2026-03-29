@@ -58,7 +58,6 @@ func TestKalman(t *testing.T) {
 		},
 	}
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			k := newKalman(append(tc.opts, setDisableMeasurementUncertaintyUpdates(true))...)
 			estimates := []time.Duration{}

@@ -108,7 +108,7 @@ func TestFecInterceptor_GenerateAndWriteFecPackets(t *testing.T) {
 	}
 
 	var mediaPacketsCount, fecPacketsCount int
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		select {
 		case packet := <-stream.WrittenRTP():
 			switch packet.PayloadType {
@@ -355,7 +355,7 @@ func TestFecInterceptor_HandleMultipleStreamsCorrectly(t *testing.T) {
 
 	mediaPacketsCount1 := 0
 	fecPacketsCount1 := 0
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		select {
 		case packet := <-stream1.WrittenRTP():
 			switch packet.SSRC {
@@ -373,7 +373,7 @@ func TestFecInterceptor_HandleMultipleStreamsCorrectly(t *testing.T) {
 
 	mediaPacketsCount2 := 0
 	fecPacketsCount2 := 0
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		select {
 		case packet := <-stream2.WrittenRTP():
 			switch packet.SSRC {

@@ -212,8 +212,6 @@ func TestUnpackRunLengthChunk(t *testing.T) {
 
 	//nolint:dupl
 	for i, tc := range cases {
-		i := i
-		tc := tc
 		t.Run(fmt.Sprintf("%v", i), func(t *testing.T) {
 			fa := NewFeedbackAdapter()
 
@@ -397,8 +395,6 @@ func TestUnpackStatusVectorChunk(t *testing.T) {
 
 	//nolint:dupl
 	for i, tc := range cases {
-		i := i
-		tc := tc
 		t.Run(fmt.Sprintf("%v", i), func(t *testing.T) {
 			fa := NewFeedbackAdapter()
 
@@ -455,7 +451,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		t0 := time.Time{}
 		adapter := NewFeedbackAdapter()
 		headers := []rtp.Header{}
-		for i := uint16(0); i < 22; i++ {
+		for i := range uint16(22) {
 			pkt := getPacketWithTransportCCExt(t, i)
 			headers = append(headers, pkt.Header)
 			assert.NoError(
@@ -694,7 +690,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		t0 := time.Time{}
 		adapter := NewFeedbackAdapter()
 		headers := []rtp.Header{}
-		for i := uint16(0); i < 8; i++ {
+		for i := range uint16(8) {
 			pkt := getPacketWithTransportCCExt(t, i)
 			headers = append(headers, pkt.Header)
 			assert.NoError(
@@ -744,7 +740,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		})
 		assert.NoError(t, err)
 		assert.Len(t, results, 7)
-		for i := uint16(0); i < 3; i++ {
+		for i := range uint16(3) {
 			assert.Contains(t, results, Acknowledgment{
 				SequenceNumber: i,
 				Size:           headers[i].MarshalSize() + 1200,
@@ -765,7 +761,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 	t.Run("runLengthChunk", func(t *testing.T) {
 		adapter := NewFeedbackAdapter()
 		t0 := time.Time{}
-		for i := uint16(0); i < 20; i++ {
+		for i := range uint16(20) {
 			pkt := getPacketWithTransportCCExt(t, i)
 			assert.NoError(
 				t,
@@ -809,7 +805,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 	t.Run("statusVectorChunk", func(t *testing.T) {
 		adapter := NewFeedbackAdapter()
 		t0 := time.Time{}
-		for i := uint16(0); i < 20; i++ {
+		for i := range uint16(20) {
 			pkt := getPacketWithTransportCCExt(t, i)
 			assert.NoError(
 				t,
@@ -869,7 +865,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		adapter := NewFeedbackAdapter()
 
 		t0 := time.Time{}
-		for i := uint16(0); i < 20; i++ {
+		for i := range uint16(20) {
 			pkt := getPacketWithTransportCCExt(t, i)
 			assert.NoError(
 				t,

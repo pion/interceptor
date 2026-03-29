@@ -50,7 +50,6 @@ func TestClamp(t *testing.T) {
 		},
 	}
 	for i, tt := range tests {
-		tt := tt
 		t.Run(fmt.Sprintf("int/%v", i), func(t *testing.T) {
 			assert.Equal(t, tt.expected, clampInt(tt.x, tt.min, tt.max))
 		})

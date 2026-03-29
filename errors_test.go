@@ -32,7 +32,7 @@ func TestMultiError(t *testing.T) {
 	errIs, ok := errs.(multiError) //nolint
 	assert.True(t, ok, "FlattenErrs returns non-multiError")
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		assert.True(t, errIs.Is(rawErrs[i]), "Should contain error %d", i)
 	}
 	assert.False(t, errIs.Is(rawErrs[3]), "Should not contain error %d", 3)

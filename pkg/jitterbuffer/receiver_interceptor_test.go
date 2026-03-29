@@ -80,14 +80,14 @@ func TestReceiverBuffersAndPlaysout(t *testing.T) {
 		SenderSSRC: 123,
 		MediaSSRC:  456,
 	}})
-	for s := 0; s < 61; s++ {
+	for s := range 61 {
 		stream.ReceiveRTP(&rtp.Packet{Header: rtp.Header{
 			SequenceNumber: uint16(s), //nolint:gosec // G115
 		}})
 	}
 	// Give time for packets to be handled and stream written to.
 	time.Sleep(50 * time.Millisecond)
-	for s := 0; s < 10; s++ {
+	for s := range 10 {
 		read := <-stream.ReadRTP()
 		seq := read.Packet.Header.SequenceNumber
 		assert.EqualValues(t, uint16(s), seq) //nolint:gosec // G115

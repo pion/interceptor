@@ -29,7 +29,7 @@ func TestPriorityQueue(t *testing.T) {
 
 	t.Run("Appends many in order", func(*testing.T) {
 		queue := NewQueue()
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			//nolint:gosec // G115
 			queue.Push(
 				&rtp.Packet{
@@ -62,7 +62,7 @@ func TestPriorityQueue(t *testing.T) {
 		queue.Push(pkt, pkt.SequenceNumber)
 		pkt2 := &rtp.Packet{Header: rtp.Header{SequenceNumber: 5004, Timestamp: 500}, Payload: []byte{0x02}}
 		queue.Push(pkt2, pkt2.SequenceNumber)
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			//nolint:gosec // G115
 			queue.Push(
 				&rtp.Packet{
@@ -81,7 +81,7 @@ func TestPriorityQueue(t *testing.T) {
 
 	t.Run("Appends in order", func(*testing.T) {
 		queue := NewQueue()
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			queue.Push(
 				&rtp.Packet{
 					Header: rtp.Header{
@@ -103,7 +103,7 @@ func TestPriorityQueue(t *testing.T) {
 
 	t.Run("Can find", func(*testing.T) {
 		queue := NewQueue()
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			//nolint:gosec // G115
 			queue.Push(
 				&rtp.Packet{
@@ -127,7 +127,7 @@ func TestPriorityQueue(t *testing.T) {
 		queue.Push(pkt, pkt.SequenceNumber)
 		pkt2 := &rtp.Packet{Header: rtp.Header{SequenceNumber: 5004, Timestamp: 500}, Payload: []byte{0x02}}
 		queue.Push(pkt2, pkt2.SequenceNumber)
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			//nolint:gosec // G115
 			queue.Push(
 				&rtp.Packet{
@@ -195,7 +195,7 @@ func TestPriorityQueue_Unreference(t *testing.T) {
 	}
 
 	numPkts := 100
-	for i := 0; i < numPkts; i++ {
+	for i := range numPkts {
 		atomic.AddInt64(&refs, 1)
 		seq := uint16(i) //nolint:gosec // G115
 		p := rtp.Packet{

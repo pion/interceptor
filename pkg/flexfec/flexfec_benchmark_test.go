@@ -19,7 +19,7 @@ const (
 // generateMediaPackets creates a slice of RTP packets with fixed-size payloads.
 func generateMediaPackets(n int, startSeq uint16) []rtp.Packet {
 	mediaPackets := make([]rtp.Packet, 0, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		payload := []byte{
 			// Payload with some random data
 			1, 2, 3, 4, 5, byte(i),
@@ -47,14 +47,14 @@ func generateMediaPackets(n int, startSeq uint16) []rtp.Packet {
 func generateMediaPacketsWithSizes(n int, startSeq uint16, minSize, maxSize int) []rtp.Packet {
 	mediaPackets := make([]rtp.Packet, 0, n)
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		// Calculate a size that varies between minSize and maxSize based on the packet index
 		size := minSize + (i % (maxSize - minSize + 1))
 
 		// Create a payload of the calculated size
 		payload := make([]byte, size)
 		// Fill with some pattern data
-		for j := 0; j < size; j++ {
+		for j := range size {
 			payload[j] = byte((j + i) % 256)
 		}
 

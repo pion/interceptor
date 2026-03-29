@@ -151,16 +151,16 @@ func TestRecorder(t *testing.T) {
 		streams := 3
 		packets := 1000
 		// Add 1000 packets on 3 different streams
-		for i := 0; i < streams; i++ {
+		for range streams {
 			ssrc := rand.Uint32() //nolint:gosec
-			for j := 0; j < packets; j++ {
+			for j := range packets {
 				recorder.AddPacket(now, ssrc, uint16(j), 0) //nolint:gosec // G115
 			}
 		}
 		reports := recorder.BuildReport(time.Time{}, maxSize)
 
 		blocks := 0
-		for i := 0; i < streams; i++ {
+		for i := range streams {
 			blocks += len(reports.ReportBlocks[i].MetricBlocks)
 		}
 		assert.Less(t, blocks*2, maxSize)
@@ -174,16 +174,16 @@ func TestRecorder(t *testing.T) {
 		streams := 10
 		packets := 1000
 		// Add 1000 packets on 10 different streams
-		for i := 0; i < streams; i++ {
+		for range streams {
 			ssrc := rand.Uint32() //nolint:gosec
-			for j := 0; j < packets; j++ {
+			for j := range packets {
 				recorder.AddPacket(now, ssrc, uint16(j), 0) //nolint:gosec // G115
 			}
 		}
 		reports := recorder.BuildReport(time.Time{}, maxSize)
 
 		blocks := 0
-		for i := 0; i < streams; i++ {
+		for i := range streams {
 			blocks += len(reports.ReportBlocks[i].MetricBlocks)
 		}
 		assert.Less(t, blocks*2, maxSize)

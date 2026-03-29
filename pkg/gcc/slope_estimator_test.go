@@ -89,7 +89,6 @@ func TestSlopeEstimator(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			out := make(chan DelayStats)
 			se := newSlopeEstimator(estimatorFunc(identity), func(ds DelayStats) {

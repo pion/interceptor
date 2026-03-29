@@ -52,7 +52,7 @@ func TestJitterBuffer(t *testing.T) {
 
 	t.Run("Appends packets and begins playout", func(*testing.T) {
 		jb := New()
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			jb.Push(
 				&rtp.Packet{
 					Header: rtp.Header{
@@ -76,7 +76,7 @@ func TestJitterBuffer(t *testing.T) {
 		jb.Listen(BeginPlayback, func(event Event, _ *JitterBuffer) {
 			events = append(events, event)
 		})
-		for i := 0; i < 2; i++ {
+		for i := range 2 {
 			//nolint:gosec // G115
 			jb.Push(
 				&rtp.Packet{
@@ -100,7 +100,7 @@ func TestJitterBuffer(t *testing.T) {
 
 	t.Run("Wraps playout correctly", func(*testing.T) {
 		jb := New()
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			sqnum := uint16(math.MaxUint16 - 32 + i) //nolint:gosec // G115
 			//nolint:gosec // G115
 			jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: sqnum, Timestamp: uint32(512 + i)}, Payload: []byte{0x02}})
@@ -111,7 +111,7 @@ func TestJitterBuffer(t *testing.T) {
 		head, err := jb.Pop()
 		assert.Equal(head.SequenceNumber, uint16(math.MaxUint16-32))
 		assert.Equal(err, nil)
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			head, err := jb.Pop()
 			if i < 99 {
 				assert.Equal(head.SequenceNumber, uint16((math.MaxUint16 - 31 + i))) //nolint:gosec // G115
@@ -124,7 +124,7 @@ func TestJitterBuffer(t *testing.T) {
 
 	t.Run("Pops at timestamp correctly", func(*testing.T) {
 		jb := New()
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			sqnum := uint16((math.MaxUint16 - 32 + i)) //nolint:gosec // G115
 			//nolint:gosec // G115
 			jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: sqnum, Timestamp: uint32(512 + i)}, Payload: []byte{0x02}})
@@ -151,7 +151,7 @@ func TestJitterBuffer(t *testing.T) {
 		pkt, err := jb.Peek(false)
 		assert.Equal(pkt.SequenceNumber, uint16(5002))
 		assert.Equal(err, nil)
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			sqnum := uint16((math.MaxUint16 - 32 + i)) //nolint:gosec // G115
 			//nolint:gosec // G115
 			jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: sqnum, Timestamp: uint32(512 + i)}, Payload: []byte{0x02}})
@@ -163,7 +163,7 @@ func TestJitterBuffer(t *testing.T) {
 
 	t.Run("Pops at sequence with an invalid sequence number", func(*testing.T) {
 		jb := New()
-		for i := 0; i < 50; i++ {
+		for i := range 50 {
 			sqnum := uint16((math.MaxUint16 - 32 + i)) //nolint:gosec // G115
 			//nolint:gosec // G115
 			jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: sqnum, Timestamp: uint32(512 + i)}, Payload: []byte{0x02}})
@@ -179,7 +179,7 @@ func TestJitterBuffer(t *testing.T) {
 
 	t.Run("Pops at timestamp with multiple packets", func(*testing.T) {
 		jb := New()
-		for i := 0; i < 50; i++ {
+		for i := range 50 {
 			sqnum := uint16((math.MaxUint16 - 32 + i)) //nolint:gosec // G115
 			//nolint:gosec // G115
 			jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: sqnum, Timestamp: uint32(512 + i)}, Payload: []byte{0x02}})
@@ -202,7 +202,7 @@ func TestJitterBuffer(t *testing.T) {
 
 	t.Run("Peeks at timestamp with multiple packets", func(*testing.T) {
 		jb := New()
-		for i := 0; i < 50; i++ {
+		for i := range 50 {
 			sqnum := uint16((math.MaxUint16 - 32 + i)) //nolint:gosec // G115
 			//nolint:gosec // G115
 			jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: sqnum, Timestamp: uint32(512 + i)}, Payload: []byte{0x02}})
@@ -227,7 +227,7 @@ func TestJitterBuffer(t *testing.T) {
 		jb := New(WithMinimumPacketCount(1))
 
 		// Push packets 0-9, but no packet 4
-		for i := uint16(0); i < 10; i++ {
+		for i := range uint16(10) {
 			if i == 4 {
 				continue
 			}
@@ -235,7 +235,7 @@ func TestJitterBuffer(t *testing.T) {
 		}
 
 		// The first 3 packets will be able to popped
-		for i := 0; i < 4; i++ {
+		for range 4 {
 			pkt, err := jb.Pop()
 			assert.NoError(err)
 			assert.NotNil(pkt)
@@ -256,7 +256,7 @@ func TestJitterBuffer(t *testing.T) {
 
 		// Increment the PlayoutHead and popping will work again
 		jb.SetPlayoutHead(jb.PlayoutHead() + 1)
-		for i := 0; i < 6; i++ {
+		for range 6 {
 			pkt, err := jb.Pop()
 			assert.NoError(err)
 			assert.NotNil(pkt)

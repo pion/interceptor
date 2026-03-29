@@ -53,7 +53,7 @@ func TestInterceptor(t *testing.T) {
 			assert.NoError(t, stream.Close())
 		}()
 
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			stream.ReceiveRTP(&rtp.Packet{
 				Header: rtp.Header{
 					Version:          0,
