@@ -182,6 +182,11 @@ func (f *FeedbackAdapter) OnTransportCCFeedback(
 		}
 	}
 
+	// Discard padding slots from the last StatusVectorChunk.
+	if int(feedback.PacketStatusCount) < len(result) {
+		result = result[:feedback.PacketStatusCount]
+	}
+
 	return result, nil
 }
 
