@@ -236,8 +236,12 @@ func (r *recorder) recordOutgoingRTP(latestStats internalStats, v *outgoingRTP) 
 	return latestStats
 }
 
-func (r *recorder) recordIncomingRR(latestStats internalStats, pkt *rtcp.ReceiverReport, ts time.Time) internalStats {
-	for _, report := range pkt.Reports {
+func (r *recorder) recordIncomingRR(
+	latestStats internalStats,
+	reports []rtcp.ReceptionReport,
+	ts time.Time,
+) internalStats {
+	for _, report := range reports {
 		if latestStats.remoteInboundFirstSequenceNumberInitialized {
 			cycles := uint64(report.LastSequenceNumber&0xFFFF0000) >> 16
 			nr := uint64(report.LastSequenceNumber & 0x0000FFFF)
@@ -312,12 +316,13 @@ func (r *recorder) recordIncomingRTCP(latestStats internalStats, incoming *incom
 		case *rtcp.PictureLossIndication:
 			latestStats.OutboundRTPStreamStats.PLICount++
 		case *rtcp.ReceiverReport:
-			latestStats = r.recordIncomingRR(latestStats, pkt, incoming.ts)
+			latestStats = r.recordIncomingRR(latestStats, pkt.Reports, incoming.ts)
 		case *rtcp.SenderReport:
 			latestStats.RemoteOutboundRTPStreamStats.PacketsSent = uint64(pkt.PacketCount)
 			latestStats.RemoteOutboundRTPStreamStats.BytesSent = uint64(pkt.OctetCount)
 			latestStats.RemoteTimeStamp = ntp.ToTime(pkt.NTPTime)
 			latestStats.ReportsSent++
+			latestStats = r.recordIncomingRR(latestStats, pkt.Reports, incoming.ts)
 
 		case *rtcp.ExtendedReport:
 			return r.recordIncomingXR(latestStats, pkt, incoming.ts)
