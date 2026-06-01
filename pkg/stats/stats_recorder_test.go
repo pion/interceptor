@@ -927,6 +927,68 @@ func TestStatsRecorder(t *testing.T) {
 				},
 			},
 		},
+		{
+			// Copy of basicOutgoingRTP but with RR embedded in a SR
+			name: "readRRinSR",
+			records: []record{
+				{
+					ts: now,
+					content: outgoingRTP{
+						header: rtp.Header{
+							SequenceNumber: 1,
+						},
+					},
+				},
+				{
+					ts: now,
+					content: outgoingRTP{
+						header: rtp.Header{
+							SequenceNumber: 3,
+						},
+					},
+				},
+				{
+					ts: now,
+					content: incomingRTCP{
+						pkts: []rtcp.Packet{
+							&rtcp.SenderReport{
+								SSRC:    0,
+								NTPTime: ntp.ToNTP(now),
+								Reports: []rtcp.ReceptionReport{
+									{
+										SSRC:               0,
+										FractionLost:       85,
+										TotalLost:          1,
+										LastSequenceNumber: 3,
+										Jitter:             45000,
+									},
+								},
+							},
+							cname,
+						},
+					},
+				},
+			},
+			expectedOutboundRTPStreamStats: OutboundRTPStreamStats{
+				SentRTPStreamStats: SentRTPStreamStats{
+					PacketsSent: 2,
+					BytesSent:   24,
+				},
+				HeaderBytesSent: 24,
+			},
+			expectedRemoteInboundRTPStreamStats: RemoteInboundRTPStreamStats{
+				ReceivedRTPStreamStats: ReceivedRTPStreamStats{
+					PacketsReceived: 2,
+					PacketsLost:     1,
+					Jitter:          0.5,
+				},
+				FractionLost: 0.33203125,
+			},
+			expectedRemoteOutboundRTPStreamStats: RemoteOutboundRTPStreamStats{
+				RemoteTimeStamp: ntp.ToTime(ntp.ToNTP(now)),
+				ReportsSent:     1,
+			},
+		},
 	} {
 		t.Run(fmt.Sprintf("%v:%v", i, cc.name), func(t *testing.T) {
 			recorder := newRecorder(0, 90_000, logging.NewDefaultLoggerFactory())
