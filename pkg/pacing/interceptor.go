@@ -182,7 +182,7 @@ func burst(rate int, interval time.Duration) int {
 	}
 	f := float64(time.Second.Milliseconds() / interval.Milliseconds())
 
-	return 8 * int(float64(rate)/f)
+	return max(8*1500, int(float64(rate)/f))
 }
 
 // setRate updates the pacing rate and burst of the rate limiter.
