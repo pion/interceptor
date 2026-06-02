@@ -989,6 +989,78 @@ func TestStatsRecorder(t *testing.T) {
 				ReportsSent:     1,
 			},
 		},
+		{
+			name: "ignoreIncomingRTCPWithUnknownSSRC",
+			records: []record{
+				{
+					ts: now,
+					content: incomingRTCP{
+						pkts: []rtcp.Packet{
+							&rtcp.SenderReport{
+								SSRC:    12,
+								NTPTime: ntp.ToNTP(now),
+								Reports: []rtcp.ReceptionReport{
+									{
+										SSRC:               5004,
+										FractionLost:       1,
+										TotalLost:          1,
+										LastSequenceNumber: 1,
+										Jitter:             1,
+										LastSenderReport:   1,
+										Delay:              1,
+									},
+								},
+							},
+							cname,
+							&rtcp.TransportLayerNack{
+								MediaSSRC:  5000,
+								SenderSSRC: 12,
+							},
+							&rtcp.FullIntraRequest{
+								MediaSSRC:  5001,
+								SenderSSRC: 12,
+							},
+							&rtcp.PictureLossIndication{
+								MediaSSRC:  5002,
+								SenderSSRC: 12,
+							},
+							&rtcp.ReceiverReport{
+								SSRC: 12,
+								Reports: []rtcp.ReceptionReport{
+									{
+										SSRC:               5003,
+										FractionLost:       1,
+										TotalLost:          1,
+										LastSequenceNumber: 1,
+										Jitter:             1,
+										LastSenderReport:   1,
+										Delay:              1,
+									},
+								},
+							},
+							&rtcp.ExtendedReport{
+								SenderSSRC: 12,
+								Reports: []rtcp.ReportBlock{
+									&rtcp.DLRRReportBlock{
+										Reports: []rtcp.DLRRReport{
+											{
+												SSRC:   5005,
+												LastRR: 1,
+												DLRR:   2,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+
+			expectedRemoteOutboundRTPStreamStats: RemoteOutboundRTPStreamStats{
+				ReportsSent: 0,
+			},
+		},
 	} {
 		t.Run(fmt.Sprintf("%v:%v", i, cc.name), func(t *testing.T) {
 			recorder := newRecorder(0, 90_000, logging.NewDefaultLoggerFactory())
@@ -1025,7 +1097,7 @@ func TestStatsRecorder(t *testing.T) {
 }
 
 func TestStatsRecorder_DLRR_Precision(t *testing.T) {
-	recorder := newRecorder(0, 90_000, logging.NewDefaultLoggerFactory())
+	recorder := newRecorder(5000, 90_000, logging.NewDefaultLoggerFactory())
 
 	report := &rtcp.ExtendedReport{
 		Reports: []rtcp.ReportBlock{
