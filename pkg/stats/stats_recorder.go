@@ -242,6 +242,9 @@ func (r *recorder) recordIncomingRR(
 	ts time.Time,
 ) internalStats {
 	for _, report := range reports {
+		if report.SSRC != r.ssrc {
+			continue
+		}
 		if latestStats.remoteInboundFirstSequenceNumberInitialized {
 			cycles := uint64(report.LastSequenceNumber&0xFFFF0000) >> 16
 			nr := uint64(report.LastSequenceNumber & 0x0000FFFF)
@@ -278,7 +281,7 @@ func (r *recorder) recordIncomingXR(latestStats internalStats, pkt *rtcp.Extende
 	for _, report := range pkt.Reports {
 		if xr, ok := report.(*rtcp.DLRRReportBlock); ok {
 			for _, xrReport := range xr.Reports {
-				if xrReport.LastRR != 0 && xrReport.DLRR != 0 {
+				if xrReport.LastRR != 0 && xrReport.DLRR != 0 && xrReport.SSRC == r.ssrc {
 					for i := min(r.maxLastReceiverReferenceTimes, len(latestStats.lastReceiverReferenceTimes)) - 1; i >= 0; i-- {
 						lastRR := latestStats.lastReceiverReferenceTimes[i]
 						if (lastRR&0x0000FFFFFFFF0000)>>16 == uint64(xrReport.LastRR) {
@@ -301,6 +304,7 @@ func contains(ls []uint32, e uint32) bool {
 	return slices.Contains(ls, e)
 }
 
+//nolint:cyclop
 func (r *recorder) recordIncomingRTCP(latestStats internalStats, incoming *incomingRTCP) internalStats {
 	for _, pkt := range incoming.pkts {
 		if !contains(pkt.DestinationSSRC(), r.ssrc) {
@@ -310,11 +314,17 @@ func (r *recorder) recordIncomingRTCP(latestStats internalStats, incoming *incom
 		}
 		switch pkt := pkt.(type) {
 		case *rtcp.TransportLayerNack:
-			latestStats.OutboundRTPStreamStats.NACKCount++
+			if pkt.MediaSSRC == r.ssrc {
+				latestStats.OutboundRTPStreamStats.NACKCount++
+			}
 		case *rtcp.FullIntraRequest:
-			latestStats.OutboundRTPStreamStats.FIRCount++
+			if pkt.MediaSSRC == r.ssrc {
+				latestStats.OutboundRTPStreamStats.FIRCount++
+			}
 		case *rtcp.PictureLossIndication:
-			latestStats.OutboundRTPStreamStats.PLICount++
+			if pkt.MediaSSRC == r.ssrc {
+				latestStats.OutboundRTPStreamStats.PLICount++
+			}
 		case *rtcp.ReceiverReport:
 			latestStats = r.recordIncomingRR(latestStats, pkt.Reports, incoming.ts)
 		case *rtcp.SenderReport:
