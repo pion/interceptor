@@ -70,7 +70,7 @@ func TestInterceptor(t *testing.T) {
 
 		i.SetRate("", 1_000_000)
 		assert.Equal(t, 1_000_000, mp.rate)
-		assert.Equal(t, 40_000, mp.burst)
+		assert.Equal(t, 12000, mp.burst)
 	})
 
 	t.Run("paces_packets", func(t *testing.T) {
