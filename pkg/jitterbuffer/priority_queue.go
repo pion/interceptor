@@ -33,19 +33,11 @@ var (
 // increasing Sequence Number, wrapping at MaxUint16, so
 // a packet with sequence number MaxUint16 - 1 will be after 0.
 func NewQueue() *PriorityQueue {
-	return &PriorityQueue{
-		next:   nil,
-		length: 0,
-	}
+	return &PriorityQueue{}
 }
 
 func newNode(val *rtp.Packet, priority uint16) *node {
-	return &node{
-		val:      val,
-		prev:     nil,
-		next:     nil,
-		priority: priority,
-	}
+	return &node{val: val, priority: priority}
 }
 
 // Find a packet in the queue with the provided sequence number,
@@ -65,41 +57,32 @@ func (q *PriorityQueue) Find(sqNum uint16) (*rtp.Packet, error) {
 // Push will insert a packet in to the queue in order of sequence number.
 func (q *PriorityQueue) Push(val *rtp.Packet, priority uint16) {
 	newPq := newNode(val, priority)
-	if q.next == nil {
+
+	// Insert at head: empty list or new node has smallest-or-equal priority.
+	// Using <= ensures equal-priority elements are consistently placed before
+	// all existing equals, matching the traversal loop's break-on-equal behavior.
+	cur := q.next
+	if cur == nil || priority <= cur.priority {
+		newPq.next = cur
+		if cur != nil {
+			cur.prev = newPq
+		}
 		q.next = newPq
 		q.length++
-
 		return
 	}
-	if priority < q.next.priority {
-		newPq.next = q.next
-		q.next.prev = newPq
-		q.next = newPq
-		q.length++
 
-		return
+	// Traverse to find insertion point; cur is guaranteed non-nil here.
+	prev := cur
+	for cur = cur.next; cur != nil && priority > cur.priority; cur = cur.next {
+		prev = cur
 	}
-	head := q.next
-	prev := q.next
-	for head != nil {
-		if priority <= head.priority {
-			break
-		}
-		prev = head
-		head = head.next
-	}
-	if head == nil {
-		if prev != nil {
-			prev.next = newPq
-		}
-		newPq.prev = prev
-	} else {
-		newPq.next = head
-		newPq.prev = prev
-		if prev != nil {
-			prev.next = newPq
-		}
-		head.prev = newPq
+
+	prev.next = newPq
+	newPq.prev = prev
+	newPq.next = cur
+	if cur != nil {
+		cur.prev = newPq
 	}
 	q.length++
 }
@@ -112,46 +95,57 @@ func (q *PriorityQueue) Length() uint16 {
 // Pop removes the first element from the queue, regardless
 // sequence number.
 func (q *PriorityQueue) Pop() (*rtp.Packet, error) {
-	if q.next == nil {
+	head := q.next
+	if head == nil {
 		return nil, ErrInvalidOperation
 	}
-	val := q.next.val
-	q.next.val = nil
+	q.next = head.next
+	if head.next != nil {
+		head.next.prev = nil
+	}
+	head.next = nil
+	val := head.val
+	head.val = nil
 	q.length--
-	q.next = q.next.next
 
 	return val, nil
 }
 
 // PopAt removes an element at the specified sequence number (priority).
 func (q *PriorityQueue) PopAt(sqNum uint16) (*rtp.Packet, error) {
-	if q.next == nil {
+	head := q.next
+	if head == nil {
 		return nil, ErrInvalidOperation
 	}
-	if q.next.priority == sqNum {
-		val := q.next.val
-		q.next.val = nil
-		q.next = q.next.next
+	if head.priority == sqNum {
+		q.next = head.next
+		if head.next != nil {
+			head.next.prev = nil
+		}
+		head.next = nil
+		val := head.val
+		head.val = nil
 		q.length--
 
 		return val, nil
 	}
-	pos := q.next
-	prev := q.next.prev
-	for pos != nil {
+	// prev is guaranteed non-nil since head didn't match.
+	prev := head
+	for pos := head.next; pos != nil; pos = pos.next {
 		if pos.priority == sqNum {
+			prev.next = pos.next
+			if pos.next != nil {
+				pos.next.prev = prev
+			}
+			pos.next = nil
+			pos.prev = nil
 			val := pos.val
 			pos.val = nil
-			prev.next = pos.next
-			if prev.next != nil {
-				prev.next.prev = prev
-			}
 			q.length--
 
 			return val, nil
 		}
 		prev = pos
-		pos = pos.next
 	}
 
 	return nil, ErrNotFound
@@ -160,33 +154,39 @@ func (q *PriorityQueue) PopAt(sqNum uint16) (*rtp.Packet, error) {
 // PopAtTimestamp removes and returns a packet at the given RTP Timestamp, regardless
 // sequence number order.
 func (q *PriorityQueue) PopAtTimestamp(timestamp uint32) (*rtp.Packet, error) {
-	if q.next == nil {
+	head := q.next
+	if head == nil {
 		return nil, ErrInvalidOperation
 	}
-	if q.next.val.Timestamp == timestamp {
-		val := q.next.val
-		q.next.val = nil
-		q.next = q.next.next
+	if head.val.Timestamp == timestamp {
+		q.next = head.next
+		if head.next != nil {
+			head.next.prev = nil
+		}
+		head.next = nil
+		val := head.val
+		head.val = nil
 		q.length--
 
 		return val, nil
 	}
-	pos := q.next
-	prev := q.next.prev
-	for pos != nil {
+	// prev is guaranteed non-nil since head didn't match.
+	prev := head
+	for pos := head.next; pos != nil; pos = pos.next {
 		if pos.val.Timestamp == timestamp {
+			prev.next = pos.next
+			if pos.next != nil {
+				pos.next.prev = prev
+			}
+			pos.next = nil
+			pos.prev = nil
 			val := pos.val
 			pos.val = nil
-			prev.next = pos.next
-			if prev.next != nil {
-				prev.next.prev = prev
-			}
 			q.length--
 
 			return val, nil
 		}
 		prev = pos
-		pos = pos.next
 	}
 
 	return nil, ErrNotFound
@@ -194,10 +194,6 @@ func (q *PriorityQueue) PopAtTimestamp(timestamp uint32) (*rtp.Packet, error) {
 
 // Clear will empty a PriorityQueue.
 func (q *PriorityQueue) Clear() {
-	next := q.next
+	q.next = nil
 	q.length = 0
-	for next != nil {
-		next.prev = nil
-		next = next.next
-	}
 }
