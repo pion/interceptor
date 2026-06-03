@@ -33,11 +33,19 @@ var (
 // increasing Sequence Number, wrapping at MaxUint16, so
 // a packet with sequence number MaxUint16 - 1 will be after 0.
 func NewQueue() *PriorityQueue {
-	return &PriorityQueue{}
+	return &PriorityQueue{
+		next:   nil,
+		length: 0,
+	}
 }
 
 func newNode(val *rtp.Packet, priority uint16) *node {
-	return &node{val: val, priority: priority}
+	return &node{
+		val:      val,
+		prev:     nil,
+		next:     nil,
+		priority: priority,
+	}
 }
 
 // Find a packet in the queue with the provided sequence number,
