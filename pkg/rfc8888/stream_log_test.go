@@ -589,7 +589,7 @@ func TestStreamLogDoesNotLeakBelowReportPointer(t *testing.T) {
 
 	t.Run("cap on throughput", func(t *testing.T) {
 		sl := newStreamLog(0)
-		for i := 0; i < 2*maxReportBlocks; i++ {
+		for i := range 2 * maxReportBlocks {
 			sl.add(base, uint16(i), 0) //nolint:gosec // G115
 		}
 		sl.metricsAfter(base.Add(time.Second), maxReportBlocks)

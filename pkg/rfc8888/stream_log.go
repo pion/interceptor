@@ -53,6 +53,8 @@ func (l *streamLog) add(ts time.Time, sequenceNumber uint16, ecn uint8) {
 
 // metricsAfter iterates over all packets order of their sequence number.
 // Packets are removed until the first loss is detected.
+//
+//nolint:cyclop
 func (l *streamLog) metricsAfter(reference time.Time, maxReportBlocks int64) rtcp.CCFeedbackReportBlock {
 	if len(l.log) == 0 {
 		return rtcp.CCFeedbackReportBlock{
