@@ -48,8 +48,12 @@ func (r *Recorder) BuildReport(now time.Time, maxSize int) *rtcp.CCFeedbackRepor
 		ReportTimestamp: ntp.ToNTP32(now),
 	}
 
-	maxReportBlocks := max((maxSize-12-(8*len(r.streams)))/2, 0)
-	maxReportBlocksPerStream := maxReportBlocks / len(r.streams)
+	streamCount := len(r.streams)
+	if streamCount == 0 {
+		return report
+	}
+	maxReportBlocks := max((maxSize-12-(8*streamCount))/2, 0)
+	maxReportBlocksPerStream := maxReportBlocks / streamCount
 
 	for _, log := range r.streams {
 		block := log.metricsAfter(now, int64(maxReportBlocksPerStream))
