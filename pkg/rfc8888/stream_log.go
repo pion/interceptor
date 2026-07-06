@@ -38,6 +38,10 @@ func (l *streamLog) add(ts time.Time, sequenceNumber uint16, ecn uint8) {
 		l.init = true
 		l.nextSequenceNumberToReport = unwrappedSequenceNumber
 	}
+	// Drop late/duplicate packets below the report pointer: metricsAfter never reads below it, so they would leak.
+	if unwrappedSequenceNumber < l.nextSequenceNumberToReport {
+		return
+	}
 	l.log[unwrappedSequenceNumber] = &packetReport{
 		arrivalTime: ts,
 		ecn:         ecn,
@@ -60,7 +64,14 @@ func (l *streamLog) metricsAfter(reference time.Time, maxReportBlocks int64) rtc
 	numReports := l.lastSequenceNumberReceived - l.nextSequenceNumberToReport + 1
 	if numReports > maxReportBlocks {
 		numReports = maxReportBlocks
-		l.nextSequenceNumberToReport = l.lastSequenceNumberReceived - maxReportBlocks + 1
+		newNext := l.lastSequenceNumberReceived - maxReportBlocks + 1
+		// Reclaim entries we advance past: metricsAfter never reads below the pointer, so they would leak.
+		for seq := range l.log {
+			if seq < newNext {
+				delete(l.log, seq)
+			}
+		}
+		l.nextSequenceNumberToReport = newNext
 	}
 	metricBlocks := make([]rtcp.CCFeedbackMetricBlock, numReports)
 	offset := l.nextSequenceNumberToReport
