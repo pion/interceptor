@@ -195,7 +195,7 @@ func TestRecorder(t *testing.T) {
 		maxSize := 1200
 
 		streams := 250
-		for i := 0; i < streams; i++ {
+		for i := range streams {
 			ssrc := uint32(i + 1)
 			recorder.AddPacket(now, ssrc, 0, 0)
 			recorder.AddPacket(now, ssrc, 1, 0)
