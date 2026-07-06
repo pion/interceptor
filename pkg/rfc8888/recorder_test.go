@@ -188,4 +188,26 @@ func TestRecorder(t *testing.T) {
 		}
 		assert.Less(t, blocks*2, maxSize)
 	})
+
+	t.Run("non-positive per-stream budget does not panic", func(t *testing.T) {
+		recorder := NewRecorder()
+		now := time.Time{}
+		maxSize := 1200
+
+		streams := 250
+		for i := 0; i < streams; i++ {
+			ssrc := uint32(i + 1)
+			recorder.AddPacket(now, ssrc, 0, 0)
+			recorder.AddPacket(now, ssrc, 1, 0)
+		}
+
+		var report *rtcp.CCFeedbackReport
+		assert.NotPanics(t, func() {
+			report = recorder.BuildReport(now, maxSize)
+		})
+		assert.Len(t, report.ReportBlocks, streams)
+		for _, block := range report.ReportBlocks {
+			assert.Empty(t, block.MetricBlocks)
+		}
+	})
 }

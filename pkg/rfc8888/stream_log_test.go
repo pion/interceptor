@@ -582,3 +582,38 @@ func TestRemoveOldestPackets(t *testing.T) {
 	assert.Equal(t, uint16(2), metrics.BeginSequence)
 	assert.Lenf(t, metrics.MetricBlocks, 16384, "%v != %v", len(metrics.MetricBlocks), 16384)
 }
+
+func TestStreamLogDoesNotLeakBelowReportPointer(t *testing.T) {
+	const maxReportBlocks = 4
+	base := time.Time{}
+
+	t.Run("cap on throughput", func(t *testing.T) {
+		sl := newStreamLog(0)
+		for i := 0; i < 2*maxReportBlocks; i++ {
+			sl.add(base, uint16(i), 0) //nolint:gosec // G115
+		}
+		sl.metricsAfter(base.Add(time.Second), maxReportBlocks)
+		assert.Empty(t, sl.log)
+	})
+
+	t.Run("cap grown by packet loss", func(t *testing.T) {
+		sl := newStreamLog(0)
+		sl.add(base, 0, 0)
+		for i := 2; i < 2*maxReportBlocks; i++ { // seq 1 is never received
+			sl.add(base, uint16(i), 0) //nolint:gosec // G115
+		}
+		sl.metricsAfter(base.Add(time.Second), maxReportBlocks)
+		assert.Empty(t, sl.log)
+	})
+
+	t.Run("late packet below the pointer", func(t *testing.T) {
+		sl := newStreamLog(0)
+		sl.add(base, 0, 0)
+		sl.add(base, 1, 0)
+		sl.add(base, 2, 0)
+		sl.metricsAfter(base.Add(time.Second), maxReportBlocks)
+
+		sl.add(base, 1, 0) // duplicate of an already-reported sequence
+		assert.Empty(t, sl.log)
+	})
+}
