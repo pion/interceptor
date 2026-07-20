@@ -147,8 +147,6 @@ func TestJitterBuffer(t *testing.T) {
 		assert.Equal(err, nil)
 	})
 
-	// this will fail now, as rtpbuffer is a circular buffer
-	// sequence 5000 gets overwritten by sequence 8 in this case
 	t.Run("Can peek at a packet", func(*testing.T) {
 		jb := New()
 		for i := range 100 {
