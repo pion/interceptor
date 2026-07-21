@@ -59,6 +59,7 @@ func (g *InterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, 
 type ReceiverInterceptor struct {
 	interceptor.NoOp
 	buffers       map[uint32]*JitterBuffer
+	bufferOptions []Option
 	m             sync.Mutex
 	wg            sync.WaitGroup
 	close         chan struct{}
@@ -76,7 +77,7 @@ func NewInterceptor(opts ...ReceiverInterceptorOption) (*InterceptorFactory, err
 func (i *ReceiverInterceptor) BindRemoteStream(
 	info *interceptor.StreamInfo, reader interceptor.RTPReader,
 ) interceptor.RTPReader {
-	buffer := New()
+	buffer := New(i.bufferOptions...)
 
 	i.m.Lock()
 	i.buffers[info.SSRC] = buffer
