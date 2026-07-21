@@ -109,7 +109,9 @@ func New(opts ...Option) *JitterBuffer {
 		o(jb)
 	}
 
-	jb.packetFactory = rtpbuffer.NewPacketFactoryCopy()
+	if jb.packetFactory == nil {
+		jb.packetFactory = rtpbuffer.NewPacketFactoryCopy()
+	}
 	jb.reorderBuffer, _ = rtpbuffer.NewRTPBuffer(jb.overflowLen)
 	jb.playbackBuffer = NewRingBuffer(jb.overflowLen)
 
@@ -121,6 +123,14 @@ func New(opts ...Option) *JitterBuffer {
 func WithMinimumPacketCount(count uint16) Option {
 	return func(jb *JitterBuffer) {
 		jb.minStartCount = count
+	}
+}
+
+// DisableCopy bypasses copy of underlying packets. It should be used when
+// you are not re-using underlying buffers of packets that have been written.
+func DisableCopy() Option {
+	return func(jb *JitterBuffer) {
+		jb.packetFactory = &rtpbuffer.PacketFactoryNoOp{}
 	}
 }
 
