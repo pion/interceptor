@@ -19,8 +19,8 @@ type InterceptorFactory struct {
 // NewInterceptor constructs a new ReceiverInterceptor.
 func (g *InterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, error) {
 	receiverInterceptor := &ReceiverInterceptor{
-		close:  make(chan struct{}),
-		buffer: New(),
+		close:   make(chan struct{}),
+		buffers: make(map[uint32]*JitterBuffer),
 	}
 
 	for _, opt := range g.opts {
@@ -58,7 +58,7 @@ func (g *InterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, 
 //	arriving) quickly enough.
 type ReceiverInterceptor struct {
 	interceptor.NoOp
-	buffer        *JitterBuffer
+	buffers       map[uint32]*JitterBuffer
 	m             sync.Mutex
 	wg            sync.WaitGroup
 	close         chan struct{}
@@ -74,8 +74,14 @@ func NewInterceptor(opts ...ReceiverInterceptorOption) (*InterceptorFactory, err
 // BindRemoteStream lets you modify any incoming RTP packets. It is called once for per RemoteStream.
 // The returned method will be called once per rtp packet.
 func (i *ReceiverInterceptor) BindRemoteStream(
-	_ *interceptor.StreamInfo, reader interceptor.RTPReader,
+	info *interceptor.StreamInfo, reader interceptor.RTPReader,
 ) interceptor.RTPReader {
+	buffer := New()
+
+	i.m.Lock()
+	i.buffers[info.SSRC] = buffer
+	i.m.Unlock()
+
 	return interceptor.RTPReaderFunc(func(b []byte, a interceptor.Attributes) (int, interceptor.Attributes, error) {
 		buf := make([]byte, len(b))
 		n, attr, err := reader.Read(buf, a)
@@ -88,27 +94,26 @@ func (i *ReceiverInterceptor) BindRemoteStream(
 		}
 		i.m.Lock()
 		defer i.m.Unlock()
-		i.buffer.Push(packet)
-		if i.buffer.state == Emitting {
-			newPkt, err := i.buffer.Pop()
-			if err != nil {
-				return 0, nil, err
-			}
-			nlen, err := newPkt.MarshalTo(b)
-
-			return nlen, attr, err
+		buffer.Push(packet)
+		newPkt, err := buffer.Pop()
+		if err != nil {
+			return 0, attr, ErrPopWhileBuffering
 		}
+		nlen, err := newPkt.MarshalTo(b)
 
-		return n, attr, ErrPopWhileBuffering
+		return nlen, attr, err
 	})
 }
 
 // UnbindRemoteStream is called when the Stream is removed. It can be used to clean up any data related to that track.
-func (i *ReceiverInterceptor) UnbindRemoteStream(_ *interceptor.StreamInfo) {
+func (i *ReceiverInterceptor) UnbindRemoteStream(info *interceptor.StreamInfo) {
 	defer i.wg.Wait()
 	i.m.Lock()
 	defer i.m.Unlock()
-	i.buffer.Clear(true)
+	if buffer, ok := i.buffers[info.SSRC]; ok {
+		buffer.Clear(true)
+		delete(i.buffers, info.SSRC)
+	}
 }
 
 // Close closes the interceptor.
@@ -116,7 +121,10 @@ func (i *ReceiverInterceptor) Close() error {
 	defer i.wg.Wait()
 	i.m.Lock()
 	defer i.m.Unlock()
-	i.buffer.Clear(true)
+	for ssrc, buffer := range i.buffers {
+		buffer.Clear(true)
+		delete(i.buffers, ssrc)
+	}
 
 	return nil
 }
