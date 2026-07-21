@@ -921,3 +921,56 @@ func TestPacketsHheld(t *testing.T) {
 	recorder.BuildFeedbackPacket()
 	assert.Zero(t, recorder.PacketsHeld())
 }
+
+func TestRecordDoesNotAllocateInSteadyState(t *testing.T) {
+	recorder := NewRecorder(5000)
+
+	arrivalTime := int64(0)
+	sequenceNumber := uint16(0)
+	record := func() {
+		arrivalTime += 1000
+		recorder.Record(5000, sequenceNumber, arrivalTime)
+		sequenceNumber++
+	}
+
+	// Warm up until the arrival-time map reaches its maximum size, after which
+	// in-order packets no longer resize it. In normal operation the map stays
+	// small because old entries are culled, but culling only runs once
+	// BuildFeedbackPacket has consumed the recorded range, and building
+	// feedback allocates. Growing the map to its cap instead gives Record a
+	// steady state without any builds in the measured loop.
+	for range maxNumberOfPackets + minCapacity {
+		record()
+	}
+
+	assert.Zero(t, testing.AllocsPerRun(1000, record))
+}
+
+func BenchmarkRecord(b *testing.B) {
+	recorder := NewRecorder(5000)
+
+	arrivalTime := int64(0)
+	sequenceNumber := uint16(0)
+	b.ReportAllocs()
+	for b.Loop() {
+		arrivalTime += 1000
+		recorder.Record(5000, sequenceNumber, arrivalTime)
+		sequenceNumber++
+	}
+}
+
+func BenchmarkRecordAndBuildFeedbackPacket(b *testing.B) {
+	recorder := NewRecorder(5000)
+
+	arrivalTime := int64(0)
+	sequenceNumber := uint16(0)
+	b.ReportAllocs()
+	for b.Loop() {
+		for range 100 {
+			arrivalTime += 1000
+			recorder.Record(5000, sequenceNumber, arrivalTime)
+			sequenceNumber++
+		}
+		recorder.BuildFeedbackPacket()
+	}
+}
