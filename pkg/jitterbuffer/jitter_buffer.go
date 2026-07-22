@@ -242,7 +242,7 @@ func (jb *JitterBuffer) Peek(playoutHead bool) (*rtp.Packet, error) {
 		return nil, ErrNotFound
 	}
 
-	return takePacket(packet), nil
+	return jb.takePacket(packet), nil
 }
 
 // Pop an RTP packet from the jitter buffer at the current playout head.
@@ -262,7 +262,7 @@ func (jb *JitterBuffer) Pop() (*rtp.Packet, error) {
 	jb.playoutHead = (jb.playoutHead + 1)
 	jb.updateState()
 
-	return takePacket(packet), nil
+	return jb.takePacket(packet), nil
 }
 
 // PopAtSequence will pop an RTP packet from the jitter buffer at the specified Sequence.
@@ -282,7 +282,7 @@ func (jb *JitterBuffer) PopAtSequence(sq uint16) (*rtp.Packet, error) {
 	jb.playoutHead = sq + 1
 	jb.updateState()
 
-	return takePacket(packet), nil
+	return jb.takePacket(packet), nil
 }
 
 // PeekAtSequence will return an RTP packet from the jitter buffer at the specified Sequence
@@ -295,7 +295,7 @@ func (jb *JitterBuffer) PeekAtSequence(sq uint16) (*rtp.Packet, error) {
 		return nil, ErrNotFound
 	}
 
-	return takePacket(packet), nil
+	return jb.takePacket(packet), nil
 }
 
 // PopAtTimestamp pops an RTP packet from the jitter buffer with the provided timestamp
@@ -316,20 +316,23 @@ func (jb *JitterBuffer) PopAtTimestamp(ts uint32) (*rtp.Packet, error) {
 	jb.playoutHead = packet.Header().SequenceNumber + 1
 	jb.updateState()
 
-	return takePacket(packet), nil
+	return jb.takePacket(packet), nil
 }
 
 // Unwrap the packet.
-func takePacket(rPacket *rtpbuffer.RetainablePacket) *rtp.Packet {
+func (jb *JitterBuffer) takePacket(rPacket *rtpbuffer.RetainablePacket) *rtp.Packet {
+	header := *rPacket.Header()
 	payload := rPacket.Payload()
-	out := make([]byte, len(payload))
-	copy(out, payload)
-	hdr := *rPacket.Header()
+	if _, ok := jb.packetFactory.(*rtpbuffer.PacketFactoryNoOp); !ok {
+		out := make([]byte, len(payload))
+		copy(out, payload)
+		payload = out
+	}
 	rPacket.Release()
 
 	return &rtp.Packet{
-		Header:  hdr,
-		Payload: out,
+		Header:  header,
+		Payload: payload,
 	}
 }
 
