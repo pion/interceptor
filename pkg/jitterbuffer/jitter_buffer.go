@@ -96,10 +96,10 @@ type Stats struct {
 }
 
 var (
-	// ErrInvalidOperation may be returned if a Pop or Find operation is performed on an empty queue.
+	// ErrInvalidOperation may be returned if a Pop or Find operation is performed on an playback buffer.
 	ErrInvalidOperation = errors.New("attempt to find or pop on an empty list")
-	// ErrNotFound will be returned if the packet cannot be found in the queue.
-	ErrNotFound = errors.New("priority not found")
+	// ErrNotFound will be returned if the packet cannot be found in the playblack buffer.
+	ErrNotFound = errors.New("packet not found")
 )
 
 // New will initialize a jitter buffer and its associated statistics.
