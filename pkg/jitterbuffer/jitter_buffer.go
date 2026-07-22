@@ -254,6 +254,16 @@ func (jb *JitterBuffer) Peek(playoutHead bool) (*rtp.Packet, error) {
 
 // Pop an RTP packet from the jitter buffer at the current playout head.
 func (jb *JitterBuffer) Pop() (*rtp.Packet, error) {
+	packet, err := jb.popRetainable()
+	if err != nil {
+		return nil, err
+	}
+
+	return jb.takePacket(packet), nil
+}
+
+// Same as Pop, except it returns a RetainablePacket.
+func (jb *JitterBuffer) popRetainable() (*rtpbuffer.RetainablePacket, error) {
 	jb.mutex.Lock()
 	defer jb.mutex.Unlock()
 	if jb.state != Emitting {
@@ -269,7 +279,7 @@ func (jb *JitterBuffer) Pop() (*rtp.Packet, error) {
 	jb.playoutHead = (jb.playoutHead + 1)
 	jb.updateState()
 
-	return jb.takePacket(packet), nil
+	return packet, nil
 }
 
 // PopAtSequence will pop an RTP packet from the jitter buffer at the specified Sequence.

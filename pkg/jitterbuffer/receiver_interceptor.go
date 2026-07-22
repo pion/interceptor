@@ -96,11 +96,16 @@ func (i *ReceiverInterceptor) BindRemoteStream(
 		i.m.Lock()
 		defer i.m.Unlock()
 		buffer.Push(packet)
-		newPkt, err := buffer.Pop()
+		rPacket, err := buffer.popRetainable()
 		if err != nil {
 			return 0, attr, ErrPopWhileBuffering
 		}
-		nlen, err := newPkt.MarshalTo(b)
+		out := rtp.Packet{
+			Header:  *rPacket.Header(),
+			Payload: rPacket.Payload(),
+		}
+		nlen, err := out.MarshalTo(b)
+		rPacket.Release()
 
 		return nlen, attr, err
 	})
