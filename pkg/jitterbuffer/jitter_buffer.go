@@ -95,6 +95,13 @@ type Stats struct {
 	overflowCount   uint32
 }
 
+var (
+	// ErrInvalidOperation may be returned if a Pop or Find operation is performed on an empty queue.
+	ErrInvalidOperation = errors.New("attempt to find or pop on an empty list")
+	// ErrNotFound will be returned if the packet cannot be found in the queue.
+	ErrNotFound = errors.New("priority not found")
+)
+
 // New will initialize a jitter buffer and its associated statistics.
 func New(opts ...Option) *JitterBuffer {
 	jb := &JitterBuffer{
