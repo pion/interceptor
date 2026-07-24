@@ -39,45 +39,67 @@ func TestAttributesGetRTPHeader(t *testing.T) {
 	})
 
 	t.Run("NotPresent", func(t *testing.T) {
-		attributes := Attributes{}
-		hdr := &rtp.Header{
-			Version:          0,
-			Padding:          false,
-			Extension:        false,
-			Marker:           false,
-			PayloadType:      0,
-			SequenceNumber:   0,
-			Timestamp:        0,
-			SSRC:             0,
-			ExtensionProfile: 0,
-			Extensions:       nil,
+		for msg, nilAttributes := range map[string]bool{"NilAttributes": true, "EmptyAttributes": false} {
+			t.Run(msg, func(t *testing.T) {
+				var attributes Attributes
+				if !nilAttributes {
+					attributes = Attributes{}
+				}
+				hdr := &rtp.Header{
+					Version:          0,
+					Padding:          false,
+					Extension:        false,
+					Marker:           false,
+					PayloadType:      0,
+					SequenceNumber:   0,
+					Timestamp:        0,
+					SSRC:             0,
+					ExtensionProfile: 0,
+					Extensions:       nil,
+				}
+				buf, err := hdr.Marshal()
+				assert.NoError(t, err)
+				header, err := attributes.GetRTPHeader(buf)
+				assert.NoError(t, err)
+				assert.Equal(t, hdr, header)
+
+				// If attributes were provided, make sure GetRTPHeader returns cached results.
+				if !nilAttributes {
+					amortizedAllocs := testing.AllocsPerRun(100, func() {
+						_, _ = attributes.GetRTPHeader(buf)
+					})
+					assert.Zero(t, amortizedAllocs)
+				}
+			})
 		}
-		buf, err := hdr.Marshal()
-		assert.NoError(t, err)
-		header, err := attributes.GetRTPHeader(buf)
-		assert.NoError(t, err)
-		assert.Equal(t, hdr, header)
 	})
 
 	t.Run("NotPresentFromFullRTPPacket", func(t *testing.T) {
-		attributes := Attributes{}
-		pkt := &rtp.Packet{Header: rtp.Header{
-			Version:          0,
-			Padding:          false,
-			Extension:        false,
-			Marker:           false,
-			PayloadType:      0,
-			SequenceNumber:   0,
-			Timestamp:        0,
-			SSRC:             0,
-			ExtensionProfile: 0,
-			Extensions:       nil,
-		}, Payload: make([]byte, 1000)}
-		buf, err := pkt.Marshal()
-		assert.NoError(t, err)
-		header, err := attributes.GetRTPHeader(buf)
-		assert.NoError(t, err)
-		assert.Equal(t, &pkt.Header, header)
+		for msg, nilAttributes := range map[string]bool{"NilAttributes": true, "EmptyAttributes": false} {
+			t.Run(msg, func(t *testing.T) {
+				var attributes Attributes
+				if !nilAttributes {
+					attributes = Attributes{}
+				}
+				pkt := &rtp.Packet{Header: rtp.Header{
+					Version:          0,
+					Padding:          false,
+					Extension:        false,
+					Marker:           false,
+					PayloadType:      0,
+					SequenceNumber:   0,
+					Timestamp:        0,
+					SSRC:             0,
+					ExtensionProfile: 0,
+					Extensions:       nil,
+				}, Payload: make([]byte, 1000)}
+				buf, err := pkt.Marshal()
+				assert.NoError(t, err)
+				header, err := attributes.GetRTPHeader(buf)
+				assert.NoError(t, err)
+				assert.Equal(t, &pkt.Header, header)
+			})
+		}
 	})
 }
 
@@ -110,18 +132,33 @@ func TestAttributesGetRTCPPackets(t *testing.T) {
 	})
 
 	t.Run("NotPresent", func(t *testing.T) {
-		attributes := Attributes{}
-		sr := &rtcp.SenderReport{
-			SSRC:        0,
-			NTPTime:     0,
-			RTPTime:     0,
-			PacketCount: 0,
-			OctetCount:  0,
+		for msg, nilAttributes := range map[string]bool{"NilAttributes": true, "EmptyAttributes": false} {
+			t.Run(msg, func(t *testing.T) {
+				var attributes Attributes
+				if !nilAttributes {
+					attributes = Attributes{}
+				}
+				sr := &rtcp.SenderReport{
+					SSRC:        0,
+					NTPTime:     0,
+					RTPTime:     0,
+					PacketCount: 0,
+					OctetCount:  0,
+				}
+				buf, err := sr.Marshal()
+				assert.NoError(t, err)
+				packets, err := attributes.GetRTCPPackets(buf)
+				assert.NoError(t, err)
+				assert.Equal(t, []rtcp.Packet{sr}, packets)
+
+				// If attributes were provided, make sure GetRTCPPackets returns cached results.
+				if !nilAttributes {
+					amortizedAllocs := testing.AllocsPerRun(100, func() {
+						_, _ = attributes.GetRTCPPackets(buf)
+					})
+					assert.Zero(t, amortizedAllocs)
+				}
+			})
 		}
-		buf, err := sr.Marshal()
-		assert.NoError(t, err)
-		packets, err := attributes.GetRTCPPackets(buf)
-		assert.NoError(t, err)
-		assert.Equal(t, []rtcp.Packet{sr}, packets)
 	})
 }
