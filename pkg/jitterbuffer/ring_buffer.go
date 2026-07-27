@@ -48,32 +48,24 @@ func (r *RingBuffer) Peek() *rtpbuffer.RetainablePacket {
 }
 
 func (r *RingBuffer) PopAt(sequenceNumber uint16) *rtpbuffer.RetainablePacket {
-	if r.Empty() {
-		return nil
-	}
-
-	extra := sequenceNumber - r.Peek().Header().SequenceNumber
-	if extra >= r.length {
-		return nil
-	}
-
-	for range extra {
-		r.Pop().Release()
-	}
-
-	return r.Pop()
+	return r.popMatching(func(rPacket *rtpbuffer.RetainablePacket) bool {
+		return sequenceNumber == rPacket.Header().SequenceNumber
+	})
 }
 
 func (r *RingBuffer) PopAtTimestamp(timestamp uint32) *rtpbuffer.RetainablePacket {
-	if r.Empty() {
-		return nil
-	}
+	return r.popMatching(func(rPacket *rtpbuffer.RetainablePacket) bool {
+		return timestamp == rPacket.Header().Timestamp
+	})
+}
 
+// popMatching removes and returns the first packet matched, discards the packets ahead of it, and handing ownership
+func (r *RingBuffer) popMatching(match func(*rtpbuffer.RetainablePacket) bool) *rtpbuffer.RetainablePacket {
 	var extra uint16
 	found := false
 	for i := range r.length {
 		rPacket := r.buffer[(r.read+i)%uint16(len(r.buffer))]
-		if timestamp == rPacket.Header().Timestamp {
+		if match(rPacket) {
 			extra = i
 			found = true
 			break
