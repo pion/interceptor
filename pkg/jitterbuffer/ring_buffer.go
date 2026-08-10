@@ -1,20 +1,20 @@
 // SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
-// RingBuffer is a classic Ring Buffer.
 package jitterbuffer
 
 import (
 	"github.com/pion/interceptor/internal/rtpbuffer"
 )
 
+// RingBuffer is a classic Ring Buffer.
 type RingBuffer struct {
-	buffer              []*rtpbuffer.RetainablePacket
-	read, write, length uint16
+	buffer                    []*rtpbuffer.RetainablePacket
+	read, write, length, size uint16
 }
 
 func NewRingBuffer(size uint16) *RingBuffer {
-	return &RingBuffer{buffer: make([]*rtpbuffer.RetainablePacket, size)}
+	return &RingBuffer{buffer: make([]*rtpbuffer.RetainablePacket, size), size: size}
 }
 
 func (r *RingBuffer) Push(rPacket *rtpbuffer.RetainablePacket) bool {
@@ -22,8 +22,9 @@ func (r *RingBuffer) Push(rPacket *rtpbuffer.RetainablePacket) bool {
 		return false
 	}
 	r.buffer[r.write] = rPacket
-	r.write = (r.write + 1) % uint16(len(r.buffer))
+	r.write = (r.write + 1) % r.size
 	r.length++
+
 	return true
 }
 
@@ -33,8 +34,8 @@ func (r *RingBuffer) Pop() *rtpbuffer.RetainablePacket {
 	}
 
 	rPacket := r.buffer[r.read]
-	r.read = (r.read + 1) % uint16(len(r.buffer))
-	r.length--
+	r.read = (r.read + 1) % r.size
+
 	return rPacket
 }
 
@@ -44,6 +45,7 @@ func (r *RingBuffer) Peek() *rtpbuffer.RetainablePacket {
 	}
 
 	rPacket := r.buffer[r.read]
+
 	return rPacket
 }
 
@@ -59,15 +61,16 @@ func (r *RingBuffer) PopAtTimestamp(timestamp uint32) *rtpbuffer.RetainablePacke
 	})
 }
 
-// popMatching removes and returns the first packet matched, discards the packets ahead of it, and handing ownership
+// popMatching removes and returns the first packet matched, discards the packets ahead of it, and handing ownership.
 func (r *RingBuffer) popMatching(match func(*rtpbuffer.RetainablePacket) bool) *rtpbuffer.RetainablePacket {
 	var extra uint16
 	found := false
 	for i := range r.length {
-		rPacket := r.buffer[(r.read+i)%uint16(len(r.buffer))]
+		rPacket := r.buffer[(r.read+i)%r.size]
 		if match(rPacket) {
 			extra = i
 			found = true
+
 			break
 		}
 	}
@@ -85,7 +88,7 @@ func (r *RingBuffer) popMatching(match func(*rtpbuffer.RetainablePacket) bool) *
 
 func (r *RingBuffer) Clear() {
 	for i := range r.length {
-		idx := (r.read + i) % uint16(len(r.buffer))
+		idx := (r.read + i) % r.size
 		if pkt := r.buffer[idx]; pkt != nil {
 			pkt.Release()
 			r.buffer[idx] = nil
@@ -96,6 +99,6 @@ func (r *RingBuffer) Clear() {
 	r.length = 0
 }
 
-func (r *RingBuffer) Full() bool     { return r.length == uint16(len(r.buffer)) }
+func (r *RingBuffer) Full() bool     { return r.length == r.size }
 func (r *RingBuffer) Empty() bool    { return r.length == 0 }
 func (r *RingBuffer) Length() uint16 { return r.length }
