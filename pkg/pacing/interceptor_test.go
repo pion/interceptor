@@ -55,6 +55,31 @@ func (m *mockPacer) SetRate(rate int, burst int) {
 	m.burst = burst
 }
 
+func TestBurst(t *testing.T) {
+	const minBurst = 8 * 1500
+
+	for _, cc := range []struct {
+		name     string
+		rate     int
+		interval time.Duration
+		expected int
+	}{
+		{"sub_millisecond_interval", 1_000_000, 500 * time.Microsecond, minBurst},
+		{"sub_millisecond_interval_high_rate", 100_000_000, 500 * time.Microsecond, 50_000},
+		{"zero_interval_defaults_to_1ms", 100_000_000, 0, 100_000},
+		{"negative_interval_defaults_to_1ms", 100_000_000, -time.Second, 100_000},
+		{"rate_below_min_burst", 300_000, 5 * time.Millisecond, minBurst},
+		{"divides_evenly", 3_000_000, 5 * time.Millisecond, 15_000},
+		{"does_not_divide_evenly", 3_000_000, 7 * time.Millisecond, 21_000},
+		{"long_interval", 3_000_000, 33 * time.Millisecond, 99_000},
+		{"zero_rate", 0, 5 * time.Millisecond, minBurst},
+	} {
+		t.Run(cc.name, func(t *testing.T) {
+			assert.Equal(t, cc.expected, burst(cc.rate, cc.interval))
+		})
+	}
+}
+
 func TestInterceptor(t *testing.T) {
 	t.Run("calls_set_rate", func(t *testing.T) {
 		mp := &mockPacer{}
