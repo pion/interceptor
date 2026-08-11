@@ -6,7 +6,6 @@ package pacing
 
 import (
 	"errors"
-	"log/slog"
 	"maps"
 	"sync"
 	"time"
@@ -241,7 +240,7 @@ func (i *Interceptor) loop() {
 				var next packet
 				next, queue = queue[0], queue[1:]
 				if _, err := next.writer.Write(next.header, next.payload, next.attributes); err != nil {
-					slog.Warn("error on writing RTP packet", "error", err)
+					i.log.Warnf("error on writing RTP packet: %v", err)
 				}
 			}
 		case pkt := <-i.queue:
