@@ -177,12 +177,11 @@ type Interceptor struct {
 // burst calculates the minimal burst size required to reach the given rate and
 // pacing interval.
 func burst(rate int, interval time.Duration) int {
-	if interval == 0 {
+	if interval <= 0 {
 		interval = time.Millisecond
 	}
-	f := float64(time.Second.Milliseconds() / interval.Milliseconds())
 
-	return max(8*1500, int(float64(rate)/f))
+	return max(8*1500, int(float64(rate)*interval.Seconds()))
 }
 
 // setRate updates the pacing rate and burst of the rate limiter.
