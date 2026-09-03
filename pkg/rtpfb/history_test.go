@@ -128,6 +128,19 @@ func TestHistory(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("prunes_packets", func(t *testing.T) {
+		history := newHistory()
+		for i := range uint16(10) {
+			history.addOutgoing(1, i, false, 0, 0, time.Time{})
+		}
+		for i := range uint16(10) {
+			history.onCCFBFeedback(time.Time{}, 1, acknowledgement{sequenceNumber: i, arrived: true})
+		}
+		reports := history.buildReport()
+		assert.Len(t, reports, 10)
+		assert.Empty(t, history.packets)
+	})
 }
 
 // TestHistoryConcurrentFeedback verifies that concurrent calls to onTWCCFeedback

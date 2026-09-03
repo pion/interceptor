@@ -186,6 +186,7 @@ func (h *history) cleanBefore(counter uint64) {
 	for i := h.cleanUntil; i < counter; i++ {
 		if p, ok := h.packets[i]; ok {
 			h.delete(p)
+			delete(h.packets, i)
 		}
 	}
 	h.cleanUntil = counter - 1
