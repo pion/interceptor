@@ -20,12 +20,21 @@ func convertTWCC(feedback *rtcp.TransportLayerCC) []acknowledgement {
 	recvDeltaIndex := 0
 
 	offset := 0
+	processed := uint16(0)
 	for _, pc := range feedback.PacketChunks {
+		if processed >= feedback.PacketStatusCount {
+			break
+		}
 		switch chunk := pc.(type) {
 		case *rtcp.RunLengthChunk:
-			for i := uint16(0); i < chunk.RunLength; i++ {
+			runLength := chunk.RunLength
+			if remaining := feedback.PacketStatusCount - processed; runLength > remaining {
+				runLength = remaining
+			}
+			for i := uint16(0); i < runLength; i++ {
 				seqNr := feedback.BaseSequenceNumber + uint16(offset) // nolint:gosec
 				offset++
+				processed++
 				switch chunk.PacketStatusSymbol {
 				case rtcp.TypeTCCPacketNotReceived:
 					acks = append(acks, acknowledgement{
@@ -35,6 +44,9 @@ func convertTWCC(feedback *rtcp.TransportLayerCC) []acknowledgement {
 						ecn:            0,
 					})
 				case rtcp.TypeTCCPacketReceivedSmallDelta, rtcp.TypeTCCPacketReceivedLargeDelta:
+					if recvDeltaIndex >= len(feedback.RecvDeltas) {
+						continue
+					}
 					delta := feedback.RecvDeltas[recvDeltaIndex]
 					nextTimestamp = nextTimestamp.Add(time.Duration(delta.Delta) * time.Microsecond)
 					recvDeltaIndex++
@@ -55,8 +67,12 @@ func convertTWCC(feedback *rtcp.TransportLayerCC) []acknowledgement {
 			}
 		case *rtcp.StatusVectorChunk:
 			for _, s := range chunk.SymbolList {
+				if processed >= feedback.PacketStatusCount {
+					break
+				}
 				seqNr := feedback.BaseSequenceNumber + uint16(offset) // nolint:gosec
 				offset++
+				processed++
 				switch s {
 				case rtcp.TypeTCCPacketNotReceived:
 					acks = append(acks, acknowledgement{
@@ -66,6 +82,9 @@ func convertTWCC(feedback *rtcp.TransportLayerCC) []acknowledgement {
 						ecn:            0,
 					})
 				case rtcp.TypeTCCPacketReceivedSmallDelta, rtcp.TypeTCCPacketReceivedLargeDelta:
+					if recvDeltaIndex >= len(feedback.RecvDeltas) {
+						continue
+					}
 					delta := feedback.RecvDeltas[recvDeltaIndex]
 					nextTimestamp = nextTimestamp.Add(time.Duration(delta.Delta) * time.Microsecond)
 					recvDeltaIndex++
