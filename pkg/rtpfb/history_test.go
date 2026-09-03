@@ -141,6 +141,21 @@ func TestHistory(t *testing.T) {
 		assert.Len(t, reports, 10)
 		assert.Empty(t, history.packets)
 	})
+
+	t.Run("sets_is_twcc", func(t *testing.T) {
+		history := newHistory()
+		for i := range uint16(10) {
+			history.addOutgoing(1, i, true, i, 0, time.Time{})
+		}
+		for i := range uint16(10) {
+			history.onTWCCFeedback(time.Time{}, acknowledgement{sequenceNumber: i, arrived: true})
+		}
+		reports := history.buildReport()
+		for _, r := range reports {
+			assert.True(t, r.IsTWCC)
+		}
+		assert.Empty(t, history.twccToCounter)
+	})
 }
 
 // TestHistoryConcurrentFeedback verifies that concurrent calls to onTWCCFeedback
