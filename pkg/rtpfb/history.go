@@ -70,6 +70,7 @@ func (h *history) addOutgoing(
 		SSRC:               ssrc,
 		SequenceNumber:     h.counter,
 		RTPSequenceNumber:  rtpSequenceNumber,
+		IsTWCC:             isTWCC,
 		TWCCSequenceNumber: twccSequenceNumber,
 		Size:               size,
 		Departure:          departure,
