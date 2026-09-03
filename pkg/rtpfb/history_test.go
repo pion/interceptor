@@ -5,6 +5,7 @@ package rtpfb
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -127,4 +128,27 @@ func TestHistory(t *testing.T) {
 			})
 		}
 	})
+}
+
+// TestHistoryConcurrentFeedback verifies that concurrent calls to onTWCCFeedback
+// do not race on shared state, since onFeedback writes h.highestAcked and fields
+// on the shared *PacketReport.
+func TestHistoryConcurrentFeedback(t *testing.T) {
+	history := newHistory()
+	const packetCount = 100
+	for i := range uint16(packetCount) {
+		history.addOutgoing(1, i, true, i, 0, time.Time{})
+	}
+
+	var wg sync.WaitGroup
+	for i := range uint16(packetCount) {
+		wg.Add(1)
+		go func(seqNr uint16) {
+			defer wg.Done()
+			history.onTWCCFeedback(time.Time{}, acknowledgement{sequenceNumber: seqNr, arrived: true})
+		}(i)
+	}
+	wg.Wait()
+
+	assert.Equal(t, uint64(packetCount-1), history.highestAcked)
 }

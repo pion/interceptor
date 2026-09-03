@@ -23,7 +23,7 @@ type ssrcSequenceNumber struct {
 // report. buildReport can be used to create a new report including all packets
 // from nextReport to highestAcked.
 type history struct {
-	lock               sync.RWMutex
+	lock               sync.Mutex
 	counter            uint64
 	twccToCounter      map[uint16]uint64
 	ssrcSeqNrToCounter map[ssrcSequenceNumber]uint64
@@ -37,7 +37,6 @@ type history struct {
 
 func newHistory() *history {
 	return &history{
-		lock:               sync.RWMutex{},
 		counter:            0,
 		twccToCounter:      map[uint16]uint64{},
 		ssrcSeqNrToCounter: map[ssrcSequenceNumber]uint64{},
@@ -84,7 +83,7 @@ func (h *history) addOutgoing(
 // onFeedback maps an incoming ack for counter to the PacketReport stored when
 // the packet was sent. If the packet cannot be found, the ack is ignored.
 //
-// onFeedback must be called while holding the lock for reading.
+// onFeedback must be called while holding the lock for writing.
 // onFeedback returns the time between ts and the time the packet was sent.
 func (h *history) onFeedback(ts time.Time, counter uint64, ack acknowledgement) (time.Duration, bool) {
 	p, ok := h.packets[counter]
@@ -105,8 +104,8 @@ func (h *history) onFeedback(ts time.Time, counter uint64, ack acknowledgement) 
 // onTWCCFeedback maps an acknowledgement to the counter by TWCC sequence number
 // and then calls onFeedback.
 func (h *history) onTWCCFeedback(ts time.Time, ack acknowledgement) (time.Duration, bool) {
-	h.lock.RLock()
-	defer h.lock.RUnlock()
+	h.lock.Lock()
+	defer h.lock.Unlock()
 
 	counter, ok := h.twccToCounter[ack.sequenceNumber]
 	if !ok {
@@ -120,8 +119,8 @@ func (h *history) onTWCCFeedback(ts time.Time, ack acknowledgement) (time.Durati
 // onCCFBFeedback maps an acknowledgement to the counter by ssrc and sequence
 // number and then calls onFeedback.
 func (h *history) onCCFBFeedback(ts time.Time, ssrc uint32, ack acknowledgement) (time.Duration, bool) {
-	h.lock.RLock()
-	defer h.lock.RUnlock()
+	h.lock.Lock()
+	defer h.lock.Unlock()
 
 	counter, ok := h.ssrcSeqNrToCounter[ssrcSequenceNumber{
 		ssrc:           ssrc,
