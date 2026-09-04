@@ -39,6 +39,7 @@ type packetLog interface {
 // Option can be used to set initial options on CCFB interceptors.
 type Option func(*Interceptor) error
 
+// WithLoggerFactory sets the logger factory used by the interceptor.
 func WithLoggerFactory(lf logging.LoggerFactory) Option {
 	return func(i *Interceptor) error {
 		i.logFactory = lf
