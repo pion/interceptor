@@ -56,7 +56,12 @@ type PacketReport struct {
 // acknowledged packets that were still in the history and not yet included in
 // an earlier Report.
 type Report struct {
-	Arrival       time.Time
-	RTT           time.Duration
+	Arrival time.Time
+
+	// RTT is the estimated round trip time. It is zero if the feedback packet
+	// did not acknowledge any packet that is still known to the interceptor,
+	// i.e. no RTT could be measured.
+	RTT time.Duration
+
 	PacketReports []PacketReport
 }

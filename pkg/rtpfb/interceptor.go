@@ -220,18 +220,21 @@ func (i *Interceptor) BindRTCPReader(reader interceptor.RTCPReader) interceptor.
 //nolint:cyclop
 func (i *Interceptor) processFeedback(ts time.Time, pkts []rtcp.Packet) (time.Duration, []PacketReport) {
 	shortestRTT := time.Duration(math.MaxInt64)
-	var ackDelay time.Duration
+	measured := false
 
 	for _, pkt := range pkts {
 		switch fb := pkt.(type) {
 		case *rtcp.CCFeedbackReport:
-			var acksPerSSRC map[uint32][]acknowledgement
-			ackDelay, acksPerSSRC = convertCCFB(ts, fb)
+			ackDelay, acksPerSSRC := convertCCFB(ts, fb)
 			for ssrc, acks := range acksPerSSRC {
 				for _, ack := range acks {
 					rtt, ok := i.history.onCCFBFeedback(ts, ssrc, ack)
-					if ok && rtt < shortestRTT {
-						shortestRTT = rtt
+					if !ok {
+						continue
+					}
+					if corrected := max(rtt-ackDelay, 0); corrected < shortestRTT {
+						shortestRTT = corrected
+						measured = true
 					}
 				}
 			}
@@ -240,10 +243,15 @@ func (i *Interceptor) processFeedback(ts time.Time, pkts []rtcp.Packet) (time.Du
 				rtt, ok := i.history.onTWCCFeedback(ts, ack)
 				if ok && rtt < shortestRTT {
 					shortestRTT = rtt
+					measured = true
 				}
 			}
 		}
 	}
 
-	return shortestRTT - ackDelay, i.history.buildReport()
+	if !measured {
+		return 0, i.history.buildReport()
+	}
+
+	return shortestRTT, i.history.buildReport()
 }
