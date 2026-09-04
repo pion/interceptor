@@ -110,6 +110,8 @@ type Interceptor struct {
 }
 
 func (i *Interceptor) bindTWCCStream(twccHdrExtID uint8, writer interceptor.RTPWriter) interceptor.RTPWriter {
+	loggedMissingExt := false
+
 	return interceptor.RTPWriterFunc(func(
 		header *rtp.Header,
 		payload []byte,
@@ -119,12 +121,14 @@ func (i *Interceptor) bindTWCCStream(twccHdrExtID uint8, writer interceptor.RTPW
 
 		var twccHdrExt rtp.TransportCCExtension
 		if err := twccHdrExt.Unmarshal(header.GetExtension(twccHdrExtID)); err != nil {
-			i.log.Warnf(
-				"CCFB configured for TWCC, but failed to get TWCC header extension from outgoing packet."+
-					"Falling back to saving history for CCFB feedback reports. err: %v",
-				err,
-			)
-			i.history.addOutgoing(header.SSRC, header.SequenceNumber, false, 0, header.MarshalSize()+len(payload), ts)
+			if !loggedMissingExt {
+				i.log.Warnf(
+					"CCFB configured for TWCC, but failed to get TWCC header extension from outgoing packet."+
+						"Packets without the extension cannot be tracked and will not appear in feedback reports. err: %v",
+					err,
+				)
+				loggedMissingExt = true
+			}
 
 			return writer.Write(header, payload, attributes)
 		}
