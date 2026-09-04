@@ -180,3 +180,20 @@ func TestHistoryConcurrentFeedback(t *testing.T) {
 
 	assert.Equal(t, uint64(packetCount-1), history.highestAcked)
 }
+
+func TestHistoryArrivedIsNotDowngraded(t *testing.T) {
+	history := newHistory()
+	history.addOutgoing(1, 0, false, 0, 0, time.Time{})
+	history.addOutgoing(1, 1, false, 0, 0, time.Time{})
+
+	arrival := time.Time{}.Add(time.Second)
+	history.onCCFBFeedback(time.Time{}, 1, acknowledgement{sequenceNumber: 0, arrived: true, arrival: arrival})
+	history.onCCFBFeedback(time.Time{}, 1, acknowledgement{sequenceNumber: 0, arrived: false})
+	history.onCCFBFeedback(time.Time{}, 1, acknowledgement{sequenceNumber: 1, arrived: true, arrival: arrival})
+
+	reports := history.buildReport()
+	assert.Equal(t, []PacketReport{
+		{SSRC: 1, SequenceNumber: 0, RTPSequenceNumber: 0, Arrived: true, Arrival: arrival},
+		{SSRC: 1, SequenceNumber: 1, RTPSequenceNumber: 1, Arrived: true, Arrival: arrival},
+	}, reports)
+}
