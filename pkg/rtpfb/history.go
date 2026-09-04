@@ -87,19 +87,22 @@ func (h *history) addOutgoing(
 // onFeedback must be called while holding the lock for writing.
 // onFeedback returns the time between ts and the time the packet was sent.
 func (h *history) onFeedback(ts time.Time, counter uint64, ack acknowledgement) (time.Duration, bool) {
-	p, ok := h.packets[counter]
+	report, ok := h.packets[counter]
 	if !ok {
 		// ignore ack for unknown packet
 		return 0, false
 	}
-	p.Arrived = ack.arrived
-	if p.Arrived && h.highestAcked < p.SequenceNumber {
-		h.highestAcked = p.SequenceNumber
+	if !ack.arrived && report.Arrived {
+		return ts.Sub(report.Departure), true
 	}
-	p.Arrival = ack.arrival
-	p.ECN = ack.ecn
+	report.Arrived = ack.arrived
+	if report.Arrived && h.highestAcked < report.SequenceNumber {
+		h.highestAcked = report.SequenceNumber
+	}
+	report.Arrival = ack.arrival
+	report.ECN = ack.ecn
 
-	return ts.Sub(p.Departure), true
+	return ts.Sub(report.Departure), true
 }
 
 // onTWCCFeedback maps an acknowledgement to the counter by TWCC sequence number
