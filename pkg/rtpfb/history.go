@@ -190,5 +190,5 @@ func (h *history) cleanBefore(counter uint64) {
 			delete(h.packets, i)
 		}
 	}
-	h.cleanUntil = counter - 1
+	h.cleanUntil = counter
 }
