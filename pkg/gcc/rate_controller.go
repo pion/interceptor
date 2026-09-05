@@ -93,7 +93,8 @@ func (c *rateController) onDelayStats(ds DelayStats) {
 		return
 	}
 	c.delayStats = ds
-	c.delayStats.State = c.delayStats.State.transition(ds.Usage)
+	c.delayStats.State = c.lastState.transition(ds.Usage)
+	c.lastState = c.delayStats.State
 
 	if c.delayStats.State == stateHold {
 		return
