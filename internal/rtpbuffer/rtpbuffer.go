@@ -116,3 +116,5 @@ func (r *RTPBuffer) Get(seq uint16) *RetainablePacket {
 
 	return pkt
 }
+
+func (r *RTPBuffer) Started() bool { return r.started }
