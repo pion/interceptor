@@ -25,6 +25,7 @@ type StreamInfo struct {
 	Channels                          uint16
 	SDPFmtpLine                       string
 	RTCPFeedback                      []RTCPFeedback
+	PayloadToMimeType                 map[uint8]string
 }
 
 // RTCPFeedback signals the connection to use additional RTCP packet types.
