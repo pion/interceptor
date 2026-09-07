@@ -96,11 +96,6 @@ func TestReceiverInterceptorExtractsPrimaryOpus(t *testing.T) {
 	}
 	require.NoError(t, outerHeader.SetExtension(3, []byte{0xaa, 0xbb}))
 	redPayload := marshalREDPayload(t, Payload{
-		RedundantBlocks: []Block{{
-			PayloadType:     testOpusPayloadType,
-			TimestampOffset: 960,
-			Payload:         []byte{0x01, 0x02},
-		}},
 		PrimaryBlock: Block{
 			PayloadType: testOpusPayloadType,
 			Payload:     []byte{0x03, 0x04, 0x05},

@@ -5,10 +5,8 @@ package red
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/pion/interceptor"
-	"github.com/pion/rtp"
 )
 
 var (
@@ -43,68 +41,12 @@ func (receiver *ReceiverInterceptor) BindRemoteStream(
 		return reader
 	}
 
-	ssrc := info.SSRC
-	opusPayloadType := info.PayloadType
-	redPayloadType := info.PayloadTypeForwardErrorCorrection
-
-	return interceptor.RTPReaderFunc(func(
-		buffer []byte, attributes interceptor.Attributes,
-	) (int, interceptor.Attributes, error) {
-		n, readAttributes, err := reader.Read(buffer, attributes)
-		if err != nil {
-			return n, readAttributes, err
-		}
-
-		header, err := readAttributes.GetRTPHeader(buffer[:n])
-		if err != nil {
-			return 0, readAttributes, err
-		}
-		if header.SSRC != ssrc || header.PayloadType != redPayloadType {
-			return n, readAttributes, nil
-		}
-
-		return extractPrimary(buffer[:n], buffer, readAttributes, opusPayloadType)
-	})
-}
-
-func extractPrimary(
-	raw, output []byte, attributes interceptor.Attributes, opusPayloadType uint8,
-) (int, interceptor.Attributes, error) {
-	var packet rtp.Packet
-	if err := packet.Unmarshal(raw); err != nil {
-		return 0, attributes, err
+	return &receiverStream{
+		reader:          reader,
+		ssrc:            info.SSRC,
+		opusPayloadType: info.PayloadType,
+		redPayloadType:  info.PayloadTypeForwardErrorCorrection,
 	}
-
-	var redPayload Payload
-	if err := redPayload.Unmarshal(packet.Payload); err != nil {
-		return 0, attributes, fmt.Errorf("%w: %w", errInvalidREDPayload, err)
-	}
-	if redPayload.PrimaryBlock.PayloadType != opusPayloadType {
-		return 0, attributes, fmt.Errorf(
-			"%w: got %d, expected %d",
-			errUnexpectedPrimaryPayloadType,
-			redPayload.PrimaryBlock.PayloadType,
-			opusPayloadType,
-		)
-	}
-	if len(redPayload.PrimaryBlock.Payload) == 0 {
-		return 0, attributes, errEmptyPrimaryPayload
-	}
-
-	primaryPacket := rtp.Packet{
-		Header:  packet.Header.Clone(),
-		Payload: append([]byte(nil), redPayload.PrimaryBlock.Payload...),
-	}
-	primaryPacket.PayloadType = opusPayloadType
-	n, err := primaryPacket.MarshalTo(output)
-	if err != nil {
-		return 0, attributes, err
-	}
-
-	outputAttributes := cloneAttributes(attributes)
-	outputAttributes.SetRTPHeader(&primaryPacket.Header)
-
-	return n, outputAttributes, nil
 }
 
 func cloneAttributes(attributes interceptor.Attributes) interceptor.Attributes {
