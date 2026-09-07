@@ -4,6 +4,7 @@
 package rfc8888
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -322,4 +323,28 @@ func TestReadAfterClose(t *testing.T) {
 	case <-time.After(time.Second):
 		assert.Fail(t, "read after close blocked")
 	}
+}
+
+func TestConcurrentClose(t *testing.T) {
+	f, err := NewSenderInterceptor()
+	assert.NoError(t, err)
+
+	intcp, err := f.NewInterceptor("")
+	assert.NoError(t, err)
+
+	intcp.BindRTCPWriter(interceptor.RTCPWriterFunc(
+		func(_ []rtcp.Packet, _ interceptor.Attributes) (int, error) {
+			return 0, nil
+		},
+	))
+
+	var wg sync.WaitGroup
+	for range 10 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			assert.NoError(t, intcp.Close())
+		}()
+	}
+	wg.Wait()
 }

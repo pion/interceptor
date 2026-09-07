@@ -142,6 +142,8 @@ func (s *SenderInterceptor) BindRemoteStream(
 func (s *SenderInterceptor) Close() error {
 	s.log.Trace("close")
 	defer s.wg.Wait()
+	s.lock.Lock()
+	defer s.lock.Unlock()
 
 	if !s.isClosed() {
 		close(s.close)
