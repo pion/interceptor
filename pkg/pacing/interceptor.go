@@ -178,15 +178,17 @@ type Interceptor struct {
 	onClose func(string)
 }
 
-// burst calculates the minimal burst size required to reach the given rate and
-// pacing interval. The burst is never smaller than minBurst, so that a packet
-// of minBurst bits can always be sent.
+// burst calculates the burst size required to reach the given rate at the
+// given pacing interval. It is one interval's worth of tokens plus minBurst
+// bits of headroom, so that a packet of minBurst bits can always be sent and
+// the tokens left over after a tick are carried into the next one instead of
+// being clamped away.
 func burst(rate int, interval time.Duration, minBurst int) int {
 	if interval <= 0 {
 		interval = time.Millisecond
 	}
 
-	return max(minBurst, int(float64(rate)*interval.Seconds()))
+	return minBurst + int(float64(rate)*interval.Seconds())
 }
 
 // setRate updates the pacing rate and burst of the rate limiter.
