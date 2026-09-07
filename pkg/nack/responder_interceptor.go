@@ -8,6 +8,7 @@ import (
 
 	"github.com/pion/interceptor"
 	"github.com/pion/interceptor/internal/rtpbuffer"
+	"github.com/pion/interceptor/internal/validation"
 	"github.com/pion/logging"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
@@ -42,7 +43,7 @@ func (r *ResponderInterceptorFactory) NewInterceptor(_ string) (interceptor.Inte
 		responderInterceptor.packetFactory = rtpbuffer.NewPacketFactoryCopy()
 	}
 
-	if _, err := rtpbuffer.NewRTPBuffer(responderInterceptor.size); err != nil {
+	if err := validation.IsPowerOfTwo(responderInterceptor.size); err != nil {
 		return nil, err
 	}
 
