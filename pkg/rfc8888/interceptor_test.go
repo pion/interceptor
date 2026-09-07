@@ -282,3 +282,44 @@ func TestInterceptor(t *testing.T) {
 		}, ccfb.ReportBlocks[0].MetricBlocks)
 	})
 }
+
+func TestReadAfterClose(t *testing.T) {
+	f, err := NewSenderInterceptor()
+	assert.NoError(t, err)
+
+	intcp, err := f.NewInterceptor("")
+	assert.NoError(t, err)
+
+	intcp.BindRTCPWriter(interceptor.RTCPWriterFunc(
+		func(pkts []rtcp.Packet, attributes interceptor.Attributes) (int, error) {
+			return 0, nil
+		},
+	))
+
+	raw, err := (&rtp.Packet{
+		Header:  rtp.Header{Version: 2, SequenceNumber: 1, SSRC: 123456},
+		Payload: []byte{},
+	}).Marshal()
+	assert.NoError(t, err)
+
+	reader := intcp.BindRemoteStream(&interceptor.StreamInfo{SSRC: 123456}, interceptor.RTPReaderFunc(
+		func(b []byte, a interceptor.Attributes) (int, interceptor.Attributes, error) {
+			return copy(b, raw), a, nil
+		},
+	))
+
+	assert.NoError(t, intcp.Close())
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _, err := reader.Read(make([]byte, 1500), nil)
+		assert.ErrorIs(t, err, errClosed)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		assert.Fail(t, "read after close blocked")
+	}
+}
