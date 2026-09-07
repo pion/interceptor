@@ -109,13 +109,22 @@ func (stream *receiverStream) readRED(
 	}
 
 	position := stream.history.position(packet.SequenceNumber)
-	if position.stale || stream.history.seen(position) {
+	if position.stale {
 		return 0, attributes, false, nil
 	}
 
-	outputs, recoveredSequences, err := stream.buildOutputs(packet, redPayload, position, attributes)
+	outputs, recoveredSequences, err := stream.buildOutputs(
+		packet,
+		redPayload,
+		position,
+		attributes,
+		!stream.history.seen(position),
+	)
 	if err != nil {
 		return 0, attributes, false, err
+	}
+	if len(outputs) == 0 {
+		return 0, attributes, false, nil
 	}
 
 	stream.history.commit(position, recoveredSequences)
@@ -145,6 +154,7 @@ func (stream *receiverStream) buildOutputs(
 	redPayload Payload,
 	position sequencePosition,
 	attributes interceptor.Attributes,
+	includePrimary bool,
 ) ([]receiverOutput, []int64, error) {
 	outputs := make([]receiverOutput, 0, len(redPayload.RedundantBlocks)+1)
 	recoveredSequences := make([]int64, 0, len(redPayload.RedundantBlocks))
@@ -167,17 +177,20 @@ func (stream *receiverStream) buildOutputs(
 		recoveredSequences = append(recoveredSequences, extendedSequence)
 	}
 
-	primaryPacket := rtp.Packet{
-		Header:  packet.Header.Clone(),
-		Payload: redPayload.PrimaryBlock.Payload,
-	}
-	primaryPacket.PayloadType = stream.opusPayloadType
-	primaryOutput, err := newReceiverOutput(primaryPacket, attributes)
-	if err != nil {
-		return nil, nil, err
+	if includePrimary {
+		primaryPacket := rtp.Packet{
+			Header:  packet.Header.Clone(),
+			Payload: redPayload.PrimaryBlock.Payload,
+		}
+		primaryPacket.PayloadType = stream.opusPayloadType
+		primaryOutput, err := newReceiverOutput(primaryPacket, attributes)
+		if err != nil {
+			return nil, nil, err
+		}
+		outputs = append(outputs, primaryOutput)
 	}
 
-	return append(outputs, primaryOutput), recoveredSequences, nil
+	return outputs, recoveredSequences, nil
 }
 
 func (stream *receiverStream) shouldRecover(

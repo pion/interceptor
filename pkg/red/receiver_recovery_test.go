@@ -195,6 +195,39 @@ func TestReceiverInterceptorSuppressesLateAndDuplicatePackets(t *testing.T) {
 	assert.Empty(t, downstream.results)
 }
 
+func TestReceiverInterceptorRecoversFromLateREDPacketWithSeenPrimary(t *testing.T) {
+	newerPacket := makeREDPacket(t, rtp.Header{
+		Version:        2,
+		SequenceNumber: 4,
+		Timestamp:      3_840,
+		SSRC:           testSSRC,
+	}, []Block{
+		{PayloadType: testOpusPayloadType, TimestampOffset: 1_920, Payload: []byte{0x02}},
+		{PayloadType: testOpusPayloadType, TimestampOffset: 960, Payload: []byte{0x03}},
+	}, []byte{0x04})
+	latePacket := makeREDPacket(t, rtp.Header{
+		Version:        2,
+		SequenceNumber: 3,
+		Timestamp:      2_880,
+		SSRC:           testSSRC,
+	}, []Block{
+		{PayloadType: testOpusPayloadType, TimestampOffset: 1_920, Payload: []byte{0x01}},
+		{PayloadType: testOpusPayloadType, TimestampOffset: 960, Payload: []byte{0x02}},
+	}, []byte{0x03})
+	downstream := readerForPackets(t, newerPacket, latePacket)
+	reader := newTestReceiver(t, opusStreamInfo(), downstream)
+
+	for expectedSequence := uint16(2); expectedSequence <= 4; expectedSequence++ {
+		packet, _ := readOutputPacket(t, reader)
+		assert.Equal(t, expectedSequence, packet.SequenceNumber)
+	}
+
+	recovered, _ := readOutputPacket(t, reader)
+	assert.Equal(t, uint16(1), recovered.SequenceNumber)
+	assert.Equal(t, []byte{0x01}, recovered.Payload)
+	assert.Empty(t, downstream.results)
+}
+
 func TestReceiverInterceptorDeliversUnseenReorderedPacket(t *testing.T) {
 	downstream := readerForPackets(
 		t,
