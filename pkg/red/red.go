@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
-// Package red implements the RTP payload format for redundant audio data described by RFC 2198.
 package red
 
 import (
