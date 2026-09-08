@@ -6,6 +6,7 @@
 package rfc8888
 
 import (
+	"errors"
 	"sync"
 	"time"
 
@@ -13,6 +14,8 @@ import (
 	"github.com/pion/logging"
 	"github.com/pion/rtcp"
 )
+
+var errClosed = errors.New("interceptor is closed")
 
 // TickerFactory is a factory to create new tickers.
 type TickerFactory func(d time.Duration) ticker
@@ -125,7 +128,11 @@ func (s *SenderInterceptor) BindRemoteStream(
 			sequenceNumber: header.SequenceNumber,
 			ecn:            0, // ECN is not supported (yet).
 		}
-		s.packetChan <- p
+		select {
+		case <-s.close:
+			return 0, nil, errClosed
+		case s.packetChan <- p:
+		}
 
 		return i, attr, nil
 	})
@@ -135,6 +142,8 @@ func (s *SenderInterceptor) BindRemoteStream(
 func (s *SenderInterceptor) Close() error {
 	s.log.Trace("close")
 	defer s.wg.Wait()
+	s.lock.Lock()
+	defer s.lock.Unlock()
 
 	if !s.isClosed() {
 		close(s.close)

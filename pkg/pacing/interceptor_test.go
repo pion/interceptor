@@ -66,17 +66,17 @@ func TestBurst(t *testing.T) {
 		minBurst int
 		expected int
 	}{
-		{"sub_millisecond_interval", 1_000_000, 500 * time.Microsecond, minBurst, minBurst},
-		{"sub_millisecond_interval_high_rate", 100_000_000, 500 * time.Microsecond, minBurst, 50_000},
-		{"zero_interval_defaults_to_1ms", 100_000_000, 0, minBurst, 100_000},
-		{"negative_interval_defaults_to_1ms", 100_000_000, -time.Second, minBurst, 100_000},
-		{"rate_below_min_burst", 300_000, 5 * time.Millisecond, minBurst, minBurst},
-		{"divides_evenly", 3_000_000, 5 * time.Millisecond, minBurst, 15_000},
-		{"does_not_divide_evenly", 3_000_000, 7 * time.Millisecond, minBurst, 21_000},
-		{"long_interval", 3_000_000, 33 * time.Millisecond, minBurst, 99_000},
+		{"sub_millisecond_interval", 1_000_000, 500 * time.Microsecond, minBurst, minBurst + 500},
+		{"sub_millisecond_interval_high_rate", 100_000_000, 500 * time.Microsecond, minBurst, minBurst + 50_000},
+		{"zero_interval_defaults_to_1ms", 100_000_000, 0, minBurst, minBurst + 100_000},
+		{"negative_interval_defaults_to_1ms", 100_000_000, -time.Second, minBurst, minBurst + 100_000},
+		{"low_rate", 300_000, 5 * time.Millisecond, minBurst, minBurst + 1_500},
+		{"divides_evenly", 3_000_000, 5 * time.Millisecond, minBurst, minBurst + 15_000},
+		{"does_not_divide_evenly", 3_000_000, 7 * time.Millisecond, minBurst, minBurst + 21_000},
+		{"long_interval", 3_000_000, 33 * time.Millisecond, minBurst, minBurst + 99_000},
 		{"zero_rate", 0, 5 * time.Millisecond, minBurst, minBurst},
-		{"grown_min_burst_wins", 300_000, 5 * time.Millisecond, 8 * 4000, 8 * 4000},
-		{"rate_above_grown_min_burst", 100_000_000, 5 * time.Millisecond, 8 * 4000, 500_000},
+		{"grown_min_burst", 300_000, 5 * time.Millisecond, 8 * 4000, 8*4000 + 1_500},
+		{"grown_min_burst_high_rate", 100_000_000, 5 * time.Millisecond, 8 * 4000, 8*4000 + 500_000},
 	} {
 		t.Run(cc.name, func(t *testing.T) {
 			assert.Equal(t, cc.expected, burst(cc.rate, cc.interval, cc.minBurst))
@@ -99,7 +99,7 @@ func TestInterceptor(t *testing.T) {
 
 		i.SetRate("", 1_000_000)
 		assert.Equal(t, 1_000_000, mp.rate)
-		assert.Equal(t, 12000, mp.burst)
+		assert.Equal(t, 12000+5000, mp.burst)
 	})
 
 	t.Run("grows_burst", func(t *testing.T) {
@@ -128,14 +128,14 @@ func TestInterceptor(t *testing.T) {
 		pacer.growMTU(4000)
 		mp.lock.Lock()
 		assert.Equal(t, 300_000, mp.rate)
-		assert.Equal(t, 8*4000, mp.burst)
+		assert.Equal(t, 8*4000+1_500, mp.burst)
 		mp.lock.Unlock()
 
 		pacer.growMTU(1500)
 		factory.SetRate("id", 600_000)
 		mp.lock.Lock()
 		assert.Equal(t, 600_000, mp.rate)
-		assert.Equal(t, 8*4000, mp.burst)
+		assert.Equal(t, 8*4000+3_000, mp.burst)
 		mp.lock.Unlock()
 	})
 
