@@ -323,3 +323,47 @@ func TestSenderInterceptor_Leak(t *testing.T) {
 		stream.ReceiveRTP(&rtp.Packet{Header: hdr})
 	}
 }
+
+func TestSenderInterceptorReadWithoutRTCPWriter(t *testing.T) {
+	f, err := NewSenderInterceptor()
+	assert.NoError(t, err)
+
+	testInterceptor, err := f.NewInterceptor("")
+	assert.NoError(t, err)
+	defer func() {
+		assert.NoError(t, testInterceptor.Close())
+	}()
+
+	hdr := rtp.Header{Version: 2}
+	tcc, err := (&rtp.TransportCCExtension{TransportSequence: 1}).Marshal()
+	assert.NoError(t, err)
+	assert.NoError(t, hdr.SetExtension(1, tcc))
+	raw, err := (&rtp.Packet{Header: hdr, Payload: []byte{}}).Marshal()
+	assert.NoError(t, err)
+
+	reader := testInterceptor.BindRemoteStream(&interceptor.StreamInfo{
+		SSRC: 1,
+		RTPHeaderExtensions: []interceptor.RTPHeaderExtension{
+			{URI: transportCCURI, ID: 1},
+		},
+	}, interceptor.RTPReaderFunc(
+		func(b []byte, a interceptor.Attributes) (int, interceptor.Attributes, error) {
+			return copy(b, raw), a, nil
+		},
+	))
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for range 2 * packetChanBufferSize {
+			_, _, err := reader.Read(make([]byte, 1500), nil)
+			assert.NoError(t, err)
+		}
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		assert.Fail(t, "read blocked without a bound RTCP writer")
+	}
+}

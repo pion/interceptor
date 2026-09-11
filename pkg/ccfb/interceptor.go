@@ -15,6 +15,10 @@ import (
 	"github.com/pion/rtcp"
 )
 
+// packetChanBufferSize is the number of packets buffered for the report loop
+// before new packets are dropped.
+const packetChanBufferSize = 1000
+
 var errClosed = errors.New("interceptor is closed")
 
 // TickerFactory is a factory to create new tickers.
@@ -34,7 +38,7 @@ func (s *SenderInterceptorFactory) NewInterceptor(_ string) (interceptor.Interce
 		recorder:      NewRecorder(),
 		interval:      100 * time.Millisecond,
 		maxReportSize: 1200,
-		packetChan:    make(chan packet),
+		packetChan:    make(chan packet, packetChanBufferSize),
 		newTicker: func(d time.Duration) ticker {
 			return &timeTicker{time.NewTicker(d)}
 		},
@@ -128,10 +132,13 @@ func (s *SenderInterceptor) BindRemoteStream(
 			sequenceNumber: header.SequenceNumber,
 			ecn:            0, // ECN is not supported (yet).
 		}
-		select {
-		case <-s.close:
+		if s.isClosed() {
 			return 0, nil, errClosed
+		}
+		select {
 		case s.packetChan <- p:
+		default:
+			s.log.Trace("packet channel is full, dropping packet")
 		}
 
 		return i, attr, nil
@@ -161,6 +168,17 @@ func (s *SenderInterceptor) isClosed() bool {
 	}
 }
 
+func (s *SenderInterceptor) recordQueuedPackets() {
+	for range len(s.packetChan) {
+		select {
+		case pkt := <-s.packetChan:
+			s.recorder.AddPacket(pkt.arrival, pkt.ssrc, pkt.sequenceNumber, pkt.ecn)
+		default:
+			return
+		}
+	}
+}
+
 func (s *SenderInterceptor) loop(writer interceptor.RTCPWriter) {
 	defer s.wg.Done()
 
@@ -186,6 +204,7 @@ func (s *SenderInterceptor) loop(writer interceptor.RTCPWriter) {
 			s.recorder.AddPacket(pkt.arrival, pkt.ssrc, pkt.sequenceNumber, pkt.ecn)
 
 		case <-t.Ch():
+			s.recordQueuedPackets()
 			now := s.now()
 			s.log.Tracef("report triggered at %v", now)
 			if writer == nil {
