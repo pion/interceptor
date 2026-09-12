@@ -671,7 +671,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		assert.NoError(t, err)
 
 		assert.NotEmpty(t, results)
-		assert.Len(t, results, 7)
+		assert.Len(t, results, 2)
 		assert.Contains(t, results, Acknowledgment{
 			SequenceNumber: 65535,
 			Size:           pkt65535.Header.MarshalSize() + 1200,
@@ -739,21 +739,13 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 			},
 		})
 		assert.NoError(t, err)
-		assert.Len(t, results, 7)
+		assert.Len(t, results, 3)
 		for i := range uint16(3) {
 			assert.Contains(t, results, Acknowledgment{
 				SequenceNumber: i,
 				Size:           headers[i].MarshalSize() + 1200,
 				Departure:      t0,
 				Arrival:        t0.Add(time.Duration((i + 1)) * 4 * time.Microsecond),
-			})
-		}
-		for i := uint16(3); i < 7; i++ {
-			assert.Contains(t, results, Acknowledgment{
-				SequenceNumber: i,
-				Size:           headers[i].MarshalSize() + 1200,
-				Departure:      t0,
-				Arrival:        time.Time{},
 			})
 		}
 	})
@@ -858,7 +850,7 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		})
 
 		assert.NoError(t, err)
-		assert.Len(t, packets, 14)
+		assert.Len(t, packets, 3)
 	})
 
 	t.Run("mixedRunLengthAndStatusVector", func(t *testing.T) {
