@@ -32,6 +32,21 @@ func (a Attributes) Set(key any, val any) {
 	a[key] = val
 }
 
+// SetRTPHeader stores an unmarshaled RTP header in the attributes cache. A nil
+// header clears the cached value. Calling SetRTPHeader on nil attributes is safe.
+func (a Attributes) SetRTPHeader(header *rtp.Header) {
+	if a == nil {
+		return
+	}
+	if header == nil {
+		delete(a, rtpHeaderKey)
+
+		return
+	}
+
+	a[rtpHeaderKey] = header
+}
+
 // GetRTPHeader gets the RTP header if present. If it is not present, it will be
 // unmarshalled from the raw byte slice and stored in the attributes. If the
 // provided attributes is nil, GetRTPHeader will always unmarshal but will not
