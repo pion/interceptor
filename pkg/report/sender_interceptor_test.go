@@ -38,17 +38,11 @@ func TestSenderInterceptor(t *testing.T) {
 		}()
 
 		mt.SetNow(time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC))
-		pkts := <-stream.WrittenRTCP()
-		assert.Equal(t, len(pkts), 1)
-		sr, ok := pkts[0].(*rtcp.SenderReport)
-		assert.True(t, ok)
-		assert.Equal(t, &rtcp.SenderReport{
-			SSRC:        123456,
-			NTPTime:     ntp.ToNTP(mt.Now()),
-			RTPTime:     2269117121,
-			PacketCount: 0,
-			OctetCount:  0,
-		}, sr)
+		select {
+		case pkts := <-stream.WrittenRTCP():
+			assert.Fail(t, "no sender report expected before any RTP packet", "%+v", pkts)
+		case <-time.After(time.Millisecond * 200):
+		}
 	})
 
 	t.Run("after RTP packets", func(t *testing.T) {
@@ -247,6 +241,7 @@ func TestSenderInterceptor(t *testing.T) {
 		}()
 
 		<-loopStarted
+		assert.NoError(t, stream.WriteRTP(&rtp.Packet{Header: rtp.Header{SequenceNumber: 0}, Payload: []byte("\x00\x00")}))
 		for range 5 {
 			advanceTicker()
 			pkts := <-stream.WrittenRTCP()
