@@ -117,7 +117,7 @@ func New(opts ...Option) *JitterBuffer {
 	}
 
 	if jb.packetFactory == nil {
-		jb.packetFactory = rtpbuffer.NewPacketFactoryCopy()
+		jb.packetFactory = &rtpbuffer.PacketFactoryNoOp{}
 	}
 	jb.reorderBuffer, _ = rtpbuffer.NewRTPBuffer(jb.overflowLen)
 	jb.playbackBuffer = NewRingBuffer(jb.overflowLen)
@@ -186,6 +186,14 @@ func (jb *JitterBuffer) Push(packet *rtp.Packet) {
 	rPacket, err := jb.packetFactory.NewPacket(&packet.Header, packet.Payload, 0, 0)
 	if err != nil {
 		return
+	}
+
+	// With the no-copy factory the RetainablePacket references the caller's
+	// header and payload directly, so the caller's *rtp.Packet is already a
+	// valid unwrapped view. Cache it so peeks/pops return it without
+	// allocating a fresh *rtp.Packet.
+	if _, ok := jb.packetFactory.(*rtpbuffer.PacketFactoryNoOp); ok {
+		rPacket.SetUnwrapped(packet)
 	}
 
 	if jb.playbackBuffer.Length() == 0 {
@@ -338,6 +346,12 @@ func (jb *JitterBuffer) PopAtTimestamp(ts uint32) (*rtp.Packet, error) {
 
 // Unwrap the packet.
 func (jb *JitterBuffer) takePacket(rPacket *rtpbuffer.RetainablePacket) *rtp.Packet {
+	if pkt := rPacket.Unwrapped(); pkt != nil {
+		rPacket.Release()
+
+		return pkt
+	}
+
 	header := *rPacket.Header()
 	payload := rPacket.Payload()
 	if _, ok := jb.packetFactory.(*rtpbuffer.PacketFactoryNoOp); !ok {
@@ -345,12 +359,15 @@ func (jb *JitterBuffer) takePacket(rPacket *rtpbuffer.RetainablePacket) *rtp.Pac
 		copy(out, payload)
 		payload = out
 	}
-	rPacket.Release()
 
-	return &rtp.Packet{
+	pkt := &rtp.Packet{
 		Header:  header,
 		Payload: payload,
 	}
+	rPacket.SetUnwrapped(pkt)
+	rPacket.Release()
+
+	return pkt
 }
 
 // Move the packets into the playback buffer as long as they are in order.
