@@ -107,7 +107,7 @@ func (c *rateController) onDelayStats(ds DelayStats) {
 	case stateHold:
 		// should never occur due to check above, but makes the linter happy
 	case stateIncrease:
-		c.target = clampInt(c.increase(now), c.minBitrate, c.maxBitrate)
+		c.target = clampInt(c.increase(now), c.target, c.maxBitrate)
 		next = DelayStats{
 			Measurement:      c.delayStats.Measurement,
 			Estimate:         c.delayStats.Estimate,
