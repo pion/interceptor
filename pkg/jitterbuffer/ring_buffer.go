@@ -34,7 +34,9 @@ func (r *RingBuffer) Pop() *rtpbuffer.RetainablePacket {
 	}
 
 	rPacket := r.buffer[r.read]
+	r.buffer[r.read] = nil
 	r.read = (r.read + 1) % r.size
+	r.length--
 
 	return rPacket
 }

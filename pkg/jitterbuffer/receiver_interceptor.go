@@ -6,9 +6,10 @@ package jitterbuffer
 import (
 	"sync"
 
-	"github.com/pion/interceptor"
 	"github.com/pion/logging"
 	"github.com/pion/rtp"
+
+	"github.com/pion/interceptor"
 )
 
 // InterceptorFactory is a interceptor.Factory for a GeneratorInterceptor.
@@ -90,7 +91,7 @@ func (i *ReceiverInterceptor) BindRemoteStream(
 			return n, attr, err
 		}
 		packet := &rtp.Packet{}
-		if err := packet.Unmarshal(buf[:n]); err != nil {
+		if err = packet.Unmarshal(buf[:n]); err != nil {
 			return 0, nil, err
 		}
 		i.m.Lock()
