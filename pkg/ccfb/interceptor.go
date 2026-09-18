@@ -83,7 +83,7 @@ type packet struct {
 	arrival        time.Time
 	ssrc           uint32
 	sequenceNumber uint16
-	ecn            uint8
+	ecn            rtcp.ECN
 }
 
 // BindRTCPWriter lets you modify any outgoing RTCP packets. It is called once per PeerConnection. The returned method
@@ -122,11 +122,12 @@ func (s *SenderInterceptor) BindRemoteStream(
 			return 0, nil, err
 		}
 
+		ecn, _ := attr.Get(interceptor.ECNKey).(rtcp.ECN)
 		p := packet{
 			arrival:        s.now(),
 			ssrc:           header.SSRC,
 			sequenceNumber: header.SequenceNumber,
-			ecn:            0, // ECN is not supported (yet).
+			ecn:            ecn,
 		}
 		select {
 		case <-s.close:
