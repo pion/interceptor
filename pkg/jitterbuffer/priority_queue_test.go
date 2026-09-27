@@ -150,6 +150,36 @@ func TestPriorityQueue(t *testing.T) {
 		assert.Equal(uint16(100), queue.Length())
 		assert.Equal(err, nil)
 	})
+
+	t.Run("Handles a sequence number already in the queue", func(*testing.T) {
+		queue := NewQueue()
+		first := &rtp.Packet{Header: rtp.Header{SequenceNumber: 5000, Timestamp: 500}, Payload: []byte{0x01}}
+		queue.Push(first, first.SequenceNumber)
+		duplicate := &rtp.Packet{Header: rtp.Header{SequenceNumber: 5000, Timestamp: 900}, Payload: []byte{0x02}}
+		queue.Push(duplicate, duplicate.SequenceNumber)
+
+		assert.Equal(uint16(2), queue.Length())
+
+		// A duplicate priority must not link back into the list: the tail has to
+		// terminate, otherwise every traversal (Find, Pop, PopAt*) spins forever.
+		assert.NotNil(queue.next)
+		assert.NotNil(queue.next.next)
+		assert.Nil(queue.next.next.next)
+		assert.Nil(queue.next.prev)
+		assert.Equal(queue.next, queue.next.next.prev)
+
+		popped := make([]*rtp.Packet, 0, 2)
+		for range 2 {
+			pkt, err := queue.Pop()
+			assert.NoError(err)
+			popped = append(popped, pkt)
+		}
+		assert.ElementsMatch([]*rtp.Packet{first, duplicate}, popped)
+		assert.Equal(uint16(0), queue.Length())
+
+		_, err := queue.Pop()
+		assert.ErrorIs(err, ErrInvalidOperation)
+	})
 }
 
 func TestPriorityQueue_Find(t *testing.T) {

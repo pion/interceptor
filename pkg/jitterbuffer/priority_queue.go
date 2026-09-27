@@ -77,6 +77,7 @@ func (q *PriorityQueue) Push(val *rtp.Packet, priority uint16) {
 		}
 		q.next = newPq
 		q.length++
+
 		return
 	}
 
