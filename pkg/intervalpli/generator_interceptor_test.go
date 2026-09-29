@@ -85,3 +85,43 @@ func TestPLIGeneratorInterceptor(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, &rtcp.PictureLossIndication{MediaSSRC: streamSSRC}, sr)
 }
+
+func TestPLIGeneratorInterceptor_UnbindRemoteStream(t *testing.T) {
+	generatorInterceptor, err := NewGeneratorInterceptor(
+		GeneratorInterval(time.Millisecond*20),
+		GeneratorLog(logging.NewDefaultLoggerFactory().NewLogger("test")),
+	)
+	assert.Nil(t, err)
+
+	info := &interceptor.StreamInfo{
+		SSRC:      123456,
+		ClockRate: 90000,
+		MimeType:  "video/h264",
+		RTCPFeedback: []interceptor.RTCPFeedback{
+			{Type: "nack", Parameter: "pli"},
+		},
+	}
+	stream := test.NewMockStream(info, generatorInterceptor)
+	defer func() {
+		assert.NoError(t, stream.Close())
+	}()
+
+	// The stream is being generated PLIs while it is bound.
+	<-stream.WrittenRTCP()
+
+	generatorInterceptor.UnbindRemoteStream(info)
+
+	// Drop PLIs that were already in flight when the stream was unbound.
+	time.Sleep(50 * time.Millisecond)
+	for len(stream.WrittenRTCP()) > 0 {
+		<-stream.WrittenRTCP()
+	}
+
+	timeout := time.NewTimer(200 * time.Millisecond)
+	defer timeout.Stop()
+	select {
+	case <-timeout.C:
+	case <-stream.WrittenRTCP():
+		assert.FailNow(t, "should not receive any PLI after the stream is unbound")
+	}
+}

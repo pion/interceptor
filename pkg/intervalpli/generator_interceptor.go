@@ -190,8 +190,8 @@ func (r *GeneratorInterceptor) BindRemoteStream(
 	return reader
 }
 
-// UnbindLocalStream is called when the Stream is removed. It can be used to clean up any data related to that track.
-func (r *GeneratorInterceptor) UnbindLocalStream(info *interceptor.StreamInfo) {
+// UnbindRemoteStream is called when the Stream is removed. It can be used to clean up any data related to that track.
+func (r *GeneratorInterceptor) UnbindRemoteStream(info *interceptor.StreamInfo) {
 	r.streams.Delete(info.SSRC)
 }
 
