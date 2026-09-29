@@ -203,5 +203,8 @@ func (r *GeneratorInterceptor) BindRTCPReader(reader interceptor.RTCPReader) int
 
 // ForcePLI sends a PLI request to the tracks matching the provided SSRCs.
 func (r *GeneratorInterceptor) ForcePLI(ssrc ...uint32) {
-	r.immediatePLINeeded <- ssrc
+	select {
+	case r.immediatePLINeeded <- ssrc:
+	case <-r.close:
+	}
 }

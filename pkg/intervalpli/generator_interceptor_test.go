@@ -85,3 +85,24 @@ func TestPLIGeneratorInterceptor(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, &rtcp.PictureLossIndication{MediaSSRC: streamSSRC}, sr)
 }
+
+func TestPLIGeneratorInterceptor_ForcePLIAfterClose(t *testing.T) {
+	generatorInterceptor, err := NewGeneratorInterceptor()
+	assert.Nil(t, err)
+	assert.NoError(t, generatorInterceptor.Close())
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		// The channel has room for one request and nothing reads it once closed.
+		generatorInterceptor.ForcePLI(1)
+		generatorInterceptor.ForcePLI(2)
+		generatorInterceptor.ForcePLI(3)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		assert.FailNow(t, "ForcePLI blocked after the interceptor was closed")
+	}
+}
