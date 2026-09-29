@@ -61,6 +61,9 @@ func (s *receiveLog) add(seq uint16) {
 			s.lastConsecutive = seq - s.size
 			s.fixLastConsecutive() // there might be valid packets at the beginning of the buffer now
 		}
+	case s.end-seq >= s.size:
+		// the packet is older than the window; its slot now belongs to a newer sequence number
+		return
 	case s.lastConsecutive+1 == seq:
 		// negative diff, seq < end (with counting for rollovers)
 		s.lastConsecutive = seq

@@ -151,3 +151,28 @@ func TestReceivedBuffer(t *testing.T) {
 		})
 	}
 }
+
+func TestReceiveLogIgnoresPacketsOlderThanWindow(t *testing.T) {
+	for _, start := range []uint16{0, 100, 65000} {
+		t.Run(fmt.Sprintf("StartFrom%d", start), func(t *testing.T) {
+			rl, err := newReceiveLog(128)
+			assert.NoError(t, err)
+
+			missing := start + 200
+			for i := range uint16(250) {
+				if start+i != missing {
+					rl.add(start + i)
+				}
+			}
+			assert.Equal(t, []uint16{missing}, rl.missingSeqNumbers(0, make([]uint16, 128)))
+
+			// A packet from more than one window ago shares its slot with the missing packet.
+			rl.add(missing - 128)
+			assert.Equal(t, []uint16{missing}, rl.missingSeqNumbers(0, make([]uint16, 128)))
+			assert.False(t, rl.get(missing))
+
+			rl.add(missing)
+			assert.Empty(t, rl.missingSeqNumbers(0, make([]uint16, 128)))
+		})
+	}
+}
