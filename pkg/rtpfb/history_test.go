@@ -29,10 +29,11 @@ func TestHistoryWaitsForFirstAcknowledgement(t *testing.T) {
 				}
 			}
 
-			// Unrelated feedback must not consume the first unacknowledged packet.
 			require.Empty(t, history.buildReport())
+			// Loss feedback for a known packet must not consume the first unacknowledged packet.
 			feedback(acknowledgement{sequenceNumber: 0, arrived: false})
 			require.Empty(t, history.buildReport())
+			// An ACK for an unknown packet must not consume it either.
 			feedback(acknowledgement{sequenceNumber: 99, arrived: true})
 			require.Empty(t, history.buildReport())
 
