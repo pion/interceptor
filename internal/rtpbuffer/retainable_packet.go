@@ -4,7 +4,7 @@
 package rtpbuffer
 
 import (
-	"sync"
+	"sync/atomic"
 
 	"github.com/pion/rtp"
 )
@@ -13,12 +13,16 @@ import (
 type RetainablePacket struct {
 	onRelease func(*rtp.Header, *[]byte)
 
-	countMu sync.Mutex
-	count   int
+	count atomic.Int32
 
 	header  *rtp.Header
 	buffer  *[]byte
 	payload []byte
+
+	// unwrapped caches an *rtp.Packet view so repeated reads of the same
+	// buffered packet (e.g. many PeekAtSequence calls) reuse one allocation
+	// instead of building a fresh *rtp.Packet each time. Cleared on release.
+	unwrapped *rtp.Packet
 
 	sequenceNumber uint16
 }
@@ -33,30 +37,38 @@ func (p *RetainablePacket) Payload() []byte {
 	return p.payload
 }
 
+// Unwrapped returns the cached *rtp.Packet view, or nil if none is cached yet.
+func (p *RetainablePacket) Unwrapped() *rtp.Packet {
+	return p.unwrapped
+}
+
+// SetUnwrapped caches an *rtp.Packet view for reuse by later reads.
+func (p *RetainablePacket) SetUnwrapped(pkt *rtp.Packet) {
+	p.unwrapped = pkt
+}
+
 // Retain increases the reference count of the RetainablePacket.
 func (p *RetainablePacket) Retain() error {
-	p.countMu.Lock()
-	defer p.countMu.Unlock()
-	if p.count == 0 {
-		// already released
-		return errPacketReleased
+	for {
+		n := p.count.Load()
+		if n == 0 {
+			// already released
+			return errPacketReleased
+		}
+		if p.count.CompareAndSwap(n, n+1) {
+			return nil
+		}
 	}
-	p.count++
-
-	return nil
 }
 
 // Release decreases the reference count of the RetainablePacket and frees if needed.
 func (p *RetainablePacket) Release() {
-	p.countMu.Lock()
-	defer p.countMu.Unlock()
-	p.count--
-
-	if p.count == 0 {
+	if p.count.Add(-1) == 0 {
 		// release back to pool
 		p.onRelease(p.header, p.buffer)
 		p.header = nil
 		p.buffer = nil
 		p.payload = nil
+		p.unwrapped = nil
 	}
 }

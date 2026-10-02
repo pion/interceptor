@@ -27,3 +27,12 @@ func WithLoggerFactory(loggerFactory logging.LoggerFactory) ReceiverInterceptorO
 		return nil
 	}
 }
+
+// WithBufferOptions configures JitterBuffers created for each remote stream.
+func WithBufferOptions(opts ...Option) ReceiverInterceptorOption {
+	return func(d *ReceiverInterceptor) error {
+		d.bufferOptions = append(d.bufferOptions, opts...)
+
+		return nil
+	}
+}
