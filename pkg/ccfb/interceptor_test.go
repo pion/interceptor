@@ -26,7 +26,8 @@ func TestInterceptor(t *testing.T) {
 		assert.NoError(t, err)
 
 		stream := test.NewMockStream(&interceptor.StreamInfo{
-			SSRC: 123456,
+			SSRC:         123456,
+			RTCPFeedback: []interceptor.RTCPFeedback{{Type: "ack", Parameter: "ccfb"}},
 		}, i)
 		defer func() {
 			assert.NoError(t, stream.Close())
@@ -48,7 +49,8 @@ func TestInterceptor(t *testing.T) {
 		assert.NoError(t, err)
 
 		stream := test.NewMockStream(&interceptor.StreamInfo{
-			SSRC: 123456,
+			SSRC:         123456,
+			RTCPFeedback: []interceptor.RTCPFeedback{{Type: "ack", Parameter: "ccfb"}},
 		}, i)
 		defer func() {
 			assert.NoError(t, stream.Close())
@@ -100,7 +102,8 @@ func TestInterceptor(t *testing.T) {
 		assert.NoError(t, err)
 
 		stream := test.NewMockStream(&interceptor.StreamInfo{
-			SSRC: 123456,
+			SSRC:         123456,
+			RTCPFeedback: []interceptor.RTCPFeedback{{Type: "ack", Parameter: "ccfb"}},
 		}, i)
 		defer func() {
 			assert.NoError(t, stream.Close())
@@ -180,7 +183,8 @@ func TestInterceptor(t *testing.T) {
 		assert.NoError(t, err)
 
 		stream := test.NewMockStream(&interceptor.StreamInfo{
-			SSRC: 123456,
+			SSRC:         123456,
+			RTCPFeedback: []interceptor.RTCPFeedback{{Type: "ack", Parameter: "ccfb"}},
 		}, i)
 		defer func() {
 			assert.NoError(t, stream.Close())
@@ -284,6 +288,37 @@ func TestInterceptor(t *testing.T) {
 	})
 }
 
+func TestStreamWithoutCCFB(t *testing.T) {
+	f, err := NewSenderInterceptor()
+	assert.NoError(t, err)
+
+	i, err := f.NewInterceptor("")
+	assert.NoError(t, err)
+
+	stream := test.NewMockStream(&interceptor.StreamInfo{
+		SSRC:         123456,
+		RTCPFeedback: []interceptor.RTCPFeedback{{Type: "transport-cc"}},
+	}, i)
+	defer func() {
+		assert.NoError(t, stream.Close())
+	}()
+
+	for i := range 10 {
+		stream.ReceiveRTP(&rtp.Packet{
+			Header: rtp.Header{
+				SequenceNumber: uint16(i), //nolint:gosec // G115
+				SSRC:           123456,
+			},
+		})
+	}
+
+	select {
+	case pkts := <-stream.WrittenRTCP():
+		assert.Fail(t, "unexpected RTCP", "%v", pkts)
+	case <-time.After(300 * time.Millisecond):
+	}
+}
+
 func TestReadAfterClose(t *testing.T) {
 	f, err := NewSenderInterceptor()
 	assert.NoError(t, err)
@@ -303,7 +338,10 @@ func TestReadAfterClose(t *testing.T) {
 	}).Marshal()
 	assert.NoError(t, err)
 
-	reader := intcp.BindRemoteStream(&interceptor.StreamInfo{SSRC: 123456}, interceptor.RTPReaderFunc(
+	reader := intcp.BindRemoteStream(&interceptor.StreamInfo{
+		SSRC:         123456,
+		RTCPFeedback: []interceptor.RTCPFeedback{{Type: "ack", Parameter: "ccfb"}},
+	}, interceptor.RTPReaderFunc(
 		func(b []byte, a interceptor.Attributes) (int, interceptor.Attributes, error) {
 			return copy(b, raw), a, nil
 		},
