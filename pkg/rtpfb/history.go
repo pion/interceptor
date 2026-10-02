@@ -30,6 +30,7 @@ type history struct {
 
 	packets      map[uint64]*PacketReport
 	highestAcked uint64
+	hasAcked     bool
 	nextReport   uint64
 
 	cleanUntil uint64
@@ -96,8 +97,9 @@ func (h *history) onFeedback(ts time.Time, counter uint64, ack acknowledgement) 
 		return ts.Sub(report.Departure), true
 	}
 	report.Arrived = ack.arrived
-	if report.Arrived && h.highestAcked < report.SequenceNumber {
-		h.highestAcked = report.SequenceNumber
+	if report.Arrived {
+		h.highestAcked = max(h.highestAcked, report.SequenceNumber)
+		h.hasAcked = true
 	}
 	report.Arrival = ack.arrival
 	report.ECN = ack.ecn
@@ -150,7 +152,8 @@ func (h *history) buildReport() []PacketReport {
 	h.lock.Lock()
 	defer h.lock.Unlock()
 
-	if h.nextReport > h.highestAcked {
+	// The initial highestAcked value of zero is not an acknowledgement.
+	if !h.hasAcked || h.nextReport > h.highestAcked {
 		return nil
 	}
 	res := make([]PacketReport, 0, h.highestAcked-h.nextReport+1)

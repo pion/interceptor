@@ -10,7 +10,53 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestHistoryWaitsForFirstAcknowledgement(t *testing.T) {
+	for _, useTWCC := range []bool{false, true} {
+		t.Run(fmt.Sprintf("twcc=%v", useTWCC), func(t *testing.T) {
+			history := newHistory()
+			require.Empty(t, history.buildReport())
+			for sequence := range uint16(2) {
+				history.addOutgoing(1, sequence, useTWCC, sequence, 1200, time.Time{})
+			}
+			feedback := func(ack acknowledgement) {
+				if useTWCC {
+					history.onTWCCFeedback(time.Time{}, ack)
+				} else {
+					history.onCCFBFeedback(time.Time{}, 1, ack)
+				}
+			}
+
+			require.Empty(t, history.buildReport())
+			// Loss feedback for a known packet must not consume the first unacknowledged packet.
+			feedback(acknowledgement{sequenceNumber: 0, arrived: false})
+			require.Empty(t, history.buildReport())
+			// An ACK for an unknown packet must not consume it either.
+			feedback(acknowledgement{sequenceNumber: 99, arrived: true})
+			require.Empty(t, history.buildReport())
+
+			// The first acknowledgement may have the global sequence number zero.
+			feedback(acknowledgement{sequenceNumber: 0, arrived: true})
+			reports := history.buildReport()
+			require.Len(t, reports, 1)
+			assert.Equal(t, uint64(0), reports[0].SequenceNumber)
+			assert.True(t, reports[0].Arrived)
+			feedback(acknowledgement{sequenceNumber: 0, arrived: true})
+			require.Empty(t, history.buildReport(), "duplicate ACK must not emit another report")
+
+			feedback(acknowledgement{sequenceNumber: 1, arrived: true})
+			reports = history.buildReport()
+			require.Len(t, reports, 1)
+			assert.Equal(t, uint64(1), reports[0].SequenceNumber)
+			assert.True(t, reports[0].Arrived)
+			assert.Empty(t, history.packets)
+			assert.Empty(t, history.twccToCounter)
+			assert.Empty(t, history.ssrcSeqNrToCounter)
+		})
+	}
+}
 
 func TestHistoryCCFB(t *testing.T) {
 	cases := []struct {
