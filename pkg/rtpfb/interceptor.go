@@ -39,6 +39,7 @@ type packetLog interface {
 // Option can be used to set initial options on CCFB interceptors.
 type Option func(*Interceptor) error
 
+// WithLoggerFactory sets the logger factory used by the interceptor.
 func WithLoggerFactory(lf logging.LoggerFactory) Option {
 	return func(i *Interceptor) error {
 		i.logFactory = lf
@@ -110,6 +111,8 @@ type Interceptor struct {
 }
 
 func (i *Interceptor) bindTWCCStream(twccHdrExtID uint8, writer interceptor.RTPWriter) interceptor.RTPWriter {
+	loggedMissingExt := false
+
 	return interceptor.RTPWriterFunc(func(
 		header *rtp.Header,
 		payload []byte,
@@ -119,12 +122,14 @@ func (i *Interceptor) bindTWCCStream(twccHdrExtID uint8, writer interceptor.RTPW
 
 		var twccHdrExt rtp.TransportCCExtension
 		if err := twccHdrExt.Unmarshal(header.GetExtension(twccHdrExtID)); err != nil {
-			i.log.Warnf(
-				"CCFB configured for TWCC, but failed to get TWCC header extension from outgoing packet."+
-					"Falling back to saving history for CCFB feedback reports. err: %v",
-				err,
-			)
-			i.history.addOutgoing(header.SSRC, header.SequenceNumber, false, 0, header.MarshalSize()+len(payload), ts)
+			if !loggedMissingExt {
+				i.log.Warnf(
+					"CCFB configured for TWCC, but failed to get TWCC header extension from outgoing packet."+
+						"Packets without the extension cannot be tracked and will not appear in feedback reports. err: %v",
+					err,
+				)
+				loggedMissingExt = true
+			}
 
 			return writer.Write(header, payload, attributes)
 		}
@@ -220,18 +225,21 @@ func (i *Interceptor) BindRTCPReader(reader interceptor.RTCPReader) interceptor.
 //nolint:cyclop
 func (i *Interceptor) processFeedback(ts time.Time, pkts []rtcp.Packet) (time.Duration, []PacketReport) {
 	shortestRTT := time.Duration(math.MaxInt64)
-	var ackDelay time.Duration
+	measured := false
 
 	for _, pkt := range pkts {
 		switch fb := pkt.(type) {
 		case *rtcp.CCFeedbackReport:
-			var acksPerSSRC map[uint32][]acknowledgement
-			ackDelay, acksPerSSRC = convertCCFB(ts, fb)
+			ackDelay, acksPerSSRC := convertCCFB(ts, fb)
 			for ssrc, acks := range acksPerSSRC {
 				for _, ack := range acks {
 					rtt, ok := i.history.onCCFBFeedback(ts, ssrc, ack)
-					if ok && rtt < shortestRTT {
-						shortestRTT = rtt
+					if !ok {
+						continue
+					}
+					if corrected := max(rtt-ackDelay, 0); corrected < shortestRTT {
+						shortestRTT = corrected
+						measured = true
 					}
 				}
 			}
@@ -240,10 +248,15 @@ func (i *Interceptor) processFeedback(ts time.Time, pkts []rtcp.Packet) (time.Du
 				rtt, ok := i.history.onTWCCFeedback(ts, ack)
 				if ok && rtt < shortestRTT {
 					shortestRTT = rtt
+					measured = true
 				}
 			}
 		}
 	}
 
-	return shortestRTT - ackDelay, i.history.buildReport()
+	if !measured {
+		return 0, i.history.buildReport()
+	}
+
+	return shortestRTT, i.history.buildReport()
 }

@@ -12,7 +12,7 @@ import (
 	"github.com/pion/logging"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
-	transportTest "github.com/pion/transport/v4/test"
+	transportTest "github.com/pion/transport/v5/test"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -44,7 +44,13 @@ func TestSenderInterceptor(t *testing.T) {
 	})
 
 	t.Run("after RTP packets", func(t *testing.T) {
-		f, err := NewSenderInterceptor()
+		mt := &test.MockTime{}
+		mt.SetNow(time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC))
+		mTick := &test.MockTicker{C: make(chan time.Time)}
+		f, err := NewSenderInterceptor(
+			SendNow(mt.Now),
+			SendTicker(func(time.Duration) Ticker { return mTick }),
+		)
 		assert.NoError(t, err)
 
 		i, err := f.NewInterceptor("")
@@ -69,6 +75,13 @@ func TestSenderInterceptor(t *testing.T) {
 			assert.NoError(t, err)
 			stream.ReceiveRTP(&rtp.Packet{Header: hdr})
 		}
+
+		// Reading a packet means the interceptor has handed it to the send
+		// loop, so the tick below happens after all packets are recorded.
+		for range 10 {
+			assert.NoError(t, (<-stream.ReadRTP()).Err)
+		}
+		mTick.Tick(mt.Now())
 
 		pkts := <-stream.WrittenRTCP()
 		assert.Equal(t, 1, len(pkts))

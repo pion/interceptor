@@ -1,14 +1,18 @@
 // SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
-package rfc8888
+package twcc
 
 import "time"
 
-type ticker interface {
+// Ticker is an interface for *time.Ticker for use with the SendTicker option.
+type Ticker interface {
 	Ch() <-chan time.Time
 	Stop()
 }
+
+// TickerFactory is a factory to create new tickers.
+type TickerFactory func(d time.Duration) Ticker
 
 type timeTicker struct {
 	*time.Ticker

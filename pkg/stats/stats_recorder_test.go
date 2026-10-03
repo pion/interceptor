@@ -100,7 +100,7 @@ func TestStatsRecorder(t *testing.T) {
 				},
 				LastPacketReceivedTimestamp: now.Add(2 * time.Second),
 				HeaderBytesReceived:         36,
-				BytesReceived:               36,
+				BytesReceived:               30,
 			},
 		},
 		{
@@ -146,7 +146,7 @@ func TestStatsRecorder(t *testing.T) {
 			expectedOutboundRTPStreamStats: OutboundRTPStreamStats{
 				SentRTPStreamStats: SentRTPStreamStats{
 					PacketsSent: 2,
-					BytesSent:   24,
+					BytesSent:   20,
 				},
 				HeaderBytesSent: 24,
 			},
@@ -202,7 +202,7 @@ func TestStatsRecorder(t *testing.T) {
 			expectedOutboundRTPStreamStats: OutboundRTPStreamStats{
 				SentRTPStreamStats: SentRTPStreamStats{
 					PacketsSent: 2,
-					BytesSent:   24,
+					BytesSent:   20,
 				},
 				HeaderBytesSent: 24,
 			},
@@ -376,7 +376,7 @@ func TestStatsRecorder(t *testing.T) {
 			expectedOutboundRTPStreamStats: OutboundRTPStreamStats{
 				SentRTPStreamStats: SentRTPStreamStats{
 					PacketsSent: 3,
-					BytesSent:   36,
+					BytesSent:   30,
 				},
 				HeaderBytesSent: 36,
 				NACKCount:       1,
@@ -465,7 +465,7 @@ func TestStatsRecorder(t *testing.T) {
 			expectedOutboundRTPStreamStats: OutboundRTPStreamStats{
 				SentRTPStreamStats: SentRTPStreamStats{
 					PacketsSent: 3,
-					BytesSent:   36,
+					BytesSent:   30,
 				},
 				HeaderBytesSent: 36,
 				NACKCount:       1,
@@ -516,7 +516,7 @@ func TestStatsRecorder(t *testing.T) {
 			expectedOutboundRTPStreamStats: OutboundRTPStreamStats{
 				SentRTPStreamStats: SentRTPStreamStats{
 					PacketsSent: 3,
-					BytesSent:   36,
+					BytesSent:   30,
 				},
 				HeaderBytesSent: 36,
 				NACKCount:       0,
@@ -566,7 +566,7 @@ func TestStatsRecorder(t *testing.T) {
 			expectedOutboundRTPStreamStats: OutboundRTPStreamStats{
 				SentRTPStreamStats: SentRTPStreamStats{
 					PacketsSent: 3,
-					BytesSent:   36,
+					BytesSent:   30,
 				},
 				HeaderBytesSent: 36,
 				FIRCount:        0,
@@ -616,7 +616,7 @@ func TestStatsRecorder(t *testing.T) {
 			expectedOutboundRTPStreamStats: OutboundRTPStreamStats{
 				SentRTPStreamStats: SentRTPStreamStats{
 					PacketsSent: 3,
-					BytesSent:   36,
+					BytesSent:   30,
 				},
 				HeaderBytesSent: 36,
 				PLICount:        0,
@@ -686,7 +686,7 @@ func TestStatsRecorder(t *testing.T) {
 				},
 				LastPacketReceivedTimestamp: now,
 				HeaderBytesReceived:         36,
-				BytesReceived:               36,
+				BytesReceived:               30,
 			},
 		},
 		{
@@ -736,7 +736,7 @@ func TestStatsRecorder(t *testing.T) {
 				},
 				LastPacketReceivedTimestamp: now,
 				HeaderBytesReceived:         36,
-				BytesReceived:               36,
+				BytesReceived:               30,
 				PLICount:                    0,
 			},
 		},
@@ -787,7 +787,7 @@ func TestStatsRecorder(t *testing.T) {
 				},
 				LastPacketReceivedTimestamp: now,
 				HeaderBytesReceived:         36,
-				BytesReceived:               36,
+				BytesReceived:               30,
 				FIRCount:                    0,
 			},
 		},
@@ -830,7 +830,7 @@ func TestStatsRecorder(t *testing.T) {
 				},
 				LastPacketReceivedTimestamp: now.Add(2*time.Second + 100*time.Millisecond),
 				HeaderBytesReceived:         36,
-				BytesReceived:               36,
+				BytesReceived:               30,
 			},
 		},
 		{
@@ -868,7 +868,7 @@ func TestStatsRecorder(t *testing.T) {
 			expectedOutboundRTPStreamStats: OutboundRTPStreamStats{
 				SentRTPStreamStats: SentRTPStreamStats{
 					PacketsSent: 1,
-					BytesSent:   12,
+					BytesSent:   10,
 				},
 				HeaderBytesSent: 12,
 			},
@@ -915,7 +915,7 @@ func TestStatsRecorder(t *testing.T) {
 			expectedOutboundRTPStreamStats: OutboundRTPStreamStats{
 				SentRTPStreamStats: SentRTPStreamStats{
 					PacketsSent: 1,
-					BytesSent:   12,
+					BytesSent:   10,
 				},
 				HeaderBytesSent: 12,
 			},
@@ -972,7 +972,7 @@ func TestStatsRecorder(t *testing.T) {
 			expectedOutboundRTPStreamStats: OutboundRTPStreamStats{
 				SentRTPStreamStats: SentRTPStreamStats{
 					PacketsSent: 2,
-					BytesSent:   24,
+					BytesSent:   20,
 				},
 				HeaderBytesSent: 24,
 			},
@@ -1064,19 +1064,20 @@ func TestStatsRecorder(t *testing.T) {
 	} {
 		t.Run(fmt.Sprintf("%v:%v", i, cc.name), func(t *testing.T) {
 			recorder := newRecorder(0, 90_000, logging.NewDefaultLoggerFactory())
+			payload := make([]byte, 10)
 
 			recorder.Start()
 
 			for _, record := range cc.records {
 				switch v := record.content.(type) {
 				case incomingRTP:
-					recorder.QueueIncomingRTP(record.ts, mustMarshalRTP(t, rtp.Packet{Header: v.header}), v.attr)
+					recorder.QueueIncomingRTP(record.ts, mustMarshalRTP(t, rtp.Packet{Header: v.header, Payload: payload}), v.attr)
 				case incomingRTCP:
 					pkts := make(rtcp.CompoundPacket, len(v.pkts))
 					copy(pkts, v.pkts)
 					recorder.QueueIncomingRTCP(record.ts, mustMarshalRTCPs(t, &pkts), v.attr)
 				case outgoingRTP:
-					recorder.QueueOutgoingRTP(record.ts, &v.header, []byte{}, v.attr)
+					recorder.QueueOutgoingRTP(record.ts, &v.header, payload, v.attr)
 				case outgoingRTCP:
 					recorder.QueueOutgoingRTCP(record.ts, v.pkts, v.attr)
 				default:
@@ -1118,6 +1119,24 @@ func TestStatsRecorder_DLRR_Precision(t *testing.T) {
 	}, report, time.Time{})
 
 	assert.Equal(t, int64(s.RemoteOutboundRTPStreamStats.RoundTripTime), int64(-9223372036854775808))
+}
+
+func TestStatsRecorderPayloadAndHeaderBytes(t *testing.T) {
+	recorder := newRecorder(0, 90_000, logging.NewDefaultLoggerFactory())
+	recorder.Start()
+
+	header := rtp.Header{Version: 2, Padding: true, PaddingSize: 4}
+	payload := make([]byte, 100)
+	recorder.QueueIncomingRTP(time.Now(), mustMarshalRTP(t, rtp.Packet{Header: header, Payload: payload}), nil)
+	recorder.QueueOutgoingRTP(time.Now(), &header, payload, nil)
+
+	stats := recorder.GetStats()
+	recorder.Stop()
+
+	assert.Equal(t, uint64(100), stats.InboundRTPStreamStats.BytesReceived)
+	assert.Equal(t, uint64(12+4), stats.InboundRTPStreamStats.HeaderBytesReceived)
+	assert.Equal(t, uint64(100), stats.OutboundRTPStreamStats.BytesSent)
+	assert.Equal(t, uint64(12+4), stats.OutboundRTPStreamStats.HeaderBytesSent)
 }
 
 func TestGetStatsNotBlocking(t *testing.T) {

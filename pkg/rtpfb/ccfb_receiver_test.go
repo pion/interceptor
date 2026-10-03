@@ -11,6 +11,7 @@ import (
 	"github.com/pion/interceptor/internal/ntp"
 	"github.com/pion/rtcp"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestConvertCCFB(t *testing.T) {
@@ -59,6 +60,56 @@ func TestConvertCCFB(t *testing.T) {
 			},
 			expectAckDelay: 500 * time.Millisecond,
 		},
+		{
+			// Two report blocks for the same media SSRC must be merged, not
+			// overwritten.
+			ts: timeZero.Add(2 * time.Second),
+			feedback: &rtcp.CCFeedbackReport{
+				SenderSSRC: 1,
+				ReportBlocks: []rtcp.CCFeedbackReportBlock{
+					{
+						MediaSSRC:     2,
+						BeginSequence: 17,
+						MetricBlocks: []rtcp.CCFeedbackMetricBlock{
+							{
+								Received:          true,
+								ECN:               0,
+								ArrivalTimeOffset: 512,
+							},
+						},
+					},
+					{
+						MediaSSRC:     2,
+						BeginSequence: 18,
+						MetricBlocks: []rtcp.CCFeedbackMetricBlock{
+							{
+								Received:          true,
+								ECN:               0,
+								ArrivalTimeOffset: 256,
+							},
+						},
+					},
+				},
+				ReportTimestamp: ntp.ToNTP32(timeZero.Add(time.Second)),
+			},
+			expect: map[uint32][]acknowledgement{
+				2: {
+					{
+						sequenceNumber: 17,
+						arrived:        true,
+						arrival:        timeZero.Add(500 * time.Millisecond),
+						ecn:            0,
+					},
+					{
+						sequenceNumber: 18,
+						arrived:        true,
+						arrival:        timeZero.Add(750 * time.Millisecond),
+						ecn:            0,
+					},
+				},
+			},
+			expectAckDelay: 250 * time.Millisecond,
+		},
 	}
 	for i, tc := range cases {
 		t.Run(fmt.Sprintf("%v", i), func(t *testing.T) {
@@ -70,6 +121,7 @@ func TestConvertCCFB(t *testing.T) {
 			// may be slightly off due to ntp conversions.
 			assert.Equal(t, len(tc.expect), len(res))
 			for i, acks := range tc.expect {
+				require.Equal(t, len(acks), len(res[i]))
 				for j, ack := range acks {
 					assert.Equal(t, ack.sequenceNumber, res[i][j].sequenceNumber)
 					assert.Equal(t, ack.arrived, res[i][j].arrived)

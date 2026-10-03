@@ -14,6 +14,7 @@ import (
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type ackListEntry struct {
@@ -25,6 +26,18 @@ type ackListEntry struct {
 type mockHistory struct {
 	log  []PacketReport
 	acks []ackListEntry
+
+	// rtts returns the RTT and match result for an acknowledgement. If nil,
+	// the mock reports a match with a zero RTT.
+	rtts func(ack acknowledgement) (time.Duration, bool)
+}
+
+func (m *mockHistory) rtt(ack acknowledgement) (time.Duration, bool) {
+	if m.rtts == nil {
+		return 0, true
+	}
+
+	return m.rtts(ack)
 }
 
 // addOutgoing implements packetLog.
@@ -59,7 +72,7 @@ func (m *mockHistory) onCCFBFeedback(ts time.Time, ssrc uint32, ack acknowledgem
 		ack:  ack,
 	})
 
-	return 0, true
+	return m.rtt(ack)
 }
 
 // onTWCCFeedback implements packetLog.
@@ -70,7 +83,7 @@ func (m *mockHistory) onTWCCFeedback(ts time.Time, ack acknowledgement) (time.Du
 		ack:  ack,
 	})
 
-	return 0, true
+	return m.rtt(ack)
 }
 
 func TestInterceptor(t *testing.T) {
@@ -215,4 +228,150 @@ func TestInterceptor(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestProcessFeedbackRTT(t *testing.T) {
+	mockTimeStamp := time.Time{}.Add(120 * time.Second)
+
+	// ccfbReport builds a report acknowledging a single packet. The arrival
+	// time offset determines the ack delay: ato/1024 seconds.
+	ccfbReport := func(seqNr uint16, ato uint16) *rtcp.CCFeedbackReport {
+		return &rtcp.CCFeedbackReport{
+			ReportBlocks: []rtcp.CCFeedbackReportBlock{
+				{
+					MediaSSRC:     0,
+					BeginSequence: seqNr,
+					MetricBlocks: []rtcp.CCFeedbackMetricBlock{
+						{Received: true, ArrivalTimeOffset: ato},
+					},
+				},
+			},
+			ReportTimestamp: 0,
+		}
+	}
+	twccReport := &rtcp.TransportLayerCC{
+		BaseSequenceNumber: 1,
+		PacketStatusCount:  1,
+		PacketChunks: []rtcp.PacketStatusChunk{
+			&rtcp.RunLengthChunk{
+				PacketStatusSymbol: rtcp.TypeTCCPacketReceivedSmallDelta,
+				RunLength:          1,
+			},
+		},
+		RecvDeltas: []*rtcp.RecvDelta{
+			{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 0},
+		},
+	}
+
+	cases := []struct {
+		name     string
+		packets  []rtcp.Packet
+		rtts     func(ack acknowledgement) (time.Duration, bool)
+		expected time.Duration
+	}{
+		{
+			name:    "no_match_returns_zero",
+			packets: []rtcp.Packet{ccfbReport(1, 512)},
+			rtts: func(acknowledgement) (time.Duration, bool) {
+				return 0, false
+			},
+			expected: 0,
+		},
+		{
+			name:    "subtracts_ack_delay",
+			packets: []rtcp.Packet{ccfbReport(1, 512)},
+			rtts: func(acknowledgement) (time.Duration, bool) {
+				return 800 * time.Millisecond, true
+			},
+			expected: 300 * time.Millisecond,
+		},
+		{
+			name:    "ack_delay_is_per_report",
+			packets: []rtcp.Packet{ccfbReport(1, 512), ccfbReport(2, 1024)},
+			rtts: func(ack acknowledgement) (time.Duration, bool) {
+				if ack.sequenceNumber == 1 {
+					return 800 * time.Millisecond, true
+				}
+
+				return 1200 * time.Millisecond, true
+			},
+			expected: 200 * time.Millisecond,
+		},
+		{
+			name:    "ack_delay_larger_than_rtt_clamps_to_zero",
+			packets: []rtcp.Packet{ccfbReport(1, 1024)},
+			rtts: func(acknowledgement) (time.Duration, bool) {
+				return 500 * time.Millisecond, true
+			},
+			expected: 0,
+		},
+		{
+			name:    "twcc_rtt_is_not_corrected",
+			packets: []rtcp.Packet{twccReport},
+			rtts: func(acknowledgement) (time.Duration, bool) {
+				return 300 * time.Millisecond, true
+			},
+			expected: 300 * time.Millisecond,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			mh := &mockHistory{rtts: tc.rtts}
+			mt := func() time.Time {
+				return mockTimeStamp
+			}
+			f, err := NewInterceptor(timeFactory(mt), setHistory(mh))
+			assert.NoError(t, err)
+			i, err := f.NewInterceptor("")
+			assert.NoError(t, err)
+
+			ic, ok := i.(*Interceptor)
+			assert.True(t, ok)
+			rtt, _ := ic.processFeedback(mockTimeStamp, tc.packets)
+			assert.Equal(t, tc.expected, rtt)
+		})
+	}
+}
+
+func TestReceiverReportBeforeFirstAcknowledgement(t *testing.T) {
+	factory, err := NewInterceptor()
+	require.NoError(t, err)
+	feedback, err := factory.NewInterceptor("test")
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, feedback.Close()) })
+	writer := feedback.BindLocalStream(&interceptor.StreamInfo{}, interceptor.RTPWriterFunc(func(
+		header *rtp.Header, payload []byte, _ interceptor.Attributes,
+	) (int, error) {
+		return header.MarshalSize() + len(payload), nil
+	}))
+	_, err = writer.Write(&rtp.Header{Version: 2, SSRC: 123, SequenceNumber: 17}, nil, nil)
+	require.NoError(t, err)
+
+	wire, err := (&rtcp.ReceiverReport{SSRC: 456}).Marshal()
+	require.NoError(t, err)
+	reader := feedback.BindRTCPReader(interceptor.RTCPReaderFunc(func(
+		buffer []byte, attributes interceptor.Attributes,
+	) (int, interceptor.Attributes, error) {
+		return copy(buffer, wire), attributes, nil
+	}))
+	_, attributes, err := reader.Read(make([]byte, 1500), nil)
+	require.NoError(t, err)
+	assert.Nil(t, attributes.Get(CCFBAttributesKey), "ordinary RTCP must not declare the first RTP packet lost")
+
+	wire, err = (&rtcp.CCFeedbackReport{
+		SenderSSRC: 456,
+		ReportBlocks: []rtcp.CCFeedbackReportBlock{{
+			MediaSSRC: 123, BeginSequence: 17,
+			MetricBlocks: []rtcp.CCFeedbackMetricBlock{{Received: true, ArrivalTimeOffset: 0x1FFF}},
+		}},
+	}).Marshal()
+	require.NoError(t, err)
+	_, attributes, err = reader.Read(make([]byte, 1500), nil)
+	require.NoError(t, err)
+	report, ok := attributes.Get(CCFBAttributesKey).(Report)
+	require.True(t, ok, "the packet must remain in history for the actual acknowledgement")
+	require.Len(t, report.PacketReports, 1)
+	assert.Equal(t, uint16(17), report.PacketReports[0].RTPSequenceNumber)
+	assert.True(t, report.PacketReports[0].Arrived)
 }

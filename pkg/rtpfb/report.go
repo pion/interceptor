@@ -9,6 +9,8 @@ import (
 	"github.com/pion/rtcp"
 )
 
+// PacketReport contains the acknowledgement state of a single outgoing RTP
+// packet.
 type PacketReport struct {
 	// SSRC of the stream the packet was sent on.
 	SSRC uint32
@@ -51,12 +53,16 @@ type PacketReport struct {
 	ECN rtcp.ECN
 }
 
-// A Report contains the Arrival time of a CCFB or TWCC packet, the estimated
-// RTT based on the feedback packet and a list of PacketReport for all
-// acknowledged packets that were still in the history and not yet included in
-// an earlier Report.
+// A Report contains the results of processing an incoming CCFB or TWCC packet.
 type Report struct {
-	Arrival       time.Time
-	RTT           time.Duration
+	// Arrival is the time at which the feedback packet arrived at the sender.
+	Arrival time.Time
+
+	// RTT is the round trip time estimated from the feedback packet. It is
+	// zero if no RTT could be measured.
+	RTT time.Duration
+
+	// PacketReports contains a PacketReport for all acknowledged packets that
+	// were still in the history and not yet included in an earlier Report.
 	PacketReports []PacketReport
 }
