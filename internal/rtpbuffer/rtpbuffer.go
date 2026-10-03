@@ -6,6 +6,7 @@ package rtpbuffer
 
 import (
 	"github.com/pion/interceptor/internal/validation"
+	"github.com/pion/rtp"
 )
 
 const (
@@ -22,6 +23,9 @@ type RTPBuffer struct {
 	size         uint16
 	highestAdded uint16
 	started      bool
+
+	// rtxSequencer numbers the retransmissions of this buffer's RTX stream.
+	rtxSequencer rtp.Sequencer
 }
 
 // NewRTPBuffer constructs a new RTPBuffer.
@@ -82,6 +86,10 @@ func (r *RTPBuffer) Clear() {
 }
 
 // Get returns the RetainablePacket for the requested sequence number.
+//
+// For a packet stored for RFC 4588 retransmission, every call is treated as a
+// retransmission: it returns a copy with the next sequence number of the RTX
+// stream, and leaves the stored packet unchanged.
 func (r *RTPBuffer) Get(seq uint16) *RetainablePacket {
 	diff := r.highestAdded - seq
 	if diff >= Uint16SizeHalf {
@@ -93,15 +101,21 @@ func (r *RTPBuffer) Get(seq uint16) *RetainablePacket {
 	}
 
 	pkt := r.packets[seq%r.size]
-	if pkt != nil {
-		if pkt.sequenceNumber != seq {
-			return nil
-		}
-		// already released
-		if err := pkt.Retain(); err != nil {
-			return nil
-		}
+	if pkt == nil || pkt.sequenceNumber != seq {
+		return nil
+	}
+	// already released
+	if err := pkt.Retain(); err != nil {
+		return nil
 	}
 
-	return pkt
+	if !pkt.rtx {
+		return pkt
+	}
+
+	if r.rtxSequencer == nil {
+		r.rtxSequencer = rtp.NewRandomSequencer()
+	}
+
+	return pkt.newRTXCopy(r.rtxSequencer.NextSequenceNumber())
 }

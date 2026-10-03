@@ -619,3 +619,183 @@ func TestResponderInterceptor_NoDeadlockWithReentrantRTPWriter(t *testing.T) {
 		assert.Fail(t, "ResponderInterceptor.Write deadlocked with reentrant RTP writer")
 	}
 }
+
+func writeRTPAndDrain(t *testing.T, stream *test.MockStream, ssrc uint32, seqNums ...uint16) {
+	t.Helper()
+
+	for _, seqNum := range seqNums {
+		require.NoError(t, stream.WriteRTP(&rtp.Packet{
+			Header:  rtp.Header{SequenceNumber: seqNum, SSRC: ssrc},
+			Payload: []byte{0xAA, 0xBB},
+		}))
+
+		select {
+		case p := <-stream.WrittenRTP():
+			require.Equal(t, seqNum, p.SequenceNumber)
+		case <-time.After(10 * time.Millisecond):
+			require.FailNow(t, "written rtp packet not found")
+		}
+	}
+}
+
+func nackAndReadRTP(t *testing.T, stream *test.MockStream, mediaSSRC uint32, seqNums ...uint16) []*rtp.Packet {
+	t.Helper()
+
+	// One NACK per sequence number, read back before the next one: resendPackets
+	// runs in its own goroutine per NACK, so this keeps the resend order fixed.
+	packets := make([]*rtp.Packet, 0, len(seqNums))
+	for _, seqNum := range seqNums {
+		stream.ReceiveRTCP([]rtcp.Packet{
+			&rtcp.TransportLayerNack{
+				MediaSSRC: mediaSSRC,
+				Nacks:     []rtcp.NackPair{{PacketID: seqNum}},
+			},
+		})
+
+		select {
+		case p := <-stream.WrittenRTP():
+			packets = append(packets, p)
+		case <-time.After(100 * time.Millisecond):
+			require.FailNow(t, "retransmitted rtp packet not found", "sequence number %d", seqNum)
+		}
+	}
+
+	return packets
+}
+
+func TestResponderInterceptor_RFC4588_SequenceNumbers(t *testing.T) {
+	f, err := NewResponderInterceptor()
+	require.NoError(t, err)
+
+	i, err := f.NewInterceptor("")
+	require.NoError(t, err)
+
+	stream := test.NewMockStream(&interceptor.StreamInfo{
+		SSRC:                      1,
+		SSRCRetransmission:        2,
+		PayloadTypeRetransmission: 2,
+		RTCPFeedback:              []interceptor.RTCPFeedback{{Type: "nack"}},
+	}, i)
+	defer func() {
+		require.NoError(t, stream.Close())
+	}()
+
+	writeRTPAndDrain(t, stream, 1, 1, 2, 3, 4, 5)
+
+	// 4 is NACKed twice, it must be sent twice with different RTX sequence numbers.
+	osns := []uint16{2, 4, 4}
+	packets := nackAndReadRTP(t, stream, 1, osns...)
+
+	first := packets[0].SequenceNumber
+	for idx, p := range packets {
+		assert.Equal(t, uint32(2), p.SSRC)
+		assert.Equal(t, uint8(2), p.PayloadType)
+		assert.Equal(t, first+uint16(idx), p.SequenceNumber, "RTX sequence numbers are not consecutive")
+		require.GreaterOrEqual(t, len(p.Payload), 2)
+		assert.Equal(t, osns[idx], binary.BigEndian.Uint16(p.Payload), "wrong original sequence number")
+		assert.Equal(t, []byte{0xAA, 0xBB}, p.Payload[2:])
+	}
+	assert.NotEqual(t, packets[1].SequenceNumber, packets[2].SequenceNumber,
+		"packet NACKed twice was sent twice with the same RTX sequence number")
+}
+
+func TestResponderInterceptor_RFC4588_SequenceNumbersPerStream(t *testing.T) {
+	f, err := NewResponderInterceptor()
+	require.NoError(t, err)
+
+	responder, err := f.NewInterceptor("")
+	require.NoError(t, err)
+
+	streamA := test.NewMockStream(&interceptor.StreamInfo{
+		SSRC:                      1,
+		SSRCRetransmission:        2,
+		PayloadTypeRetransmission: 2,
+		RTCPFeedback:              []interceptor.RTCPFeedback{{Type: "nack"}},
+	}, responder)
+	defer func() {
+		require.NoError(t, streamA.Close())
+	}()
+	streamB := test.NewMockStream(&interceptor.StreamInfo{
+		SSRC:                      3,
+		SSRCRetransmission:        4,
+		PayloadTypeRetransmission: 2,
+		RTCPFeedback:              []interceptor.RTCPFeedback{{Type: "nack"}},
+	}, responder)
+	defer func() {
+		require.NoError(t, streamB.Close())
+	}()
+
+	// Interleave the streams so a shared sequencer would leave gaps in both.
+	for _, seqNum := range []uint16{1, 2, 3} {
+		writeRTPAndDrain(t, streamA, 1, seqNum)
+		writeRTPAndDrain(t, streamB, 3, seqNum)
+	}
+
+	for _, tc := range []struct {
+		stream    *test.MockStream
+		mediaSSRC uint32
+		rtxSSRC   uint32
+	}{
+		{streamA, 1, 2},
+		{streamB, 3, 4},
+	} {
+		osns := []uint16{1, 2, 3}
+		packets := nackAndReadRTP(t, tc.stream, tc.mediaSSRC, osns...)
+
+		first := packets[0].SequenceNumber
+		for idx, p := range packets {
+			assert.Equal(t, tc.rtxSSRC, p.SSRC)
+			assert.Equal(t, first+uint16(idx), p.SequenceNumber, "RTX sequence numbers of SSRC %d are not consecutive", tc.rtxSSRC)
+			assert.Equal(t, osns[idx], binary.BigEndian.Uint16(p.Payload))
+		}
+	}
+}
+
+func TestResponderInterceptor_NonRTXSequenceNumbers(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		opts []ResponderOption
+		info *interceptor.StreamInfo
+	}{
+		{
+			name: "no RTX stream",
+			info: &interceptor.StreamInfo{
+				SSRC:         1,
+				RTCPFeedback: []interceptor.RTCPFeedback{{Type: "nack"}},
+			},
+		},
+		{
+			name: "RTX stream without copy",
+			opts: []ResponderOption{DisableCopy()},
+			info: &interceptor.StreamInfo{
+				SSRC:                      1,
+				SSRCRetransmission:        2,
+				PayloadTypeRetransmission: 2,
+				RTCPFeedback:              []interceptor.RTCPFeedback{{Type: "nack"}},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f, err := NewResponderInterceptor(tc.opts...)
+			require.NoError(t, err)
+
+			i, err := f.NewInterceptor("")
+			require.NoError(t, err)
+
+			stream := test.NewMockStream(tc.info, i)
+			defer func() {
+				require.NoError(t, stream.Close())
+			}()
+
+			writeRTPAndDrain(t, stream, 1, 1, 2, 3, 4, 5)
+
+			seqNums := []uint16{2, 4, 4}
+			packets := nackAndReadRTP(t, stream, 1, seqNums...)
+			for idx, p := range packets {
+				assert.Equal(t, uint32(1), p.SSRC)
+				assert.Equal(t, seqNums[idx], p.SequenceNumber)
+				assert.Equal(t, []byte{0xAA, 0xBB}, p.Payload)
+			}
+		})
+	}
+}
