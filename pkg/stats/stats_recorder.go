@@ -54,6 +54,7 @@ type incomingRTP struct {
 	ts         time.Time
 	header     rtp.Header
 	payloadLen int
+	paddingLen int
 	attr       interceptor.Attributes
 }
 
@@ -67,6 +68,7 @@ type outgoingRTP struct {
 	ts         time.Time
 	header     rtp.Header
 	payloadLen int
+	paddingLen int
 	attr       interceptor.Attributes
 }
 
@@ -157,8 +159,8 @@ func (r *recorder) recordIncomingRTP(latestStats internalStats, incoming *incomi
 	}
 
 	latestStats.LastPacketReceivedTimestamp = incoming.ts
-	latestStats.HeaderBytesReceived += uint64(incoming.header.MarshalSize())                 //nolint:gosec // G115
-	latestStats.BytesReceived += uint64(incoming.header.MarshalSize() + incoming.payloadLen) //nolint:gosec // G115
+	latestStats.HeaderBytesReceived += uint64(incoming.header.MarshalSize() + incoming.paddingLen) //nolint:gosec // G115
+	latestStats.BytesReceived += uint64(incoming.payloadLen)                                       //nolint:gosec // G115
 
 	return latestStats
 }
@@ -226,8 +228,8 @@ func (r *recorder) recordOutgoingRTP(latestStats internalStats, v *outgoingRTP) 
 	}
 	headerSize := v.header.MarshalSize()
 	latestStats.OutboundRTPStreamStats.PacketsSent++
-	latestStats.OutboundRTPStreamStats.BytesSent += uint64(headerSize + v.payloadLen) //nolint:gosec // G115
-	latestStats.HeaderBytesSent += uint64(headerSize)                                 //nolint:gosec // G115
+	latestStats.OutboundRTPStreamStats.BytesSent += uint64(v.payloadLen) //nolint:gosec // G115
+	latestStats.HeaderBytesSent += uint64(headerSize + v.paddingLen)     //nolint:gosec // G115
 	if !latestStats.remoteInboundFirstSequenceNumberInitialized {
 		latestStats.remoteInboundFirstSequenceNumber = int64(v.header.SequenceNumber)
 		latestStats.remoteInboundFirstSequenceNumberInitialized = true
@@ -360,11 +362,17 @@ func (r *recorder) QueueIncomingRTP(ts time.Time, buf []byte, attr interceptor.A
 		return
 	}
 	hdr := header.Clone()
+	payloadLen := len(buf) - hdr.MarshalSize()
+	paddingLen := 0
+	if hdr.Padding && payloadLen > 0 {
+		paddingLen = min(int(buf[len(buf)-1]), payloadLen)
+	}
 	r.ms.Lock()
 	*r.latestStats = r.recordIncomingRTP(*r.latestStats, &incomingRTP{
 		ts:         ts,
 		header:     hdr,
-		payloadLen: len(buf) - hdr.MarshalSize(),
+		payloadLen: payloadLen - paddingLen,
+		paddingLen: paddingLen,
 		attr:       attr,
 	})
 	r.ms.Unlock()
@@ -397,11 +405,16 @@ func (r *recorder) QueueOutgoingRTP(ts time.Time, header *rtp.Header, payload []
 		return
 	}
 	hdr := header.Clone()
+	paddingLen := 0
+	if hdr.Padding {
+		paddingLen = int(hdr.PaddingSize)
+	}
 	r.ms.Lock()
 	*r.latestStats = r.recordOutgoingRTP(*r.latestStats, &outgoingRTP{
 		ts:         ts,
 		header:     hdr,
 		payloadLen: len(payload),
+		paddingLen: paddingLen,
 		attr:       attr,
 	})
 	r.ms.Unlock()
