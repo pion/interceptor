@@ -14,6 +14,7 @@ import (
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type ackListEntry struct {
@@ -331,4 +332,46 @@ func TestProcessFeedbackRTT(t *testing.T) {
 			assert.Equal(t, tc.expected, rtt)
 		})
 	}
+}
+
+func TestReceiverReportBeforeFirstAcknowledgement(t *testing.T) {
+	factory, err := NewInterceptor()
+	require.NoError(t, err)
+	feedback, err := factory.NewInterceptor("test")
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, feedback.Close()) })
+	writer := feedback.BindLocalStream(&interceptor.StreamInfo{}, interceptor.RTPWriterFunc(func(
+		header *rtp.Header, payload []byte, _ interceptor.Attributes,
+	) (int, error) {
+		return header.MarshalSize() + len(payload), nil
+	}))
+	_, err = writer.Write(&rtp.Header{Version: 2, SSRC: 123, SequenceNumber: 17}, nil, nil)
+	require.NoError(t, err)
+
+	wire, err := (&rtcp.ReceiverReport{SSRC: 456}).Marshal()
+	require.NoError(t, err)
+	reader := feedback.BindRTCPReader(interceptor.RTCPReaderFunc(func(
+		buffer []byte, attributes interceptor.Attributes,
+	) (int, interceptor.Attributes, error) {
+		return copy(buffer, wire), attributes, nil
+	}))
+	_, attributes, err := reader.Read(make([]byte, 1500), nil)
+	require.NoError(t, err)
+	assert.Nil(t, attributes.Get(CCFBAttributesKey), "ordinary RTCP must not declare the first RTP packet lost")
+
+	wire, err = (&rtcp.CCFeedbackReport{
+		SenderSSRC: 456,
+		ReportBlocks: []rtcp.CCFeedbackReportBlock{{
+			MediaSSRC: 123, BeginSequence: 17,
+			MetricBlocks: []rtcp.CCFeedbackMetricBlock{{Received: true, ArrivalTimeOffset: 0x1FFF}},
+		}},
+	}).Marshal()
+	require.NoError(t, err)
+	_, attributes, err = reader.Read(make([]byte, 1500), nil)
+	require.NoError(t, err)
+	report, ok := attributes.Get(CCFBAttributesKey).(Report)
+	require.True(t, ok, "the packet must remain in history for the actual acknowledgement")
+	require.Len(t, report.PacketReports, 1)
+	assert.Equal(t, uint16(17), report.PacketReports[0].RTPSequenceNumber)
+	assert.True(t, report.PacketReports[0].Arrived)
 }
