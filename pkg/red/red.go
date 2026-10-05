@@ -52,10 +52,11 @@ func (p Payload) Marshal() ([]byte, error) {
 		return nil, err
 	}
 
-	raw := make([]byte, p.MarshalSize())
-	n := p.marshalTo(raw)
+	size := p.MarshalSize()
+	raw := make([]byte, size)
+	p.marshalTo(raw)
 
-	return raw[:n], nil
+	return raw, nil
 }
 
 // MarshalTo serializes a RED payload into raw.
@@ -64,14 +65,17 @@ func (p Payload) MarshalTo(raw []byte) (int, error) {
 		return 0, err
 	}
 
-	if len(raw) < p.MarshalSize() {
+	size := p.MarshalSize()
+	if len(raw) < size {
 		return 0, io.ErrShortBuffer
 	}
 
-	return p.marshalTo(raw), nil
+	p.marshalTo(raw)
+
+	return size, nil
 }
 
-func (p Payload) marshalTo(raw []byte) int {
+func (p Payload) marshalTo(raw []byte) {
 	headerOffset := 0
 	payloadOffset := len(p.RedundantBlocks)*redundantHeaderSize + primaryHeaderSize
 
@@ -88,8 +92,6 @@ func (p Payload) marshalTo(raw []byte) int {
 
 	raw[headerOffset] = p.PrimaryBlock.PayloadType
 	copy(raw[payloadOffset:], p.PrimaryBlock.Payload)
-
-	return p.MarshalSize()
 }
 
 // MarshalSize returns the number of bytes needed to serialize the payload.
