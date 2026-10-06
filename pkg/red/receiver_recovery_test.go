@@ -165,6 +165,63 @@ func TestReceiverInterceptorRecoversOnlyMissingPackets(t *testing.T) {
 	assert.Empty(t, downstream.results)
 }
 
+func TestReceiverInterceptorSuppressesRedundantAudioAtObservedPadding(t *testing.T) {
+	redPacket := makeREDPacket(t, rtp.Header{
+		Version:        2,
+		SequenceNumber: 12,
+		Timestamp:      10_560,
+		SSRC:           testSSRC,
+	}, []Block{{
+		PayloadType:     testOpusPayloadType,
+		TimestampOffset: 960,
+		Payload:         []byte{0x0a},
+	}}, []byte{0x0c})
+	downstream := readerForPackets(t,
+		makePlainPacket(10, 9_600, []byte{0x0a}),
+		paddingOnlyPacket(11, 9_600, 50),
+		redPacket,
+	)
+	reader := newTestReceiver(t, opusStreamInfo(), downstream)
+
+	first, _ := readOutputPacket(t, reader)
+	second, _ := readOutputPacket(t, reader)
+	assert.Equal(t, []uint16{10, 12}, []uint16{first.SequenceNumber, second.SequenceNumber})
+	assert.Equal(t, [][]byte{{0x0a}, {0x0c}}, [][]byte{first.Payload, second.Payload})
+	assert.Equal(t, []uint32{9_600, 10_560}, []uint32{first.Timestamp, second.Timestamp})
+
+	n, _, err := reader.Read(make([]byte, 1500), interceptor.Attributes{})
+	assert.Zero(t, n)
+	assert.ErrorIs(t, err, io.EOF)
+}
+
+func TestReceiverInterceptorDoesNotMisidentifyRedundancySpanningObservedPadding(t *testing.T) {
+	redPacket := makeREDPacket(t, rtp.Header{
+		Version:        2,
+		SequenceNumber: 12,
+		Timestamp:      11_520,
+		SSRC:           testSSRC,
+	}, []Block{
+		{PayloadType: testOpusPayloadType, TimestampOffset: 2_880, Payload: []byte{0x09}},
+		{PayloadType: testOpusPayloadType, TimestampOffset: 1_920, Payload: []byte{0x0a}},
+	}, []byte{0x0c})
+	downstream := readerForPackets(t,
+		makePlainPacket(9, 8_640, []byte{0x09}),
+		paddingOnlyPacket(11, 9_600, 50),
+		redPacket,
+	)
+	reader := newTestReceiver(t, opusStreamInfo(), downstream)
+
+	first, _ := readOutputPacket(t, reader)
+	second, _ := readOutputPacket(t, reader)
+	assert.Equal(t, []uint16{9, 12}, []uint16{first.SequenceNumber, second.SequenceNumber})
+	assert.Equal(t, [][]byte{{0x09}, {0x0c}}, [][]byte{first.Payload, second.Payload})
+	assert.Equal(t, []uint32{8_640, 11_520}, []uint32{first.Timestamp, second.Timestamp})
+
+	n, _, err := reader.Read(make([]byte, 1500), interceptor.Attributes{})
+	assert.Zero(t, n)
+	assert.ErrorIs(t, err, io.EOF)
+}
+
 func TestReceiverInterceptorSuppressesLateAndDuplicatePackets(t *testing.T) {
 	redPacket := makeREDPacket(t, rtp.Header{
 		Version:        2,

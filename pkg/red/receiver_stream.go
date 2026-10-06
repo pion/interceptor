@@ -40,6 +40,7 @@ type sequencePosition struct {
 type receiveHistoryEntry struct {
 	extended int64
 	valid    bool
+	padding  bool
 }
 
 type receiveHistory struct {
@@ -79,6 +80,20 @@ func (stream *receiverStream) readIncoming(
 	}
 	if header.SSRC != stream.ssrc {
 		return n, receivedAttributes, true, nil
+	}
+	if header.Padding {
+		var packet rtp.Packet
+		if err := packet.Unmarshal(buffer[:n]); err != nil {
+			return 0, receivedAttributes, false, err
+		}
+		if len(packet.Payload) == 0 {
+			position := stream.history.position(packet.SequenceNumber)
+			if !position.stale {
+				stream.history.commitPadding(position)
+			}
+
+			return 0, receivedAttributes, false, nil
+		}
 	}
 	if header.PayloadType == stream.redPayloadType {
 		return stream.readRED(buffer[:n], receivedAttributes)
@@ -200,6 +215,7 @@ func (stream *receiverStream) shouldRecover(
 		len(block.Payload) > 0 &&
 		block.TimestampOffset > 0 &&
 		!stream.history.stale(position, extendedSequence) &&
+		!stream.history.hasPaddingBetween(position, extendedSequence) &&
 		!stream.history.containsForPosition(position, extendedSequence)
 }
 
@@ -289,6 +305,23 @@ func (history *receiveHistory) contains(extended int64) bool {
 	return entry.valid && entry.extended == extended
 }
 
+func (history *receiveHistory) hasPaddingBetween(position sequencePosition, extended int64) bool {
+	if position.reset {
+		return false
+	}
+
+	// RED does not carry the original sequence number for a redundant block.
+	// A known padding packet makes a contiguous sequence inference unsafe.
+	for sequence := extended; sequence < position.extended; sequence++ {
+		entry := history.entries[receiveHistoryIndex(sequence)]
+		if entry.valid && entry.extended == sequence && entry.padding {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (history *receiveHistory) stale(position sequencePosition, extended int64) bool {
 	reference := history.highest
 	if !history.initialized || position.reset || position.extended > reference {
@@ -311,6 +344,11 @@ func (history *receiveHistory) commit(position sequencePosition, recovered []int
 		history.mark(extended)
 	}
 	history.mark(position.extended)
+}
+
+func (history *receiveHistory) commitPadding(position sequencePosition) {
+	history.commit(position, nil)
+	history.entries[receiveHistoryIndex(position.extended)].padding = true
 }
 
 func (history *receiveHistory) mark(extended int64) {
