@@ -71,8 +71,7 @@ func newDelayController(delayConfig delayControllerConfig, loggerFactory logging
 		},
 	)
 	delayController.rateController = rateController
-	overuseDetector := newOveruseDetector(newAdaptiveThreshold(), 10*time.Millisecond, rateController.onDelayStats)
-	slopeEstimator := newSlopeEstimator(newKalman(), overuseDetector.onDelayStats)
+	trendline := newTrendlineEstimator(rateController.onDelayStats)
 	arrivalGroupAccumulator := newArrivalGroupAccumulator()
 
 	rc := newRateCalculator(500 * time.Millisecond)
@@ -80,7 +79,7 @@ func newDelayController(delayConfig delayControllerConfig, loggerFactory logging
 	delayController.wg.Add(2)
 	go func() {
 		defer delayController.wg.Done()
-		arrivalGroupAccumulator.run(ackPipe, slopeEstimator.onArrivalGroup)
+		arrivalGroupAccumulator.run(ackPipe, trendline.onArrivalGroup)
 	}()
 	go func() {
 		defer delayController.wg.Done()

@@ -9,18 +9,20 @@ import (
 	"github.com/pion/interceptor/internal/cc"
 )
 
-type arrivalGroupAccumulator struct {
-	interDepartureThreshold          time.Duration
-	interArrivalThreshold            time.Duration
-	interGroupDelayVariationTreshold time.Duration
-}
+const (
+	// burstTime is the departure span of one group (libwebrtc
+	// kBurstDeltaThreshold / kSendTimeGroupLength).
+	burstTime = 5 * time.Millisecond
+	// maxBurstDuration bounds how long arrivals may extend a group.
+	maxBurstDuration = 100 * time.Millisecond
+)
+
+// arrivalGroupAccumulator groups acknowledged packets into send bursts the
+// way libwebrtc's InterArrivalDelta does.
+type arrivalGroupAccumulator struct{}
 
 func newArrivalGroupAccumulator() *arrivalGroupAccumulator {
-	return &arrivalGroupAccumulator{
-		interDepartureThreshold:          5 * time.Millisecond,
-		interArrivalThreshold:            5 * time.Millisecond,
-		interGroupDelayVariationTreshold: 0,
-	}
+	return &arrivalGroupAccumulator{}
 }
 
 func (a *arrivalGroupAccumulator) run(in <-chan []cc.Acknowledgment, agWriter func(arrivalGroup)) {
@@ -28,54 +30,51 @@ func (a *arrivalGroupAccumulator) run(in <-chan []cc.Acknowledgment, agWriter fu
 	group := arrivalGroup{}
 	for acks := range in {
 		for _, next := range acks {
+			if next.Arrival.IsZero() {
+				// lost: carries no arrival time
+				continue
+			}
 			if !init {
 				group = newArrivalGroup(next)
 				init = true
 
 				continue
 			}
-			if next.Arrival.Before(group.arrival) {
-				// ignore out of order arrivals
+			if next.Departure.Before(group.firstDeparture) || next.Arrival.Before(group.arrival) {
+				// reordered: ignored by the arrival-time model
 				continue
 			}
-			if next.Departure.After(group.departure) {
-				// A sequence of packets which are sent within a burst_time interval
-				// constitute a group.
-				if interDepartureTimePkt(group, next) <= a.interDepartureThreshold {
-					group.add(next)
+			if belongsToGroup(group, next) {
+				group.add(next)
 
-					continue
-				}
-
-				// A Packet which has an inter-arrival time less than burst_time and
-				// an inter-group delay variation d(i) less than 0 is considered
-				// being part of the current group of packets.
-				if interArrivalTimePkt(group, next) <= a.interArrivalThreshold &&
-					interGroupDelayVariationPkt(group, next) < a.interGroupDelayVariationTreshold {
-					group.add(next)
-
-					continue
-				}
-
-				agWriter(group)
-				group = newArrivalGroup(next)
+				continue
 			}
+			agWriter(group)
+			group = newArrivalGroup(next)
 		}
 	}
 }
 
-func interArrivalTimePkt(group arrivalGroup, ack cc.Acknowledgment) time.Duration {
-	return ack.Arrival.Sub(group.arrival)
-}
-
-func interDepartureTimePkt(group arrivalGroup, ack cc.Acknowledgment) time.Duration {
-	if len(group.packets) == 0 {
-		return 0
+// belongsToGroup reports whether next extends the group: sent within
+// burstTime of the group's first packet, or part of a burst that arrived
+// back to back (it reached the receiver faster than it was sent).
+func belongsToGroup(group arrivalGroup, next cc.Acknowledgment) bool {
+	if belongsToBurst(group, next) {
+		return true
 	}
 
-	return ack.Departure.Sub(group.departure)
+	return next.Departure.Sub(group.firstDeparture) <= burstTime
 }
 
-func interGroupDelayVariationPkt(group arrivalGroup, ack cc.Acknowledgment) time.Duration {
-	return ack.Arrival.Sub(group.arrival) - ack.Departure.Sub(group.departure)
+func belongsToBurst(group arrivalGroup, next cc.Acknowledgment) bool {
+	arrivalDelta := next.Arrival.Sub(group.arrival)
+	departureDelta := next.Departure.Sub(group.departure)
+	if departureDelta == 0 {
+		return true
+	}
+	propagationDelta := arrivalDelta - departureDelta
+
+	return propagationDelta < 0 &&
+		arrivalDelta <= burstTime &&
+		next.Arrival.Sub(group.firstArrival) < maxBurstDuration
 }
