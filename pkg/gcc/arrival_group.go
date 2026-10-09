@@ -10,22 +10,35 @@ import (
 	"github.com/pion/interceptor/internal/cc"
 )
 
+// arrivalGroup is a group of packets sent in one burst. As in libwebrtc's
+// InterArrivalDelta, inter-group deltas use the group's LAST departure and
+// LAST arrival: pairing the first departure with the last arrival made the
+// group's own send span read as queueing delay.
 type arrivalGroup struct {
-	packets   []cc.Acknowledgment
+	packets []cc.Acknowledgment
+	// firstDeparture and firstArrival bound the group's extent.
+	firstDeparture time.Time
+	firstArrival   time.Time
+	// departure is the latest departure, arrival the last arrival.
 	departure time.Time
 	arrival   time.Time
 }
 
 func newArrivalGroup(a cc.Acknowledgment) arrivalGroup {
 	return arrivalGroup{
-		packets:   []cc.Acknowledgment{a},
-		departure: a.Departure,
-		arrival:   a.Arrival,
+		packets:        []cc.Acknowledgment{a},
+		firstDeparture: a.Departure,
+		firstArrival:   a.Arrival,
+		departure:      a.Departure,
+		arrival:        a.Arrival,
 	}
 }
 
 func (g *arrivalGroup) add(a cc.Acknowledgment) {
 	g.packets = append(g.packets, a)
+	if a.Departure.After(g.departure) {
+		g.departure = a.Departure
+	}
 	g.arrival = a.Arrival
 }
 
