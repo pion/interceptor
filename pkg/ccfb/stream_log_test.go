@@ -14,7 +14,7 @@ import (
 type input struct {
 	ts  time.Time
 	nr  uint16
-	ecn uint8
+	ecn rtcp.ECN
 }
 
 func TestStreamLogAdd(t *testing.T) {
