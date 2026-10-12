@@ -216,6 +216,62 @@ func TestStatsRecorder(t *testing.T) {
 			},
 		},
 		{
+			name: "negativeTotalLostInReceiverReport",
+			records: []record{
+				{
+					ts: now,
+					content: outgoingRTP{
+						header: rtp.Header{
+							SequenceNumber: 0,
+						},
+					},
+				},
+				{
+					ts: now,
+					content: outgoingRTP{
+						header: rtp.Header{
+							SequenceNumber: 10,
+						},
+					},
+				},
+				{
+					ts: now,
+					content: incomingRTCP{
+						pkts: []rtcp.Packet{
+							&rtcp.ReceiverReport{
+								SSRC: 0,
+								Reports: []rtcp.ReceptionReport{
+									{
+										SSRC:               0,
+										FractionLost:       0,
+										TotalLost:          0xFFFFFF,
+										LastSequenceNumber: 10,
+										Jitter:             0,
+									},
+								},
+							},
+							cname,
+						},
+					},
+				},
+			},
+			expectedOutboundRTPStreamStats: OutboundRTPStreamStats{
+				SentRTPStreamStats: SentRTPStreamStats{
+					PacketsSent: 2,
+					BytesSent:   20,
+				},
+				HeaderBytesSent: 24,
+			},
+			expectedRemoteInboundRTPStreamStats: RemoteInboundRTPStreamStats{
+				ReceivedRTPStreamStats: ReceivedRTPStreamStats{
+					PacketsReceived: 12,
+					PacketsLost:     -1,
+					Jitter:          0,
+				},
+				FractionLost: 0.0,
+			},
+		},
+		{
 			name: "basicOutgoingRTCP",
 			records: []record{
 				{
