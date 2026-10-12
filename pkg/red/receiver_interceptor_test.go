@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"testing"
+	"time"
 
 	"github.com/pion/interceptor"
 	"github.com/pion/rtp"
@@ -52,7 +53,16 @@ func newTestReceiver(
 ) interceptor.RTPReader {
 	t.Helper()
 
-	factory, err := NewReceiverInterceptor()
+	// These synthetic fixtures declare continuous 20 ms packetization.
+	return newTestReceiverWithOptions(t, info, downstream, ReceiverPacketDuration(20*time.Millisecond))
+}
+
+func newTestReceiverWithOptions(
+	t *testing.T, info *interceptor.StreamInfo, downstream interceptor.RTPReader, opts ...ReceiverOption,
+) interceptor.RTPReader {
+	t.Helper()
+
+	factory, err := NewReceiverInterceptor(opts...)
 	require.NoError(t, err)
 
 	receiver, err := factory.NewInterceptor("")

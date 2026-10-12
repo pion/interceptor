@@ -194,7 +194,7 @@ func TestReceiverInterceptorSuppressesRedundantAudioAtObservedPadding(t *testing
 	assert.ErrorIs(t, err, io.EOF)
 }
 
-func TestReceiverInterceptorDoesNotMisidentifyRedundancySpanningObservedPadding(t *testing.T) {
+func TestReceiverInterceptorRecoversRedundancySpanningObservedPadding(t *testing.T) {
 	redPacket := makeREDPacket(t, rtp.Header{
 		Version:        2,
 		SequenceNumber: 12,
@@ -213,9 +213,12 @@ func TestReceiverInterceptorDoesNotMisidentifyRedundancySpanningObservedPadding(
 
 	first, _ := readOutputPacket(t, reader)
 	second, _ := readOutputPacket(t, reader)
-	assert.Equal(t, []uint16{9, 12}, []uint16{first.SequenceNumber, second.SequenceNumber})
-	assert.Equal(t, [][]byte{{0x09}, {0x0c}}, [][]byte{first.Payload, second.Payload})
-	assert.Equal(t, []uint32{8_640, 11_520}, []uint32{first.Timestamp, second.Timestamp})
+	third, _ := readOutputPacket(t, reader)
+	// Packet 9 is known and packet 11 is padding, so the backup at timestamp
+	// 9,600 uniquely identifies the only missing packet, 10.
+	assert.Equal(t, []uint16{9, 10, 12}, []uint16{first.SequenceNumber, second.SequenceNumber, third.SequenceNumber})
+	assert.Equal(t, [][]byte{{0x09}, {0x0a}, {0x0c}}, [][]byte{first.Payload, second.Payload, third.Payload})
+	assert.Equal(t, []uint32{8_640, 9_600, 11_520}, []uint32{first.Timestamp, second.Timestamp, third.Timestamp})
 
 	n, _, err := reader.Read(make([]byte, 1500), interceptor.Attributes{})
 	assert.Zero(t, n)
@@ -458,5 +461,66 @@ func TestOpusREDSenderReceiverRecovery(t *testing.T) {
 		assert.Equal(t, expectedSequence, packet.SequenceNumber)
 		assert.Equal(t, []byte{byte(expectedSequence)}, packet.Payload)
 	}
+	assert.Empty(t, downstream.results)
+}
+
+// TestOpusREDSenderReceiverLeavesOldestOfThreeLossesUnavailable verifies a carrier cannot recover beyond two stored copies.
+func TestOpusREDSenderReceiverLeavesOldestOfThreeLossesUnavailable(t *testing.T) {
+	senderOutput := &capturedWriter{}
+	sender := newTestSender(t, opusStreamInfo(), senderOutput)
+	for sequenceNumber := uint16(1); sequenceNumber <= 5; sequenceNumber++ {
+		writeOpus(t, sender, sequenceNumber, uint32(sequenceNumber)*960, []byte{byte(sequenceNumber)})
+	}
+	require.Len(t, senderOutput.packets, 5)
+
+	// Only the two newest lost packets fit in the next carrier's RED history.
+	last := requireREDPayload(t, senderOutput.packets[4])
+	assert.Equal(t, []Block{
+		{PayloadType: testOpusPayloadType, TimestampOffset: 1_920, Payload: []byte{0x03}},
+		{PayloadType: testOpusPayloadType, TimestampOffset: 960, Payload: []byte{0x04}},
+	}, last.RedundantBlocks)
+
+	// Drop packets 2, 3, and 4. Packet 5 can recover 3 and 4, but not 2.
+	downstream := readerForPackets(t, senderOutput.packets[0], senderOutput.packets[4])
+	receiver := newTestReceiver(t, opusStreamInfo(), downstream)
+	for _, expectedSequence := range []uint16{1, 3, 4, 5} {
+		packet, _ := readOutputPacket(t, receiver)
+		assert.Equal(t, testOpusPayloadType, packet.PayloadType)
+		assert.Equal(t, expectedSequence, packet.SequenceNumber)
+		assert.Equal(t, uint32(expectedSequence)*960, packet.Timestamp)
+		assert.Equal(t, []byte{byte(expectedSequence)}, packet.Payload)
+	}
+	assert.Empty(t, downstream.results)
+	n, _, err := receiver.Read(make([]byte, 1500), nil)
+	assert.Zero(t, n)
+	assert.ErrorIs(t, err, io.EOF)
+}
+
+// TestOpusREDSenderReceiverCannotRecoverTerminalLoss verifies a final loss remains missing without later audio.
+func TestOpusREDSenderReceiverCannotRecoverTerminalLoss(t *testing.T) {
+	senderOutput := &capturedWriter{}
+	sender := newTestSender(t, opusStreamInfo(), senderOutput)
+	for sequenceNumber := uint16(1); sequenceNumber <= 4; sequenceNumber++ {
+		writeOpus(t, sender, sequenceNumber, uint32(sequenceNumber)*960, []byte{byte(sequenceNumber)})
+	}
+	require.Len(t, senderOutput.packets, 4)
+	assert.Equal(t, testREDPayloadType, senderOutput.packets[3].PayloadType)
+
+	// The finite fixture ends with padding-only RTP, which cannot recover lost packet 4.
+	downstream := readerForPackets(t,
+		senderOutput.packets[0], senderOutput.packets[1], senderOutput.packets[2],
+		paddingOnlyPacket(5, 3_840, 1),
+	)
+	receiver := newTestReceiver(t, opusStreamInfo(), downstream)
+	for expectedSequence := uint16(1); expectedSequence <= 3; expectedSequence++ {
+		packet, _ := readOutputPacket(t, receiver)
+		assert.Equal(t, testOpusPayloadType, packet.PayloadType)
+		assert.Equal(t, expectedSequence, packet.SequenceNumber)
+		assert.Equal(t, uint32(expectedSequence)*960, packet.Timestamp)
+		assert.Equal(t, []byte{byte(expectedSequence)}, packet.Payload)
+	}
+	n, _, err := receiver.Read(make([]byte, 1500), nil)
+	assert.Zero(t, n)
+	assert.ErrorIs(t, err, io.EOF)
 	assert.Empty(t, downstream.results)
 }

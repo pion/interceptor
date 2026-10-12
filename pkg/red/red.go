@@ -40,7 +40,8 @@ type Block struct {
 }
 
 // Payload contains the redundant blocks followed by the primary media block
-// carried in an RFC 2198 payload. RedundantBlocks are ordered oldest to newest.
+// carried in an RFC 2198 payload. RedundantBlocks preserve wire order, which need
+// not be chronological; TimestampOffset identifies each block's media time.
 type Payload struct {
 	RedundantBlocks []Block
 	PrimaryBlock    Block

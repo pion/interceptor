@@ -27,6 +27,7 @@ type receiverStream struct {
 	ssrc            uint32
 	opusPayloadType uint8
 	redPayloadType  uint8
+	timestampStep   uint32
 	history         receiveHistory
 	pending         []receiverOutput
 }
@@ -38,9 +39,10 @@ type sequencePosition struct {
 }
 
 type receiveHistoryEntry struct {
-	extended int64
-	valid    bool
-	padding  bool
+	extended  int64
+	valid     bool
+	timestamp uint32
+	media     bool
 }
 
 type receiveHistory struct {
@@ -99,18 +101,18 @@ func (stream *receiverStream) readIncoming(
 		return stream.readRED(buffer[:n], receivedAttributes)
 	}
 
-	return stream.readPlain(n, receivedAttributes, header.SequenceNumber)
+	return stream.readPlain(n, receivedAttributes, header)
 }
 
 func (stream *receiverStream) readPlain(
-	n int, attributes interceptor.Attributes, sequenceNumber uint16,
+	n int, attributes interceptor.Attributes, header *rtp.Header,
 ) (int, interceptor.Attributes, bool, error) {
-	position := stream.history.position(sequenceNumber)
+	position := stream.history.position(header.SequenceNumber)
 	if position.stale || stream.history.seen(position) {
 		return 0, attributes, false, nil
 	}
 
-	stream.history.commit(position, nil)
+	stream.history.commit(position, header.Timestamp, header.PayloadType == stream.opusPayloadType, nil)
 
 	return n, attributes, true, nil
 }
@@ -142,7 +144,7 @@ func (stream *receiverStream) readRED(
 		return 0, attributes, false, nil
 	}
 
-	stream.history.commit(position, recoveredSequences)
+	stream.history.commit(position, packet.Timestamp, true, recoveredSequences)
 	stream.pending = outputs
 
 	return 0, attributes, false, nil
@@ -170,18 +172,16 @@ func (stream *receiverStream) buildOutputs(
 	position sequencePosition,
 	attributes interceptor.Attributes,
 	includePrimary bool,
-) ([]receiverOutput, []int64, error) {
+) ([]receiverOutput, []receiveHistoryEntry, error) {
 	outputs := make([]receiverOutput, 0, len(redPayload.RedundantBlocks)+1)
-	recoveredSequences := make([]int64, 0, len(redPayload.RedundantBlocks))
-	for index, block := range redPayload.RedundantBlocks {
-		distance := len(redPayload.RedundantBlocks) - index
-		extendedSequence := position.extended - int64(distance) //nolint:gosec // RED blocks are capped at 32.
-		if !stream.shouldRecover(block, position, extendedSequence) {
+	recoveredSequences := make([]receiveHistoryEntry, 0, len(redPayload.RedundantBlocks))
+	for _, candidate := range stream.recoveryCandidates(packet.Header, redPayload.RedundantBlocks, position) {
+		if !stream.shouldRecover(candidate.block, position, candidate.extended) {
 			continue
 		}
 
 		output, err := newReceiverOutput(
-			recoveredPacket(packet.Header, block, extendedSequence),
+			recoveredPacket(packet.Header, candidate.block, candidate.extended),
 			attributes,
 		)
 		if err != nil {
@@ -189,7 +189,11 @@ func (stream *receiverStream) buildOutputs(
 		}
 
 		outputs = append(outputs, output)
-		recoveredSequences = append(recoveredSequences, extendedSequence)
+		recoveredSequences = append(recoveredSequences, receiveHistoryEntry{
+			extended:  candidate.extended,
+			timestamp: candidate.timestamp,
+			media:     true,
+		})
 	}
 
 	if includePrimary {
@@ -215,7 +219,6 @@ func (stream *receiverStream) shouldRecover(
 		len(block.Payload) > 0 &&
 		block.TimestampOffset > 0 &&
 		!stream.history.stale(position, extendedSequence) &&
-		!stream.history.hasPaddingBetween(position, extendedSequence) &&
 		!stream.history.containsForPosition(position, extendedSequence)
 }
 
@@ -305,23 +308,6 @@ func (history *receiveHistory) contains(extended int64) bool {
 	return entry.valid && entry.extended == extended
 }
 
-func (history *receiveHistory) hasPaddingBetween(position sequencePosition, extended int64) bool {
-	if position.reset {
-		return false
-	}
-
-	// RED does not carry the original sequence number for a redundant block.
-	// A known padding packet makes a contiguous sequence inference unsafe.
-	for sequence := extended; sequence < position.extended; sequence++ {
-		entry := history.entries[receiveHistoryIndex(sequence)]
-		if entry.valid && entry.extended == sequence && entry.padding {
-			return true
-		}
-	}
-
-	return false
-}
-
 func (history *receiveHistory) stale(position sequencePosition, extended int64) bool {
 	reference := history.highest
 	if !history.initialized || position.reset || position.extended > reference {
@@ -331,7 +317,9 @@ func (history *receiveHistory) stale(position sequencePosition, extended int64) 
 	return reference-extended >= receiveWindowSize
 }
 
-func (history *receiveHistory) commit(position sequencePosition, recovered []int64) {
+func (history *receiveHistory) commit(
+	position sequencePosition, timestamp uint32, media bool, recovered []receiveHistoryEntry,
+) {
 	if !history.initialized || position.reset {
 		history.entries = [receiveWindowSize]receiveHistoryEntry{}
 		history.highest = position.extended
@@ -340,22 +328,19 @@ func (history *receiveHistory) commit(position sequencePosition, recovered []int
 		history.highest = position.extended
 	}
 
-	for _, extended := range recovered {
-		history.mark(extended)
+	for _, entry := range recovered {
+		history.mark(entry)
 	}
-	history.mark(position.extended)
+	history.mark(receiveHistoryEntry{extended: position.extended, timestamp: timestamp, media: media})
 }
 
 func (history *receiveHistory) commitPadding(position sequencePosition) {
-	history.commit(position, nil)
-	history.entries[receiveHistoryIndex(position.extended)].padding = true
+	history.commit(position, 0, false, nil)
 }
 
-func (history *receiveHistory) mark(extended int64) {
-	history.entries[receiveHistoryIndex(extended)] = receiveHistoryEntry{
-		extended: extended,
-		valid:    true,
-	}
+func (history *receiveHistory) mark(entry receiveHistoryEntry) {
+	entry.valid = true
+	history.entries[receiveHistoryIndex(entry.extended)] = entry
 }
 
 func receiveHistoryIndex(extended int64) int {
