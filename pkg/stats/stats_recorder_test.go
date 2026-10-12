@@ -1207,6 +1207,36 @@ func TestQueueNotBlocking(t *testing.T) {
 	}
 }
 
+func TestRecordIncomingRRSignExtendsCumulativeLoss(t *testing.T) {
+	lossRecorder := &recorder{ssrc: 7, clockRate: 90000}
+	base := internalStats{}
+	base.remoteInboundFirstSequenceNumber = 0
+	base.remoteInboundFirstSequenceNumberInitialized = true
+
+	// Last sequence 10 and first sequence 0 means 11 packets were expected.
+	for _, tc := range []struct {
+		name     string
+		total    uint32
+		wantLost int64
+		wantRecv uint64
+	}{
+		{name: "negative one", total: 0xFFFFFF, wantLost: -1, wantRecv: 12},
+		{name: "minimum negative", total: 0x800000, wantLost: -8_388_608, wantRecv: 8_388_619},
+		{name: "maximum positive", total: 0x7FFFFF, wantLost: 8_388_607, wantRecv: 0},
+		{name: "one lost", total: 1, wantLost: 1, wantRecv: 10},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := lossRecorder.recordIncomingRR(base, []rtcp.ReceptionReport{{
+				SSRC:               7,
+				TotalLost:          tc.total,
+				LastSequenceNumber: 10,
+			}}, time.Unix(0, 0))
+			assert.Equal(t, tc.wantLost, got.RemoteInboundRTPStreamStats.PacketsLost)
+			assert.Equal(t, tc.wantRecv, got.RemoteInboundRTPStreamStats.PacketsReceived)
+		})
+	}
+}
+
 func TestContains(t *testing.T) {
 	for i, tc := range []struct {
 		list     []uint32

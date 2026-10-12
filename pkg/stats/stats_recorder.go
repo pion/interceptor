@@ -238,6 +238,20 @@ func (r *recorder) recordOutgoingRTP(latestStats internalStats, v *outgoingRTP) 
 	return latestStats
 }
 
+// cumulativePacketsLost sign-extends the 24-bit RFC 3550 cumulative loss.
+// pion/rtcp keeps those bits in a uint32, so 0xFFFFFF is -1.
+func cumulativePacketsLost(totalLost uint32) int64 {
+	const signBit = 1 << 23
+	const width = 1 << 24
+
+	v := totalLost & (width - 1)
+	if v&signBit != 0 {
+		return int64(v) - width
+	}
+
+	return int64(v)
+}
+
 func (r *recorder) recordIncomingRR(
 	latestStats internalStats,
 	reports []rtcp.ReceptionReport,
@@ -247,17 +261,18 @@ func (r *recorder) recordIncomingRR(
 		if report.SSRC != r.ssrc {
 			continue
 		}
+		lost := cumulativePacketsLost(report.TotalLost)
 		if latestStats.remoteInboundFirstSequenceNumberInitialized {
 			cycles := uint64(report.LastSequenceNumber&0xFFFF0000) >> 16
 			nr := uint64(report.LastSequenceNumber & 0x0000FFFF)
 			highest := cycles*(0xFFFF+1) + nr
 			//nolint:gosec // G115
 			expected := int64(highest) - latestStats.remoteInboundFirstSequenceNumber + 1
-			received := max(expected-int64(report.TotalLost), 0)
+			received := max(expected-lost, 0)
 			//nolint:gosec // G115
 			latestStats.RemoteInboundRTPStreamStats.PacketsReceived = uint64(received)
 		}
-		latestStats.RemoteInboundRTPStreamStats.PacketsLost = int64(report.TotalLost)
+		latestStats.RemoteInboundRTPStreamStats.PacketsLost = lost
 		latestStats.RemoteInboundRTPStreamStats.Jitter = float64(report.Jitter) / r.clockRate
 
 		if report.Delay != 0 && report.LastSenderReport != 0 {
