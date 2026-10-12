@@ -90,63 +90,65 @@ func (f *FeedbackAdapter) OnSent(ts time.Time, header *rtp.Header, size int, att
 // chunk: the feedback's PacketStatusCount bounds every chunk.
 func (f *FeedbackAdapter) unpackRunLengthChunk(
 	start uint16, refTime time.Time, chunk *rtcp.RunLengthChunk, deltas []*rtcp.RecvDelta, maxStatuses uint16,
-) (consumedDeltas int, nextRef time.Time, acks []Acknowledgment, err error) {
+) (consumedDeltas int, nextRef time.Time, statusCount uint16, acks []Acknowledgment, err error) {
 	count := min(chunk.RunLength, maxStatuses)
-	result := make([]Acknowledgment, count)
 	deltaIndex := 0
+	acks = []Acknowledgment{}
 
 	end := start + count
-	resultIndex := 0
 	for i := start; i != end; i++ {
+		var arrival time.Time
+		if chunk.PacketStatusSymbol != rtcp.TypeTCCPacketNotReceived {
+			if len(deltas)-1 < deltaIndex {
+				return deltaIndex, refTime, count, acks, errInvalidFeedback
+			}
+			refTime = refTime.Add(time.Duration(deltas[deltaIndex].Delta) * time.Microsecond)
+			arrival = refTime
+			deltaIndex++
+		}
+
 		key := feedbackHistoryKey{
 			ssrc:           0,
 			sequenceNumber: i,
 		}
 		if ack, ok := f.history.get(key); ok {
-			if chunk.PacketStatusSymbol != rtcp.TypeTCCPacketNotReceived {
-				if len(deltas)-1 < deltaIndex {
-					return deltaIndex, refTime, result, errInvalidFeedback
-				}
-				refTime = refTime.Add(time.Duration(deltas[deltaIndex].Delta) * time.Microsecond)
-				ack.Arrival = refTime
-				deltaIndex++
-			}
-			result[resultIndex] = ack
+			ack.Arrival = arrival
+			acks = append(acks, ack)
 		}
-		resultIndex++
 	}
 
-	return deltaIndex, refTime, result, nil
+	return deltaIndex, refTime, count, acks, nil
 }
 
 // unpackStatusVectorChunk reads at most maxStatuses symbols from the chunk.
 func (f *FeedbackAdapter) unpackStatusVectorChunk(
 	start uint16, refTime time.Time, chunk *rtcp.StatusVectorChunk, deltas []*rtcp.RecvDelta, maxStatuses uint16,
-) (consumedDeltas int, nextRef time.Time, acks []Acknowledgment, err error) {
+) (consumedDeltas int, nextRef time.Time, statusCount uint16, acks []Acknowledgment, err error) {
 	symbols := chunk.SymbolList[:min(len(chunk.SymbolList), int(maxStatuses))]
-	result := make([]Acknowledgment, len(symbols))
 	deltaIndex := 0
-	resultIndex := 0
+	acks = []Acknowledgment{}
 	for i, symbol := range symbols {
+		var arrival time.Time
+		if symbol != rtcp.TypeTCCPacketNotReceived {
+			if len(deltas)-1 < deltaIndex {
+				return deltaIndex, refTime, uint16(len(symbols)), acks, errInvalidFeedback //nolint:gosec // G115
+			}
+			refTime = refTime.Add(time.Duration(deltas[deltaIndex].Delta) * time.Microsecond)
+			arrival = refTime
+			deltaIndex++
+		}
+
 		key := feedbackHistoryKey{
 			ssrc:           0,
 			sequenceNumber: start + uint16(i), //nolint:gosec // G115
 		}
 		if ack, ok := f.history.get(key); ok {
-			if symbol != rtcp.TypeTCCPacketNotReceived {
-				if len(deltas)-1 < deltaIndex {
-					return deltaIndex, refTime, result, errInvalidFeedback
-				}
-				refTime = refTime.Add(time.Duration(deltas[deltaIndex].Delta) * time.Microsecond)
-				ack.Arrival = refTime
-				deltaIndex++
-			}
-			result[resultIndex] = ack
+			ack.Arrival = arrival
+			acks = append(acks, ack)
 		}
-		resultIndex++
 	}
 
-	return deltaIndex, refTime, result, nil
+	return deltaIndex, refTime, uint16(len(symbols)), acks, nil //nolint:gosec // G115
 }
 
 // OnTransportCCFeedback converts incoming TWCC RTCP packet feedback to
@@ -171,25 +173,25 @@ func (f *FeedbackAdapter) OnTransportCCFeedback(
 		}
 		switch chunk := chunk.(type) {
 		case *rtcp.RunLengthChunk:
-			n, nextRefTime, acks, err := f.unpackRunLengthChunk(index, refTime, chunk, recvDeltas, remaining)
+			n, nextRefTime, statusCount, acks, err := f.unpackRunLengthChunk(index, refTime, chunk, recvDeltas, remaining)
 			if err != nil {
 				return nil, err
 			}
 			refTime = nextRefTime
 			result = append(result, acks...)
 			recvDeltas = recvDeltas[n:]
-			index = uint16(int(index) + len(acks)) //nolint:gosec // G115
-			remaining -= uint16(len(acks))         //nolint:gosec // G115
+			index += statusCount
+			remaining -= statusCount
 		case *rtcp.StatusVectorChunk:
-			n, nextRefTime, acks, err := f.unpackStatusVectorChunk(index, refTime, chunk, recvDeltas, remaining)
+			n, nextRefTime, statusCount, acks, err := f.unpackStatusVectorChunk(index, refTime, chunk, recvDeltas, remaining)
 			if err != nil {
 				return nil, err
 			}
 			refTime = nextRefTime
 			result = append(result, acks...)
 			recvDeltas = recvDeltas[n:]
-			index = uint16(int(index) + len(acks)) //nolint:gosec // G115
-			remaining -= uint16(len(acks))         //nolint:gosec // G115
+			index += statusCount
+			remaining -= statusCount
 		default:
 			return nil, errInvalidFeedback
 		}
