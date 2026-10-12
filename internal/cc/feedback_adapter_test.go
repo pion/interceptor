@@ -225,7 +225,7 @@ func TestUnpackRunLengthChunk(t *testing.T) {
 				assert.NoError(t, fa.OnSent(time.Time{}, h, 0, attributes))
 			}
 
-			n, refTime, acks, err := fa.unpackRunLengthChunk(tc.start, time.Time{}, &tc.chunk, tc.deltas, math.MaxUint16)
+			n, refTime, _, acks, err := fa.unpackRunLengthChunk(tc.start, time.Time{}, &tc.chunk, tc.deltas, math.MaxUint16)
 			assert.NoError(t, err)
 			assert.Len(t, acks, len(tc.acks))
 			assert.Equal(t, tc.n, n)
@@ -408,7 +408,7 @@ func TestUnpackStatusVectorChunk(t *testing.T) {
 				assert.NoError(t, fa.OnSent(time.Time{}, h, 0, attributes))
 			}
 
-			n, refTime, acks, err := fa.unpackStatusVectorChunk(tc.start, time.Time{}, &tc.chunk, tc.deltas, math.MaxUint16)
+			n, refTime, _, acks, err := fa.unpackStatusVectorChunk(tc.start, time.Time{}, &tc.chunk, tc.deltas, math.MaxUint16)
 			assert.NoError(t, err)
 			assert.Len(t, acks, len(tc.acks))
 			assert.Equal(t, tc.n, n)
@@ -972,6 +972,42 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		for _, r := range results {
 			assert.False(t, r.Arrival.IsZero(), "packet %d must not be reported lost", r.SequenceNumber)
 		}
+	})
+
+	t.Run("skipsPacketsEvictedFromHistory", func(t *testing.T) {
+		t0 := time.Time{}
+		adapter := NewFeedbackAdapter()
+		for i := range uint16(251) {
+			pkt := getPacketWithTransportCCExt(t, i)
+			assert.NoError(
+				t,
+				adapter.OnSent(t0, &pkt.Header, 1200, interceptor.Attributes{TwccExtensionAttributesKey: hdrExtID}),
+			)
+		}
+
+		results, err := adapter.OnTransportCCFeedback(t0, &rtcp.TransportLayerCC{
+			BaseSequenceNumber: 0,
+			PacketStatusCount:  251,
+			PacketChunks: []rtcp.PacketStatusChunk{
+				&rtcp.RunLengthChunk{
+					Type:               rtcp.TypeTCCRunLengthChunk,
+					PacketStatusSymbol: rtcp.TypeTCCPacketReceivedSmallDelta,
+					RunLength:          251,
+				},
+			},
+			RecvDeltas: func() []*rtcp.RecvDelta {
+				ret := make([]*rtcp.RecvDelta, 251)
+				for i := range ret {
+					ret[i] = &rtcp.RecvDelta{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 4}
+				}
+
+				return ret
+			}(),
+		})
+		assert.NoError(t, err)
+		assert.Len(t, results, 250)
+		assert.Equal(t, uint16(1), results[0].SequenceNumber)
+		assert.False(t, results[0].Arrival.IsZero())
 	})
 
 	t.Run("doesNotcrashOnInvalidTWCCPacket", func(t *testing.T) {
