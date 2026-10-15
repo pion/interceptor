@@ -531,11 +531,56 @@ func TestSenderInterceptorKeepsHistoryAfterWriteError(t *testing.T) {
 }
 
 func TestSenderMaxPacketSizeValidation(t *testing.T) {
-	factory, err := NewSenderInterceptor(SenderMaxPacketSize(0))
+	for _, maxPacketSize := range []int{0, -1} {
+		factory, err := NewSenderInterceptor(SenderMaxPacketSize(maxPacketSize))
+		assert.ErrorIs(t, err, errInvalidMaxPacketSize)
+		assert.Nil(t, factory)
+	}
+}
+
+func TestSenderInterceptorFactoryAppliesOptionsOnce(t *testing.T) {
+	const maxPacketSize = 1400
+
+	optionCalls := 0
+	factory, err := NewSenderInterceptor(func(sender *SenderInterceptor) error {
+		optionCalls++
+		sender.maxPacketSize = maxPacketSize
+
+		return nil
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 1, optionCalls)
+
+	first, err := factory.NewInterceptor("first")
+	require.NoError(t, err)
+	second, err := factory.NewInterceptor("second")
+	require.NoError(t, err)
+	assert.Equal(t, 1, optionCalls)
+	assert.NotSame(t, first, second)
+
+	firstSender, ok := first.(*SenderInterceptor)
+	require.True(t, ok)
+	secondSender, ok := second.(*SenderInterceptor)
+	require.True(t, ok)
+	assert.Equal(t, maxPacketSize, firstSender.maxPacketSize)
+	assert.Equal(t, maxPacketSize, secondSender.maxPacketSize)
+
+	firstSender.maxPacketSize = 800
+	assert.Equal(t, maxPacketSize, secondSender.maxPacketSize)
+	assert.Equal(t, maxPacketSize, factory.maxPacketSize)
+}
+
+func TestSenderInterceptorFactoryDefaultPacketSize(t *testing.T) {
+	factory, err := NewSenderInterceptor()
 	require.NoError(t, err)
 
-	_, err = factory.NewInterceptor("")
-	assert.ErrorIs(t, err, errInvalidMaxPacketSize)
+	for _, factory := range []*SenderInterceptorFactory{factory, {}} {
+		created, err := factory.NewInterceptor("")
+		require.NoError(t, err)
+		sender, ok := created.(*SenderInterceptor)
+		require.True(t, ok)
+		assert.Equal(t, defaultMaxPacketSize, sender.maxPacketSize)
+	}
 }
 
 func writeOpus(

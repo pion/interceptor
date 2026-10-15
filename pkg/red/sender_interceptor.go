@@ -23,7 +23,7 @@ var errInvalidMaxPacketSize = errors.New("maximum RED packet size must be greate
 
 // SenderInterceptorFactory creates SenderInterceptors.
 type SenderInterceptorFactory struct {
-	opts []SenderOption
+	maxPacketSize int
 }
 
 // SenderInterceptor adds previous Opus payloads to outgoing packets using RFC 2198 RED.
@@ -49,20 +49,28 @@ type senderStream struct {
 }
 
 // NewSenderInterceptor returns a new SenderInterceptorFactory.
+// Options are applied once when creating the factory.
 func NewSenderInterceptor(opts ...SenderOption) (*SenderInterceptorFactory, error) {
-	return &SenderInterceptorFactory{opts: opts}, nil
-}
-
-// NewInterceptor constructs a new SenderInterceptor.
-func (factory *SenderInterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, error) {
 	sender := &SenderInterceptor{maxPacketSize: defaultMaxPacketSize}
-	for _, opt := range factory.opts {
+	for _, opt := range opts {
 		if err := opt(sender); err != nil {
 			return nil, err
 		}
 	}
 
-	return sender, nil
+	return &SenderInterceptorFactory{
+		maxPacketSize: sender.maxPacketSize,
+	}, nil
+}
+
+// NewInterceptor constructs a new SenderInterceptor.
+func (factory *SenderInterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, error) {
+	maxPacketSize := factory.maxPacketSize
+	if maxPacketSize == 0 {
+		maxPacketSize = defaultMaxPacketSize
+	}
+
+	return &SenderInterceptor{maxPacketSize: maxPacketSize}, nil
 }
 
 // BindLocalStream wraps an outgoing Opus stream with RED when negotiated RED information is available.
