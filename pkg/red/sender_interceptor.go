@@ -98,12 +98,7 @@ func (sender *SenderInterceptor) BindLocalStream(
 }
 
 func (stream *senderStream) encode(header *rtp.Header, payload []byte) (*rtp.Header, []byte, error) {
-	if header.PayloadType != stream.opusPayloadType {
-		stream.reset()
-
-		return header, payload, nil
-	}
-	if len(payload) == 0 {
+	if header.PayloadType != stream.opusPayloadType || len(payload) == 0 {
 		stream.reset()
 
 		return header, payload, nil
