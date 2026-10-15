@@ -202,6 +202,30 @@ func TestSenderInterceptorHonorsMaxPacketSize(t *testing.T) {
 		}}, redPayload.RedundantBlocks)
 	})
 
+	t.Run("UsesSmallerOlderBlockWhenNewestDoesNotFit", func(t *testing.T) {
+		downstream := &capturedWriter{}
+		writer := newTestSender(t, opusStreamInfo(), downstream, SenderMaxPacketSize(37))
+		oldestPayload := bytesWithValue(5, 0x01)
+		primaryPayload := bytesWithValue(10, 0x03)
+
+		writeOpus(t, writer, 1, 960, oldestPayload)
+		writeOpus(t, writer, 2, 1_920, bytesWithValue(20, 0x02))
+		writeOpus(t, writer, 3, 2_880, primaryPayload)
+		require.Len(t, downstream.packets, 3)
+
+		// The newest copy would make 47 bytes; the older copy makes 32.
+		packet := downstream.packets[2]
+		require.Equal(t, testREDPayloadType, packet.PayloadType)
+		assert.LessOrEqual(t, packet.MarshalSize(), 37)
+		redPayload := requireREDPayload(t, packet)
+		assert.Equal(t, []Block{{
+			PayloadType:     testOpusPayloadType,
+			TimestampOffset: 1_920,
+			Payload:         oldestPayload,
+		}}, redPayload.RedundantBlocks)
+		assert.Equal(t, Block{PayloadType: testOpusPayloadType, Payload: primaryPayload}, redPayload.PrimaryBlock)
+	})
+
 	t.Run("UsesPlainOpusWhenNoBlockFits", func(t *testing.T) {
 		downstream := &capturedWriter{}
 		writer := newTestSender(t, opusStreamInfo(), downstream, SenderMaxPacketSize(36))

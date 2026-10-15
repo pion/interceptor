@@ -164,7 +164,7 @@ func (stream *senderStream) selectRedundantBlocks(header *rtp.Header, payload []
 
 		blockSize := redundantHeaderSize + len(entry.payload)
 		if packetSize+blockSize > stream.maxPacketSize {
-			break
+			continue
 		}
 
 		blocksNewestFirst = append(blocksNewestFirst, Block{
