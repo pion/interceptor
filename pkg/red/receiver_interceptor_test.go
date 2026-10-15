@@ -155,107 +155,98 @@ func TestReceiverInterceptorExtractsPrimaryOpus(t *testing.T) {
 	assert.Nil(t, inputAttributes.Get("output-only"), "the input attribute map must not be mutated")
 }
 
-func TestReceiverInterceptorConsumesPaddingOnlyRED(t *testing.T) {
+func TestReceiverInterceptorConsumesPaddingOnlyPackets(t *testing.T) {
 	info := opusStreamInfo()
 	info.PayloadTypeForwardErrorCorrection = 63
-	mediaPacket := func(sequenceNumber uint16, timestamp uint32, payload []byte) rtp.Packet {
-		return rtp.Packet{
-			Header: rtp.Header{
-				Version:        2,
-				PayloadType:    info.PayloadTypeForwardErrorCorrection,
-				SequenceNumber: sequenceNumber,
-				Timestamp:      timestamp,
-				SSRC:           testSSRC,
-			},
-			Payload: marshalREDPayload(t, Payload{PrimaryBlock: Block{
-				PayloadType: testOpusPayloadType,
-				Payload:     payload,
-			}}),
-		}
+	mediaPacket := func(sequenceNumber uint16, timestamp uint32) rtp.Packet {
+		packet := makeREDPacket(t, rtp.Header{
+			Version:        2,
+			SequenceNumber: sequenceNumber,
+			Timestamp:      timestamp,
+			SSRC:           testSSRC,
+		}, nil, []byte{byte(sequenceNumber)}) //nolint:gosec // Test sequence numbers are bounded below.
+		packet.PayloadType = info.PayloadTypeForwardErrorCorrection
+
+		return packet
 	}
 
-	padding := paddingOnlyPacket(21, 960, 50)
-	padding.PayloadType = info.PayloadTypeForwardErrorCorrection
-	downstream := readerForPackets(
-		t,
-		mediaPacket(20, 960, []byte{0x20}),
-		padding,
-		mediaPacket(22, 1_920, []byte{0x22}),
-	)
-	reader := newTestReceiver(t, info, downstream)
+	redPadding := paddingOnlyPacket(21, 960, 50)
+	redPadding.PayloadType = info.PayloadTypeForwardErrorCorrection
+	opusPadding := paddingOnlyPacket(1, 960, 50)
+	opusPadding.PayloadType = testOpusPayloadType
+	terminalPadding := paddingOnlyPacket(5, 3_840, 1)
+	terminalPadding.PayloadType = info.PayloadTypeForwardErrorCorrection
 
-	first, _ := readOutputPacket(t, reader)
-	second, _ := readOutputPacket(t, reader)
-	assert.Equal(t, []uint16{20, 22}, []uint16{first.SequenceNumber, second.SequenceNumber})
-	assert.Equal(t, [][]byte{{0x20}, {0x22}}, [][]byte{first.Payload, second.Payload})
-	assert.Equal(t, testOpusPayloadType, first.PayloadType)
-	assert.Equal(t, testOpusPayloadType, second.PayloadType)
-	assert.Empty(t, downstream.results)
+	tests := []struct {
+		name     string
+		input    []rtp.Packet
+		expected []rtp.Packet
+	}{
+		{
+			name:  "RED",
+			input: []rtp.Packet{mediaPacket(20, 960), redPadding, mediaPacket(22, 1_920)},
+			expected: []rtp.Packet{
+				makePlainPacket(20, 960, []byte{20}), makePlainPacket(22, 1_920, []byte{22}),
+			},
+		},
+		{
+			name:     "Opus",
+			input:    []rtp.Packet{opusPadding, mediaPacket(2, 1_920)},
+			expected: []rtp.Packet{makePlainPacket(2, 1_920, []byte{2})},
+		},
+		{
+			name: "TerminalGapIsNotFabricated",
+			input: []rtp.Packet{
+				makePlainPacket(1, 960, []byte{1}), makePlainPacket(2, 1_920, []byte{2}),
+				makePlainPacket(3, 2_880, []byte{3}), terminalPadding,
+			},
+			expected: []rtp.Packet{
+				makePlainPacket(1, 960, []byte{1}), makePlainPacket(2, 1_920, []byte{2}),
+				makePlainPacket(3, 2_880, []byte{3}),
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			downstream := readerForPackets(t, test.input...)
+			reader := newTestReceiverWithOptions(t, info, downstream)
+			for _, expected := range test.expected {
+				packet, _ := readOutputPacket(t, reader)
+				assert.Equal(t, expected.Header, packet.Header)
+				assert.Equal(t, expected.Payload, packet.Payload)
+			}
 
-	n, _, err := reader.Read(make([]byte, 1500), interceptor.Attributes{})
-	assert.Zero(t, n)
-	assert.ErrorIs(t, err, io.EOF)
+			n, _, err := reader.Read(make([]byte, 1500), interceptor.Attributes{})
+			assert.Zero(t, n)
+			assert.ErrorIs(t, err, io.EOF)
+			assert.Empty(t, downstream.results)
+		})
+	}
 }
 
-func TestReceiverInterceptorConsumesPaddingOnlyOpus(t *testing.T) {
-	padding := paddingOnlyPacket(1, 960, 50)
-	padding.PayloadType = testOpusPayloadType
-	redPacket := makeREDPacket(t, rtp.Header{
-		Version:        2,
-		SequenceNumber: 2,
-		Timestamp:      1_920,
-		SSRC:           testSSRC,
-	}, nil, []byte{0x02})
-	downstream := readerForPackets(t, padding, redPacket)
-	reader := newTestReceiver(t, opusStreamInfo(), downstream)
+func TestReceiverInterceptorPreservesReadErrors(t *testing.T) {
+	opusPadding := paddingOnlyPacket(1, 960, 50)
+	opusPadding.PayloadType = testOpusPayloadType
+	tests := []struct {
+		name    string
+		padding []rtp.Packet
+	}{
+		{name: "BeforePadding"},
+		{name: "AfterREDPadding", padding: []rtp.Packet{paddingOnlyPacket(1, 960, 50)}},
+		{name: "AfterOpusPadding", padding: []rtp.Packet{opusPadding}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			downstream := readerForPackets(t, test.padding...)
+			downstream.results = append(downstream.results, readerResult{err: errTestRead})
+			reader := newTestReceiver(t, opusStreamInfo(), downstream)
 
-	packet, _ := readOutputPacket(t, reader)
-	assert.Equal(t, uint16(2), packet.SequenceNumber)
-	assert.Equal(t, testOpusPayloadType, packet.PayloadType)
-	assert.Equal(t, []byte{0x02}, packet.Payload)
-
-	n, _, err := reader.Read(make([]byte, 1500), interceptor.Attributes{})
-	assert.Zero(t, n)
-	assert.ErrorIs(t, err, io.EOF)
-}
-
-func TestReceiverInterceptorRejectsEmptyREDMediaWithoutPadding(t *testing.T) {
-	downstream := readerForPackets(t, rtp.Packet{Header: rtp.Header{
-		Version:        2,
-		PayloadType:    testREDPayloadType,
-		SequenceNumber: 1,
-		SSRC:           testSSRC,
-	}})
-	reader := newTestReceiver(t, opusStreamInfo(), downstream)
-
-	n, _, err := reader.Read(make([]byte, 1500), interceptor.Attributes{})
-	assert.Zero(t, n)
-	assert.ErrorIs(t, err, errInvalidREDPayload)
-}
-
-func TestReceiverInterceptorPreservesReadErrorAfterPaddingOnlyRED(t *testing.T) {
-	downstream := &queuedRTPReader{results: []readerResult{
-		{raw: marshalPacket(t, paddingOnlyPacket(1, 960, 50))},
-		{err: errTestRead},
-	}}
-	reader := newTestReceiver(t, opusStreamInfo(), downstream)
-
-	n, _, err := reader.Read(make([]byte, 1500), interceptor.Attributes{})
-	assert.Zero(t, n)
-	assert.ErrorIs(t, err, errTestRead)
-	assert.Empty(t, downstream.results)
-}
-
-func TestReceiverInterceptorRejectsMalformedRTPPadding(t *testing.T) {
-	raw := marshalPacket(t, paddingOnlyPacket(1, 960, 4))
-	raw[len(raw)-1] = 0
-	downstream := &queuedRTPReader{results: []readerResult{{raw: raw}}}
-	reader := newTestReceiver(t, opusStreamInfo(), downstream)
-
-	n, _, err := reader.Read(make([]byte, 1500), interceptor.Attributes{})
-	assert.Zero(t, n)
-	assert.ErrorContains(t, err, "invalid RTP padding")
-	assert.NotErrorIs(t, err, errInvalidREDPayload)
+			n, _, err := reader.Read(make([]byte, 1500), interceptor.Attributes{})
+			assert.Zero(t, n)
+			assert.ErrorIs(t, err, errTestRead)
+			assert.Empty(t, downstream.results)
+		})
+	}
 }
 
 func TestReceiverInterceptorPassesThroughPlainAndUnrelatedRTP(t *testing.T) {
@@ -314,92 +305,80 @@ func TestReceiverInterceptorPassesThroughPlainAndUnrelatedRTP(t *testing.T) {
 	}
 }
 
-func TestReceiverInterceptorRejectsInvalidRED(t *testing.T) {
-	validPacket := rtp.Packet{
-		Header: rtp.Header{
-			Version:        2,
-			PayloadType:    testREDPayloadType,
-			SequenceNumber: 2,
-			SSRC:           testSSRC,
-		},
-		Payload: marshalREDPayload(t, Payload{
-			PrimaryBlock: Block{PayloadType: testOpusPayloadType, Payload: []byte{0x02}},
-		}),
+func TestReceiverInterceptorRejectsInvalidPackets(t *testing.T) {
+	header := rtp.Header{
+		Version:        2,
+		PayloadType:    testREDPayloadType,
+		SequenceNumber: 1,
+		SSRC:           testSSRC,
 	}
-	downstream := &queuedRTPReader{results: []readerResult{
-		{
-			raw: marshalPacket(t, rtp.Packet{
-				Header: rtp.Header{
-					Version:        2,
-					PayloadType:    testREDPayloadType,
-					SequenceNumber: 1,
-					SSRC:           testSSRC,
-				},
-				Payload: []byte{followBit},
-			}),
-		},
-		{raw: marshalPacket(t, validPacket)},
-	}}
-	reader := newTestReceiver(t, opusStreamInfo(), downstream)
-	buffer := make([]byte, 1500)
-
-	n, _, err := reader.Read(buffer, interceptor.Attributes{})
-	assert.Zero(t, n)
-	assert.ErrorIs(t, err, errInvalidREDPayload)
-
-	n, _, err = reader.Read(buffer, interceptor.Attributes{})
-	require.NoError(t, err)
-	var outputPacket rtp.Packet
-	require.NoError(t, outputPacket.Unmarshal(buffer[:n]))
-	assert.Equal(t, testOpusPayloadType, outputPacket.PayloadType)
-	assert.Equal(t, []byte{0x02}, outputPacket.Payload)
-}
-
-func TestReceiverInterceptorRejectsUnexpectedPrimary(t *testing.T) {
+	malformedPadding := marshalPacket(t, paddingOnlyPacket(1, 960, 4))
+	malformedPadding[len(malformedPadding)-1] = 0
+	validPacket := makeREDPacket(t, rtp.Header{
+		Version:        2,
+		SequenceNumber: 2,
+		Timestamp:      1_920,
+		SSRC:           testSSRC,
+	}, nil, []byte{2})
 	tests := []struct {
 		name    string
-		primary Block
+		raw     []byte
 		err     error
+		message string
 	}{
 		{
-			name:    "PayloadType",
-			primary: Block{PayloadType: testOpusPayloadType - 1, Payload: []byte{0x01}},
-			err:     errUnexpectedPrimaryPayloadType,
+			name: "EmptyREDWithoutPadding",
+			raw:  marshalPacket(t, rtp.Packet{Header: header}),
+			err:  errInvalidREDPayload,
 		},
 		{
-			name:    "EmptyPayload",
-			primary: Block{PayloadType: testOpusPayloadType},
-			err:     errEmptyPrimaryPayload,
+			name: "TruncatedREDHeader",
+			raw:  marshalPacket(t, rtp.Packet{Header: header, Payload: []byte{followBit}}),
+			err:  errInvalidREDPayload,
+		},
+		{
+			name: "PrimaryPayloadType",
+			raw: marshalPacket(t, rtp.Packet{Header: header, Payload: marshalREDPayload(t, Payload{
+				PrimaryBlock: Block{PayloadType: testOpusPayloadType - 1, Payload: []byte{1}},
+			})}),
+			err: errUnexpectedPrimaryPayloadType,
+		},
+		{
+			name: "EmptyPrimaryPayload",
+			raw: marshalPacket(t, rtp.Packet{Header: header, Payload: marshalREDPayload(t, Payload{
+				PrimaryBlock: Block{PayloadType: testOpusPayloadType},
+			})}),
+			err: errEmptyPrimaryPayload,
+		},
+		{
+			name:    "MalformedRTPPadding",
+			raw:     malformedPadding,
+			message: "invalid RTP padding",
 		},
 	}
-
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			inputPacket := rtp.Packet{
-				Header: rtp.Header{
-					Version:     2,
-					PayloadType: testREDPayloadType,
-					SSRC:        testSSRC,
-				},
-				Payload: marshalREDPayload(t, Payload{PrimaryBlock: test.primary}),
-			}
-			downstream := &queuedRTPReader{results: []readerResult{{raw: marshalPacket(t, inputPacket)}}}
+			downstream := &queuedRTPReader{results: []readerResult{
+				{raw: test.raw}, {raw: marshalPacket(t, validPacket)},
+			}}
 			reader := newTestReceiver(t, opusStreamInfo(), downstream)
 
 			n, _, err := reader.Read(make([]byte, 1500), interceptor.Attributes{})
 			assert.Zero(t, n)
-			assert.ErrorIs(t, err, test.err)
+			if test.err != nil {
+				assert.ErrorIs(t, err, test.err)
+			} else {
+				assert.ErrorContains(t, err, test.message)
+				assert.NotErrorIs(t, err, errInvalidREDPayload)
+			}
+
+			packet, _ := readOutputPacket(t, reader)
+			assert.Equal(t, uint16(2), packet.SequenceNumber)
+			assert.Equal(t, testOpusPayloadType, packet.PayloadType)
+			assert.Equal(t, []byte{2}, packet.Payload)
+			assert.Empty(t, downstream.results)
 		})
 	}
-}
-
-func TestReceiverInterceptorPassesThroughReadErrors(t *testing.T) {
-	downstream := &queuedRTPReader{results: []readerResult{{err: errTestRead}}}
-	reader := newTestReceiver(t, opusStreamInfo(), downstream)
-
-	n, _, err := reader.Read(make([]byte, 1500), interceptor.Attributes{})
-	assert.Zero(t, n)
-	assert.ErrorIs(t, err, errTestRead)
 }
 
 func TestReceiverInterceptorBypassesIneligibleStream(t *testing.T) {

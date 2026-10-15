@@ -99,7 +99,7 @@ func TestSenderInterceptorBuildsOpusRED(t *testing.T) {
 	firstHeader := &rtp.Header{
 		Version:        2,
 		PayloadType:    testOpusPayloadType,
-		SequenceNumber: 10,
+		SequenceNumber: 1,
 		Timestamp:      1_000,
 		SSRC:           testSSRC,
 	}
@@ -113,7 +113,7 @@ func TestSenderInterceptorBuildsOpusRED(t *testing.T) {
 	secondHeader := &rtp.Header{
 		Version:        2,
 		PayloadType:    testOpusPayloadType,
-		SequenceNumber: 11,
+		SequenceNumber: 2,
 		Timestamp:      1_960,
 		SSRC:           testSSRC,
 	}
@@ -135,7 +135,7 @@ func TestSenderInterceptorBuildsOpusRED(t *testing.T) {
 		Padding:        true,
 		Marker:         true,
 		PayloadType:    testOpusPayloadType,
-		SequenceNumber: 12,
+		SequenceNumber: 3,
 		Timestamp:      2_920,
 		SSRC:           testSSRC,
 		CSRC:           []uint32{0x55667788},
@@ -157,6 +157,18 @@ func TestSenderInterceptorBuildsOpusRED(t *testing.T) {
 		{PayloadType: testOpusPayloadType, TimestampOffset: 960, Payload: []byte{0x03, 0x04}},
 	}, thirdRED.RedundantBlocks)
 	assert.Equal(t, Block{PayloadType: testOpusPayloadType, Payload: []byte{0x05, 0x06}}, thirdRED.PrimaryBlock)
+
+	writeOpus(t, writer, 4, 3_880, []byte{0x07, 0x08})
+	writeOpus(t, writer, 5, 4_840, []byte{0x09, 0x0a})
+	require.Len(t, downstream.packets, 5)
+
+	// The packetizer retains only the two newest copies as its history advances.
+	fifthRED := requireREDPayload(t, downstream.packets[4])
+	assert.Equal(t, []Block{
+		{PayloadType: testOpusPayloadType, TimestampOffset: 1_920, Payload: []byte{0x05, 0x06}},
+		{PayloadType: testOpusPayloadType, TimestampOffset: 960, Payload: []byte{0x07, 0x08}},
+	}, fifthRED.RedundantBlocks)
+	assert.Equal(t, Block{PayloadType: testOpusPayloadType, Payload: []byte{0x09, 0x0a}}, fifthRED.PrimaryBlock)
 }
 
 func TestSenderInterceptorHonorsMaxPacketSize(t *testing.T) {

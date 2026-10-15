@@ -36,7 +36,7 @@ func assertTimestampOutputs(t *testing.T, reader interceptor.RTPReader, expected
 		assert.Equal(t, want.SequenceNumber, got.SequenceNumber)
 		assert.Equal(t, want.Timestamp, got.Timestamp)
 		assert.Equal(t, want.Payload, got.Payload)
-		assert.Equal(t, testOpusPayloadType, got.PayloadType)
+		assert.Equal(t, want.PayloadType, got.PayloadType)
 		header, err := attributes.GetRTPHeader(marshalPacket(t, got))
 		assert.NoError(t, err)
 		if err == nil {
@@ -50,213 +50,209 @@ func assertTimestampOutputs(t *testing.T, reader interceptor.RTPReader, expected
 	assert.ErrorIs(t, err, io.EOF)
 }
 
-func TestReceiverTimestampRecoveryOrdersCompleteVariableDurationGap(t *testing.T) {
-	// The missing packets begin 10 ms apart, then the last covers 20 ms.
-	// Their header order is newest first and their offsets are not a fixed cadence.
-	anchor := makePlainPacket(1, 960, []byte{1})
-	carrier := timestampREDPacket(t, 4, 2_880,
-		timestampBlock(960, 3), timestampBlock(1_440, 2))
-	reader := newTestReceiverWithOptions(t, opusStreamInfo(), readerForPackets(t, anchor, carrier))
-
-	assertTimestampOutputs(t, reader, anchor,
-		makePlainPacket(2, 1_440, []byte{2}),
-		makePlainPacket(3, 1_920, []byte{3}),
-		makePlainPacket(4, 2_880, []byte{4}))
+type timestampRecoveryTest struct {
+	name     string
+	input    []rtp.Packet
+	expected []rtp.Packet
 }
 
-func TestReceiverTimestampRecoverySkipsPartialGapWithoutSuppressingOriginals(t *testing.T) {
-	anchor := makePlainPacket(1, 960, []byte{1})
-	carrier := timestampREDPacket(t, 4, 3_840, timestampBlock(960, 3))
-	lateSecond := makePlainPacket(2, 1_920, []byte{2})
-	lateThird := makePlainPacket(3, 2_880, []byte{3})
-	reader := newTestReceiverWithOptions(t, opusStreamInfo(),
-		readerForPackets(t, anchor, carrier, lateSecond, lateThird))
+func runTimestampRecoveryTests(t *testing.T, tests []timestampRecoveryTest, options ...ReceiverOption) {
+	t.Helper()
 
-	assertTimestampOutputs(t, reader, anchor, makePlainPacket(4, 3_840, []byte{4}), lateSecond, lateThird)
-}
-
-func TestReceiverTimestampRecoverySkipsUnanchoredBlocks(t *testing.T) {
-	carrier := timestampREDPacket(t, 3, 2_880, timestampBlock(1_920, 1), timestampBlock(960, 2))
-	lateFirst := makePlainPacket(1, 960, []byte{1})
-	lateSecond := makePlainPacket(2, 1_920, []byte{2})
-	reader := newTestReceiverWithOptions(t, opusStreamInfo(), readerForPackets(t, carrier, lateFirst, lateSecond))
-
-	assertTimestampOutputs(t, reader, makePlainPacket(3, 2_880, []byte{3}), lateFirst, lateSecond)
-}
-
-func TestReceiverTimestampRecoveryHandlesCompleteGapAcrossSilence(t *testing.T) {
-	// Silence changes timestamp spacing without consuming sequence numbers.
-	anchor := makePlainPacket(1, 960, []byte{1})
-	carrier := timestampREDPacket(t, 3, 9_600, timestampBlock(5_760, 2))
-	reader := newTestReceiverWithOptions(t, opusStreamInfo(), readerForPackets(t, anchor, carrier))
-
-	assertTimestampOutputs(t, reader, anchor,
-		makePlainPacket(2, 3_840, []byte{2}), makePlainPacket(3, 9_600, []byte{3}))
-}
-
-func TestReceiverTimestampRecoveryDeduplicatesBlockTimestamps(t *testing.T) {
-	anchor := makePlainPacket(1, 960, []byte{1})
-	carrier := timestampREDPacket(t, 3, 2_880, timestampBlock(960, 2), timestampBlock(960, 2))
-	reader := newTestReceiverWithOptions(t, opusStreamInfo(), readerForPackets(t, anchor, carrier))
-
-	assertTimestampOutputs(t, reader, anchor,
-		makePlainPacket(2, 1_920, []byte{2}), makePlainPacket(3, 2_880, []byte{3}))
-}
-
-func TestReceiverTimestampRecoverySkipsConflictingBlocksWithoutSuppressingOriginal(t *testing.T) {
-	anchor := makePlainPacket(1, 960, []byte{1})
-	carrier := timestampREDPacket(t, 3, 2_880, timestampBlock(960, 2), timestampBlock(960, 0xf2))
-	lateOriginal := makePlainPacket(2, 1_920, []byte{2})
-	reader := newTestReceiverWithOptions(t, opusStreamInfo(), readerForPackets(t, anchor, carrier, lateOriginal))
-
-	assertTimestampOutputs(t, reader, anchor, makePlainPacket(3, 2_880, []byte{3}), lateOriginal)
-}
-
-func TestReceiverTimestampRecoveryDoesNotGuessSequenceFromElapsedTime(t *testing.T) {
-	for _, originalSequence := range []uint16{97, 98} {
-		t.Run(string(rune('A'+originalSequence-97)), func(t *testing.T) {
-			// These identical received packets admit two continuous Opus histories:
-			// 20,20,10,10 ms or 10,10,20,20 ms for the four missing packets.
-			// The same backup timestamp belongs to SN 97 or 98 respectively.
-			anchor := makePlainPacket(95, 92_160, []byte{95})
-			carrier := timestampREDPacket(t, 100, 96_000, timestampBlock(1_920, 0xa0))
-			lateOriginal := makePlainPacket(originalSequence, 94_080, []byte{0xa0})
-			reader := newTestReceiverWithOptions(t, opusStreamInfo(),
-				readerForPackets(t, anchor, carrier, lateOriginal))
-
-			assertTimestampOutputs(t, reader, anchor, makePlainPacket(100, 96_000, []byte{100}), lateOriginal)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			reader := newTestReceiverWithOptions(t, opusStreamInfo(), readerForPackets(t, test.input...), options...)
+			assertTimestampOutputs(t, reader, test.expected...)
 		})
 	}
 }
 
-func TestReceiverTimestampRecoveryDoesNotCountUnsupportedBlocks(t *testing.T) {
-	anchor := makePlainPacket(1, 960, []byte{1})
-	unsupported := timestampBlock(960, 3)
-	unsupported.PayloadType--
-	carrier := timestampREDPacket(t, 4, 3_840, timestampBlock(1_920, 2), unsupported)
-	lateSecond := makePlainPacket(2, 1_920, []byte{2})
-	reader := newTestReceiverWithOptions(t, opusStreamInfo(), readerForPackets(t, anchor, carrier, lateSecond))
-
-	assertTimestampOutputs(t, reader, anchor, makePlainPacket(4, 3_840, []byte{4}), lateSecond)
-}
-
-func TestReceiverTimestampRecoveryExcludesObservedPaddingFromGap(t *testing.T) {
-	anchor := makePlainPacket(1, 960, []byte{1})
-	carrier := timestampREDPacket(t, 4, 2_880, timestampBlock(960, 2))
-	reader := newTestReceiverWithOptions(t, opusStreamInfo(),
-		readerForPackets(t, anchor, paddingOnlyPacket(3, 1_920, 1), carrier))
-
-	assertTimestampOutputs(t, reader, anchor,
-		makePlainPacket(2, 1_920, []byte{2}), makePlainPacket(4, 2_880, []byte{4}))
-}
-
-func TestReceiverTimestampRecoveryWrapsSequenceAndTimestamp(t *testing.T) {
-	anchor := makePlainPacket(65_534, 4_294_965_856, []byte{0xfe})
-	carrier := timestampREDPacket(t, 1, 1_440, timestampBlock(960, 0), timestampBlock(1_920, 0xff))
-	reader := newTestReceiverWithOptions(t, opusStreamInfo(), readerForPackets(t, anchor, carrier))
-
-	assertTimestampOutputs(t, reader, anchor,
-		makePlainPacket(65_535, 4_294_966_816, []byte{0xff}),
-		makePlainPacket(0, 480, []byte{0}), makePlainPacket(1, 1_440, []byte{1}))
-}
-
-func TestReceiverTimestampRecoveryDropsAnchorsOnHistoryReset(t *testing.T) {
-	anchor := makePlainPacket(1, 960, []byte{1})
-	carrier := timestampREDPacket(t, 100, 96_000, timestampBlock(1_920, 98), timestampBlock(960, 99))
-	lateOriginal := makePlainPacket(99, 95_040, []byte{99})
-	reader := newTestReceiverWithOptions(t, opusStreamInfo(), readerForPackets(t, anchor, carrier, lateOriginal))
-
-	assertTimestampOutputs(t, reader, anchor, makePlainPacket(100, 96_000, []byte{100}), lateOriginal)
-}
-
-func TestReceiverTimestampRecoveryUsesReorderedAnchorWithSeenPrimary(t *testing.T) {
-	carrier := timestampREDPacket(t, 4, 3_840, timestampBlock(960, 3), timestampBlock(1_920, 2))
-	lateAnchor := makePlainPacket(1, 960, []byte{1})
-	lateDuplicate := makePlainPacket(2, 1_920, []byte{0xf2})
-	reader := newTestReceiverWithOptions(t, opusStreamInfo(),
-		readerForPackets(t, carrier, lateAnchor, carrier, lateDuplicate))
-
-	assertTimestampOutputs(t, reader, makePlainPacket(4, 3_840, []byte{4}), lateAnchor,
-		makePlainPacket(2, 1_920, []byte{2}), makePlainPacket(3, 2_880, []byte{3}))
-}
-
-func TestReceiverTimestampRecoveryUsesIntermediateAnchors(t *testing.T) {
+func TestReceiverTimestampMapping(t *testing.T) {
 	first := makePlainPacket(1, 960, []byte{1})
 	third := makePlainPacket(3, 2_880, []byte{3})
-	carrier := timestampREDPacket(t, 5, 4_800, timestampBlock(960, 4), timestampBlock(2_880, 2))
-	reader := newTestReceiverWithOptions(t, opusStreamInfo(), readerForPackets(t, first, third, carrier))
+	lateCarrier := timestampREDPacket(t, 4, 3_840, timestampBlock(960, 3), timestampBlock(1_920, 2))
+	paddingAnchor := makePlainPacket(9, 8_640, []byte{9})
+	wrapAnchor := makePlainPacket(65_534, 4_294_965_856, []byte{0xfe})
 
-	assertTimestampOutputs(t, reader, first, third,
-		makePlainPacket(2, 1_920, []byte{2}), makePlainPacket(4, 3_840, []byte{4}),
-		makePlainPacket(5, 4_800, []byte{5}))
+	runTimestampRecoveryTests(t, []timestampRecoveryTest{
+		{
+			// Two missing packets begin 10 ms apart, then the last covers 20 ms.
+			name:  "ReversedBlocksWithVariableDuration",
+			input: []rtp.Packet{first, timestampREDPacket(t, 4, 2_880, timestampBlock(960, 3), timestampBlock(1_440, 2))},
+			expected: []rtp.Packet{
+				first, makePlainPacket(2, 1_440, []byte{2}),
+				makePlainPacket(3, 1_920, []byte{3}), makePlainPacket(4, 2_880, []byte{4}),
+			},
+		},
+		{
+			name: "UnanchoredBlocksLeaveOriginalsDeliverable",
+			input: []rtp.Packet{
+				timestampREDPacket(t, 3, 2_880, timestampBlock(1_920, 1), timestampBlock(960, 2)),
+				first, makePlainPacket(2, 1_920, []byte{2}),
+			},
+			expected: []rtp.Packet{third, first, makePlainPacket(2, 1_920, []byte{2})},
+		},
+		{
+			name:     "SilenceAdvancesTimeWithoutConsumingSequenceNumbers",
+			input:    []rtp.Packet{first, timestampREDPacket(t, 3, 9_600, timestampBlock(5_760, 2))},
+			expected: []rtp.Packet{first, makePlainPacket(2, 3_840, []byte{2}), makePlainPacket(3, 9_600, []byte{3})},
+		},
+		{
+			name: "ObservedPaddingAndAlreadySeenBackup",
+			input: []rtp.Packet{
+				paddingAnchor, paddingOnlyPacket(11, 9_600, 50),
+				timestampREDPacket(t, 12, 11_520, timestampBlock(2_880, 9), timestampBlock(1_920, 10)),
+			},
+			expected: []rtp.Packet{paddingAnchor, makePlainPacket(10, 9_600, []byte{10}), makePlainPacket(12, 11_520, []byte{12})},
+		},
+		{
+			name: "ObservedPaddingHasNoMissingMedia",
+			input: []rtp.Packet{
+				makePlainPacket(10, 9_600, []byte{10}), paddingOnlyPacket(11, 9_600, 50),
+				timestampREDPacket(t, 12, 10_560, timestampBlock(960, 10)),
+			},
+			expected: []rtp.Packet{makePlainPacket(10, 9_600, []byte{10}), makePlainPacket(12, 10_560, []byte{12})},
+		},
+		{
+			name:  "SequenceAndTimestampWraparound",
+			input: []rtp.Packet{wrapAnchor, timestampREDPacket(t, 1, 1_440, timestampBlock(960, 0), timestampBlock(1_920, 0xff))},
+			expected: []rtp.Packet{
+				wrapAnchor, makePlainPacket(65_535, 4_294_966_816, []byte{0xff}),
+				makePlainPacket(0, 480, []byte{0}), makePlainPacket(1, 1_440, []byte{1}),
+			},
+		},
+		{
+			name: "HistoryResetRejectsStalePacketsAndAcceptsUnseenRecentPackets",
+			input: []rtp.Packet{
+				first, timestampREDPacket(t, 100, 96_000, timestampBlock(1_920, 98), timestampBlock(960, 99)),
+				makePlainPacket(1, 960, []byte{0xf1}), makePlainPacket(99, 95_040, []byte{99}), makePlainPacket(101, 96_960, []byte{101}),
+			},
+			expected: []rtp.Packet{
+				first, makePlainPacket(100, 96_000, []byte{100}),
+				makePlainPacket(99, 95_040, []byte{99}), makePlainPacket(101, 96_960, []byte{101}),
+			},
+		},
+		{
+			name:     "ReorderedAnchorWithSeenPrimary",
+			input:    []rtp.Packet{lateCarrier, first, lateCarrier, makePlainPacket(2, 1_920, []byte{0xf2})},
+			expected: []rtp.Packet{makePlainPacket(4, 3_840, []byte{4}), first, makePlainPacket(2, 1_920, []byte{2}), third},
+		},
+		{
+			name:  "IntermediateAnchorsPartitionGaps",
+			input: []rtp.Packet{first, third, timestampREDPacket(t, 5, 4_800, timestampBlock(960, 4), timestampBlock(2_880, 2))},
+			expected: []rtp.Packet{
+				first, third, makePlainPacket(2, 1_920, []byte{2}),
+				makePlainPacket(4, 3_840, []byte{4}), makePlainPacket(5, 4_800, []byte{5}),
+			},
+		},
+	})
 }
 
-func TestReceiverFixedDurationRecoveryOrdersSparseBlocksByOffset(t *testing.T) {
-	carrier := timestampREDPacket(t, 100, 96_000, timestampBlock(960, 99), timestampBlock(2_880, 97))
-	reader := newTestReceiverWithOptions(t, opusStreamInfo(), readerForPackets(t, carrier),
-		ReceiverPacketDuration(20*time.Millisecond))
+func TestReceiverAmbiguousBlocks(t *testing.T) {
+	first := makePlainPacket(1, 960, []byte{1})
+	second := makePlainPacket(2, 1_920, []byte{2})
+	third := makePlainPacket(3, 2_880, []byte{3})
+	anchor := makePlainPacket(95, 92_160, []byte{95})
+	carrier := timestampREDPacket(t, 100, 96_000, timestampBlock(1_920, 0xa0))
+	primary := makePlainPacket(100, 96_000, []byte{100})
+	unsupported := timestampBlock(960, 3)
+	unsupported.PayloadType--
 
-	assertTimestampOutputs(t, reader, makePlainPacket(97, 93_120, []byte{97}),
-		makePlainPacket(99, 95_040, []byte{99}), makePlainPacket(100, 96_000, []byte{100}))
-}
-
-func TestReceiverFixedDurationRecoverySkipsOffsetsBetweenPackets(t *testing.T) {
-	carrier := timestampREDPacket(t, 100, 96_000, timestampBlock(1_000, 0xf9), timestampBlock(1_920, 98))
-	lateOriginal := makePlainPacket(99, 95_040, []byte{99})
-	reader := newTestReceiverWithOptions(t, opusStreamInfo(), readerForPackets(t, carrier, lateOriginal),
-		ReceiverPacketDuration(20*time.Millisecond))
-
-	assertTimestampOutputs(t, reader, makePlainPacket(98, 94_080, []byte{98}),
-		makePlainPacket(100, 96_000, []byte{100}), lateOriginal)
-}
-
-func TestReceiverFixedDurationRecoveryFallsBackForContradictoryTiming(t *testing.T) {
-	t.Run("CompleteGap", func(t *testing.T) {
-		anchor := makePlainPacket(1, 960, []byte{1})
-		carrier := timestampREDPacket(t, 4, 2_880, timestampBlock(960, 3), timestampBlock(1_440, 2))
-		reader := newTestReceiverWithOptions(t, opusStreamInfo(), readerForPackets(t, anchor, carrier),
-			ReceiverPacketDuration(20*time.Millisecond))
-
-		assertTimestampOutputs(t, reader, anchor, makePlainPacket(2, 1_440, []byte{2}),
-			makePlainPacket(3, 1_920, []byte{3}), makePlainPacket(4, 2_880, []byte{4}))
+	// Identical received packets admit these two continuous Opus histories:
+	// 20,20,10,10 ms or 10,10,20,20 ms for the four missing packets. A backup
+	// timestamp alone cannot choose SN 97 or 98; every late original must survive.
+	runTimestampRecoveryTests(t, []timestampRecoveryTest{
+		{
+			name: "PartialGapWithBackupAtSequence97",
+			input: []rtp.Packet{
+				anchor, carrier, makePlainPacket(96, 93_120, []byte{96}),
+				makePlainPacket(97, 94_080, []byte{0xa0}), makePlainPacket(98, 95_040, []byte{98}), makePlainPacket(99, 95_520, []byte{99}),
+			},
+			expected: []rtp.Packet{
+				anchor, primary, makePlainPacket(96, 93_120, []byte{96}),
+				makePlainPacket(97, 94_080, []byte{0xa0}), makePlainPacket(98, 95_040, []byte{98}), makePlainPacket(99, 95_520, []byte{99}),
+			},
+		},
+		{
+			name: "PartialGapWithBackupAtSequence98",
+			input: []rtp.Packet{
+				anchor, carrier, makePlainPacket(96, 93_120, []byte{96}),
+				makePlainPacket(97, 93_600, []byte{97}), makePlainPacket(98, 94_080, []byte{0xa0}), makePlainPacket(99, 95_040, []byte{99}),
+			},
+			expected: []rtp.Packet{
+				anchor, primary, makePlainPacket(96, 93_120, []byte{96}),
+				makePlainPacket(97, 93_600, []byte{97}), makePlainPacket(98, 94_080, []byte{0xa0}), makePlainPacket(99, 95_040, []byte{99}),
+			},
+		},
+		{
+			name:     "IdenticalCopiesIdentifyOnePacket",
+			input:    []rtp.Packet{first, timestampREDPacket(t, 3, 2_880, timestampBlock(960, 2), timestampBlock(960, 2))},
+			expected: []rtp.Packet{first, second, third},
+		},
+		{
+			name:     "ConflictingCopiesLeaveOriginalDeliverable",
+			input:    []rtp.Packet{first, timestampREDPacket(t, 3, 2_880, timestampBlock(960, 2), timestampBlock(960, 0xf2)), second},
+			expected: []rtp.Packet{first, third, second},
+		},
+		{
+			name:     "UnsupportedCopiesDoNotCompleteGap",
+			input:    []rtp.Packet{first, timestampREDPacket(t, 4, 3_840, timestampBlock(1_920, 2), unsupported), second, third},
+			expected: []rtp.Packet{first, makePlainPacket(4, 3_840, []byte{4}), second, third},
+		},
 	})
 
-	t.Run("PartialGap", func(t *testing.T) {
-		anchor := makePlainPacket(95, 92_160, []byte{95})
-		carrier := timestampREDPacket(t, 100, 96_000, timestampBlock(1_920, 97))
-		lateOriginal := makePlainPacket(97, 94_080, []byte{97})
-		reader := newTestReceiverWithOptions(t, opusStreamInfo(), readerForPackets(t, anchor, carrier, lateOriginal),
-			ReceiverPacketDuration(20*time.Millisecond))
-
-		assertTimestampOutputs(t, reader, anchor, makePlainPacket(100, 96_000, []byte{100}), lateOriginal)
-	})
+	for _, test := range []struct {
+		name  string
+		block Block
+	}{
+		{"UnsupportedPayloadType", Block{PayloadType: testOpusPayloadType - 1, TimestampOffset: 960, Payload: []byte{0xf1}}},
+		{"ZeroTimestampOffset", timestampBlock(0, 0xf1)},
+		{"EmptyPayload", Block{PayloadType: testOpusPayloadType, TimestampOffset: 960}},
+	} {
+		runTimestampRecoveryTests(t, []timestampRecoveryTest{{
+			name:     test.name,
+			input:    []rtp.Packet{makePlainPacket(0, 0, []byte{0}), timestampREDPacket(t, 2, 1_920, test.block), first},
+			expected: []rtp.Packet{makePlainPacket(0, 0, []byte{0}), second, first},
+		}})
+	}
 }
 
-func TestReceiverFixedDurationRecoveryFallsBackAfterObservedPadding(t *testing.T) {
-	anchor := makePlainPacket(1, 960, []byte{1})
-	carrier := timestampREDPacket(t, 4, 2_880, timestampBlock(960, 2))
-	reader := newTestReceiverWithOptions(t, opusStreamInfo(),
-		readerForPackets(t, anchor, paddingOnlyPacket(3, 1_920, 1), carrier),
-		ReceiverPacketDuration(20*time.Millisecond))
-
-	assertTimestampOutputs(t, reader, anchor, makePlainPacket(2, 1_920, []byte{2}),
-		makePlainPacket(4, 2_880, []byte{4}))
-}
-
-func TestReceiverFixedDurationRecoveryFallsBackAfterOtherPayloadType(t *testing.T) {
-	anchor := makePlainPacket(1, 960, []byte{1})
-	other := makePlainPacket(3, 1_920, []byte{0xa3})
+func TestReceiverFixedDurationMapping(t *testing.T) {
+	first := makePlainPacket(1, 960, []byte{1})
+	padding := paddingOnlyPacket(3, 2_880, 1)
+	other := makePlainPacket(3, 2_880, []byte{0xa3})
 	other.PayloadType--
-	carrier := timestampREDPacket(t, 4, 2_880, timestampBlock(960, 2))
-	reader := newTestReceiverWithOptions(t, opusStreamInfo(), readerForPackets(t, anchor, other, carrier),
-		ReceiverPacketDuration(20*time.Millisecond))
 
-	first, _ := readOutputPacket(t, reader)
-	assert.Equal(t, anchor.SequenceNumber, first.SequenceNumber)
-	second, _ := readOutputPacket(t, reader)
-	assert.Equal(t, other.SequenceNumber, second.SequenceNumber)
-	assert.Equal(t, other.PayloadType, second.PayloadType)
-	assert.Equal(t, other.Payload, second.Payload)
-	assertTimestampOutputs(t, reader, makePlainPacket(2, 1_920, []byte{2}),
-		makePlainPacket(4, 2_880, []byte{4}))
+	runTimestampRecoveryTests(t, []timestampRecoveryTest{
+		{
+			name:     "ReversedSparseBlocks",
+			input:    []rtp.Packet{timestampREDPacket(t, 100, 96_000, timestampBlock(960, 99), timestampBlock(2_880, 97))},
+			expected: []rtp.Packet{makePlainPacket(97, 93_120, []byte{97}), makePlainPacket(99, 95_040, []byte{99}), makePlainPacket(100, 96_000, []byte{100})},
+		},
+		{
+			name:     "OffsetBetweenPacketsLeavesOriginalDeliverable",
+			input:    []rtp.Packet{timestampREDPacket(t, 100, 96_000, timestampBlock(1_000, 0xf9), timestampBlock(1_920, 98)), makePlainPacket(99, 95_040, []byte{99})},
+			expected: []rtp.Packet{makePlainPacket(98, 94_080, []byte{98}), makePlainPacket(100, 96_000, []byte{100}), makePlainPacket(99, 95_040, []byte{99})},
+		},
+		{
+			name:     "ContradictoryTimingFallsBackToCompleteGap",
+			input:    []rtp.Packet{first, timestampREDPacket(t, 4, 2_880, timestampBlock(960, 3), timestampBlock(1_440, 2))},
+			expected: []rtp.Packet{first, makePlainPacket(2, 1_440, []byte{2}), makePlainPacket(3, 1_920, []byte{3}), makePlainPacket(4, 2_880, []byte{4})},
+		},
+		{
+			name:     "ContradictoryTimingLeavesPartialGapMissing",
+			input:    []rtp.Packet{makePlainPacket(95, 92_160, []byte{95}), timestampREDPacket(t, 100, 96_000, timestampBlock(1_920, 97)), makePlainPacket(97, 94_080, []byte{97})},
+			expected: []rtp.Packet{makePlainPacket(95, 92_160, []byte{95}), makePlainPacket(100, 96_000, []byte{100}), makePlainPacket(97, 94_080, []byte{97})},
+		},
+		{
+			name:     "ObservedPaddingFallsBackDespiteMatchingMediaCadence",
+			input:    []rtp.Packet{first, padding, timestampREDPacket(t, 4, 3_840, timestampBlock(960, 2))},
+			expected: []rtp.Packet{first, makePlainPacket(2, 2_880, []byte{2}), makePlainPacket(4, 3_840, []byte{4})},
+		},
+		{
+			name:     "OtherPayloadTypeFallsBackDespiteMatchingMediaCadence",
+			input:    []rtp.Packet{first, other, timestampREDPacket(t, 4, 3_840, timestampBlock(960, 2))},
+			expected: []rtp.Packet{first, other, makePlainPacket(2, 2_880, []byte{2}), makePlainPacket(4, 3_840, []byte{4})},
+		},
+	}, ReceiverPacketDuration(20*time.Millisecond))
 }
