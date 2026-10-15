@@ -103,7 +103,7 @@ func (stream *senderStream) encode(header *rtp.Header, payload []byte) (*rtp.Hea
 
 		return header, payload, nil
 	}
-	if len(payload) == 0 || len(payload) > maxBlockLength {
+	if len(payload) == 0 {
 		stream.reset()
 
 		return header, payload, nil
@@ -161,6 +161,9 @@ func (stream *senderStream) selectRedundantBlocks(header *rtp.Header, payload []
 		if timestampOffset == 0 || timestampOffset > maxTimestampOffset {
 			break
 		}
+		if len(entry.payload) == 0 {
+			continue
+		}
 
 		blockSize := redundantHeaderSize + len(entry.payload)
 		if packetSize+blockSize > stream.maxPacketSize {
@@ -182,7 +185,11 @@ func (stream *senderStream) remember(header *rtp.Header, payload []byte) {
 	entry := senderHistoryEntry{
 		sequenceNumber: header.SequenceNumber,
 		timestamp:      header.Timestamp,
-		payload:        append([]byte(nil), payload...),
+	}
+	// Oversized primaries cannot become backups, but still occupy a history slot
+	// so continuity checks and the two-packet window follow the original packets.
+	if len(payload) <= maxBlockLength {
+		entry.payload = append([]byte(nil), payload...)
 	}
 
 	if stream.historyCount < maxSenderRedundantBlocks {

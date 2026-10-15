@@ -246,6 +246,81 @@ func TestSenderInterceptorHonorsMaxPacketSize(t *testing.T) {
 	})
 }
 
+func TestSenderInterceptorHandlesLargePrimary(t *testing.T) {
+	tests := []struct {
+		name          string
+		payloadSize   int
+		maxPacketSize int
+		primaryRED    bool
+		backupAllowed bool
+	}{
+		{"AtBackupLimit", maxBlockLength, 1_200, true, true},
+		{"AboveBackupLimit", maxBlockLength + 1, 1_200, true, false},
+		{"ExceedsPacketBudget", maxBlockLength + 1, 37, false, false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			downstream := &capturedWriter{}
+			writer := newTestSender(t, opusStreamInfo(), downstream, SenderMaxPacketSize(test.maxPacketSize))
+			firstPayload := []byte{0x01}
+			largePayload := bytesWithValue(test.payloadSize, 0x02)
+			thirdPayload := []byte{0x03}
+			fourthPayload := []byte{0x04}
+
+			writeOpus(t, writer, 1, 960, firstPayload)
+			writeOpus(t, writer, 2, 1_920, largePayload)
+			writeOpus(t, writer, 3, 2_880, thirdPayload)
+			writeOpus(t, writer, 4, 3_840, fourthPayload)
+			require.Len(t, downstream.packets, 4)
+
+			if test.primaryRED {
+				require.Equal(t, testREDPayloadType, downstream.packets[1].PayloadType)
+				redPayload := requireREDPayload(t, downstream.packets[1])
+				assert.Equal(t, Block{PayloadType: testOpusPayloadType, Payload: largePayload}, redPayload.PrimaryBlock)
+				assert.Equal(t, []Block{{
+					PayloadType: testOpusPayloadType, TimestampOffset: 960, Payload: firstPayload,
+				}}, redPayload.RedundantBlocks)
+			} else {
+				assert.Equal(t, testOpusPayloadType, downstream.packets[1].PayloadType)
+				assert.Equal(t, largePayload, downstream.packets[1].Payload)
+			}
+
+			thirdBlocks := []Block{{
+				PayloadType: testOpusPayloadType, TimestampOffset: 1_920, Payload: firstPayload,
+			}}
+			fourthBlocks := []Block{}
+			if test.backupAllowed {
+				thirdBlocks = append(thirdBlocks, Block{
+					PayloadType: testOpusPayloadType, TimestampOffset: 960, Payload: largePayload,
+				})
+				fourthBlocks = append(fourthBlocks, Block{
+					PayloadType: testOpusPayloadType, TimestampOffset: 1_920, Payload: largePayload,
+				})
+			}
+			fourthBlocks = append(fourthBlocks, Block{
+				PayloadType: testOpusPayloadType, TimestampOffset: 960, Payload: thirdPayload,
+			})
+
+			require.Equal(t, testREDPayloadType, downstream.packets[2].PayloadType)
+			thirdRED := requireREDPayload(t, downstream.packets[2])
+			assert.Equal(t, thirdBlocks, thirdRED.RedundantBlocks)
+			assert.Equal(t, Block{PayloadType: testOpusPayloadType, Payload: thirdPayload}, thirdRED.PrimaryBlock)
+
+			require.Equal(t, testREDPayloadType, downstream.packets[3].PayloadType)
+			fourthRED := requireREDPayload(t, downstream.packets[3])
+			assert.Equal(t, fourthBlocks, fourthRED.RedundantBlocks)
+			assert.Equal(t, Block{PayloadType: testOpusPayloadType, Payload: fourthPayload}, fourthRED.PrimaryBlock)
+
+			for _, packet := range downstream.packets {
+				if packet.PayloadType == testREDPayloadType {
+					assert.LessOrEqual(t, packet.MarshalSize(), test.maxPacketSize)
+				}
+			}
+		})
+	}
+}
+
 func TestSenderInterceptorResetsUnsafeHistory(t *testing.T) {
 	t.Run("SequenceGap", func(t *testing.T) {
 		downstream := &capturedWriter{}
@@ -303,12 +378,12 @@ func TestSenderInterceptorResetsUnsafeHistory(t *testing.T) {
 		assert.Equal(t, []byte{0x02}, redPayload.RedundantBlocks[0].Payload)
 	})
 
-	t.Run("OversizedPayload", func(t *testing.T) {
+	t.Run("EmptyPayload", func(t *testing.T) {
 		downstream := &capturedWriter{}
 		writer := newTestSender(t, opusStreamInfo(), downstream)
 
 		writeOpus(t, writer, 1, 1_000, []byte{0x01})
-		writeOpus(t, writer, 2, 1_960, make([]byte, maxBlockLength+1))
+		writeOpus(t, writer, 2, 1_960, nil)
 		writeOpus(t, writer, 3, 2_920, []byte{0x03})
 		writeOpus(t, writer, 4, 3_880, []byte{0x04})
 
