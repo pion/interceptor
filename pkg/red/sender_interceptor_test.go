@@ -4,8 +4,10 @@
 package red
 
 import (
+	"encoding/binary"
 	"errors"
 	"math"
+	"sync"
 	"testing"
 
 	"github.com/pion/interceptor"
@@ -558,4 +560,86 @@ func bytesWithValue(size int, value byte) []byte {
 	}
 
 	return payload
+}
+
+func TestSenderInterceptorConcurrentWrites(t *testing.T) {
+	const packetCount uint16 = 128
+
+	downstream := &capturedWriter{}
+	var outputMutex sync.Mutex
+	writer := newTestSender(t, opusStreamInfo(), interceptor.RTPWriterFunc(func(
+		header *rtp.Header, payload []byte, attributes interceptor.Attributes,
+	) (int, error) {
+		outputMutex.Lock()
+		defer outputMutex.Unlock()
+
+		return downstream.Write(header, payload, attributes)
+	}))
+	sources := make(map[uint32][]byte, packetCount)
+	for sequence := uint16(1); sequence <= packetCount; sequence++ {
+		sources[uint32(sequence)*960] = binary.BigEndian.AppendUint16(nil, sequence)
+	}
+	// Establish useful RED history before concurrent writes exercise replacement.
+	for sequence := uint16(1); sequence <= 3; sequence++ {
+		timestamp := uint32(sequence) * 960
+		writeOpus(t, writer, sequence, timestamp, sources[timestamp])
+	}
+
+	results := make(chan error, packetCount-3)
+	for sequence := uint16(4); sequence <= packetCount; sequence++ {
+		go func() {
+			timestamp := uint32(sequence) * 960
+			header := &rtp.Header{
+				Version: 2, PayloadType: testOpusPayloadType, SSRC: testSSRC,
+				SequenceNumber: sequence, Timestamp: timestamp,
+			}
+			payload := append([]byte(nil), sources[timestamp]...)
+			_, err := writer.Write(header, payload, nil)
+			// Callers may immediately reuse their input after Write returns.
+			clear(payload)
+			results <- err
+		}()
+	}
+	for range packetCount - 3 {
+		require.NoError(t, <-results)
+	}
+
+	require.Len(t, downstream.packets, int(packetCount))
+	for _, packet := range downstream.packets {
+		assert.Equal(t, testSSRC, packet.SSRC)
+		assert.Equal(t, uint32(packet.SequenceNumber)*960, packet.Timestamp)
+		if packet.PayloadType == testOpusPayloadType {
+			assert.Equal(t, sources[packet.Timestamp], packet.Payload)
+
+			continue
+		}
+		require.Equal(t, testREDPayloadType, packet.PayloadType)
+		payload := requireREDPayload(t, packet)
+		assert.Equal(t, sources[packet.Timestamp], payload.PrimaryBlock.Payload)
+		for _, block := range payload.RedundantBlocks {
+			assert.Equal(t, sources[packet.Timestamp-uint32(block.TimestampOffset)], block.Payload)
+		}
+	}
+}
+
+func BenchmarkSenderInterceptorWrite(b *testing.B) {
+	sender := &SenderInterceptor{maxPacketSize: defaultMaxPacketSize}
+	writer := sender.BindLocalStream(opusStreamInfo(), interceptor.RTPWriterFunc(func(
+		_ *rtp.Header, payload []byte, _ interceptor.Attributes,
+	) (int, error) {
+		return len(payload), nil
+	}))
+	header := &rtp.Header{Version: 2, PayloadType: testOpusPayloadType, SSRC: testSSRC}
+	payload := bytesWithValue(160, 1)
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for range b.N {
+		header.SequenceNumber++
+		header.Timestamp += 960
+		_, err := writer.Write(header, payload, nil)
+		if err != nil {
+			require.NoError(b, err)
+		}
+	}
 }

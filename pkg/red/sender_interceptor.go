@@ -5,6 +5,7 @@ package red
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 
@@ -86,9 +87,7 @@ func (sender *SenderInterceptor) BindLocalStream(
 			return writer.Write(header, payload, attributes)
 		}
 
-		stream.mutex.Lock()
 		outputHeader, outputPayload, err := stream.encode(header, payload)
-		stream.mutex.Unlock()
 		if err != nil {
 			return 0, err
 		}
@@ -98,24 +97,14 @@ func (sender *SenderInterceptor) BindLocalStream(
 }
 
 func (stream *senderStream) encode(header *rtp.Header, payload []byte) (*rtp.Header, []byte, error) {
-	if header.PayloadType != stream.opusPayloadType || len(payload) == 0 {
-		stream.reset()
-
+	var blockBuffer [maxSenderRedundantBlocks]Block
+	blocks := stream.prepareRedundantBlocks(header, payload, blockBuffer[:0])
+	if len(blocks) == 0 {
 		return header, payload, nil
 	}
 
-	stream.resetIfDiscontinuous(header)
-	blocksNewestFirst := stream.selectRedundantBlocks(header, payload)
-
-	stream.remember(header, payload)
-	if len(blocksNewestFirst) == 0 {
-		return header, payload, nil
-	}
-
-	blocks := make([]Block, len(blocksNewestFirst))
-	for index, block := range blocksNewestFirst {
-		blocks[len(blocks)-1-index] = block
-	}
+	// Selection prefers newer backups; RED headers are serialized oldest first.
+	slices.Reverse(blocks)
 
 	redPayload, err := (Payload{
 		RedundantBlocks: blocks,
@@ -147,8 +136,16 @@ func (stream *senderStream) resetIfDiscontinuous(header *rtp.Header) {
 	}
 }
 
-func (stream *senderStream) selectRedundantBlocks(header *rtp.Header, payload []byte) []Block {
-	blocksNewestFirst := make([]Block, 0, maxSenderRedundantBlocks)
+func (stream *senderStream) prepareRedundantBlocks(header *rtp.Header, payload []byte, blocks []Block) []Block {
+	stream.mutex.Lock()
+	defer stream.mutex.Unlock()
+	if header.PayloadType != stream.opusPayloadType || len(payload) == 0 {
+		stream.reset()
+
+		return blocks
+	}
+
+	stream.resetIfDiscontinuous(header)
 	packetSize := header.MarshalSize() + int(header.PaddingSize) + primaryHeaderSize + len(payload)
 	for index := stream.historyCount - 1; index >= 0; index-- {
 		entry := stream.history[index]
@@ -165,7 +162,7 @@ func (stream *senderStream) selectRedundantBlocks(header *rtp.Header, payload []
 			continue
 		}
 
-		blocksNewestFirst = append(blocksNewestFirst, Block{
+		blocks = append(blocks, Block{
 			PayloadType:     stream.opusPayloadType,
 			TimestampOffset: uint16(timestampOffset), //nolint:gosec // Offset is bounded above.
 			Payload:         entry.payload,
@@ -173,7 +170,11 @@ func (stream *senderStream) selectRedundantBlocks(header *rtp.Header, payload []
 		packetSize += blockSize
 	}
 
-	return blocksNewestFirst
+	// History owns immutable payload copies, so replacing entries cannot change
+	// the selected backups while encode serializes them after unlocking.
+	stream.remember(header, payload)
+
+	return blocks
 }
 
 func (stream *senderStream) remember(header *rtp.Header, payload []byte) {
