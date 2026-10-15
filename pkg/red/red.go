@@ -5,7 +5,6 @@
 package red
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -81,11 +80,11 @@ func (p Payload) marshalTo(raw []byte) {
 	payloadOffset := len(p.RedundantBlocks)*redundantHeaderSize + primaryHeaderSize
 
 	for _, block := range p.RedundantBlocks {
-		blockLength := uint16(len(block.Payload)) //nolint:gosec // Block length is validated as 10 bits.
 		raw[headerOffset] = followBit | block.PayloadType
-		raw[headerOffset+1] = byte(block.TimestampOffset >> 6) //nolint:gosec // Offset is validated as 14 bits.
-		binary.BigEndian.PutUint16(raw[headerOffset+2:headerOffset+4], blockLength)
-		raw[headerOffset+2] |= byte((block.TimestampOffset & 0x3f) << 2) //nolint:gosec // Offset is bounded.
+		field := uint32(block.TimestampOffset)<<10 | uint32(len(block.Payload)) //nolint:gosec // Length is validated as 10 bits.
+		raw[headerOffset+1] = byte((field >> 16) & 0xff)
+		raw[headerOffset+2] = byte((field >> 8) & 0xff)
+		raw[headerOffset+3] = byte(field & 0xff)
 		headerOffset += redundantHeaderSize
 
 		payloadOffset += copy(raw[payloadOffset:], block.Payload)
