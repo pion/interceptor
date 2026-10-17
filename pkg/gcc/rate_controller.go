@@ -14,6 +14,10 @@ const (
 	beta             = 0.85
 )
 
+// maxPacketSizeBits bounds the expected packet size used by the additive
+// increase. Chosen as a conservative MTU-limited RTP payload.
+const maxPacketSizeBits = 1200 * 8
+
 type rateController struct {
 	now                  now
 	initialTargetBitrate int
@@ -141,8 +145,12 @@ func (c *rateController) increase(now time.Time) int {
 		float64(c.latestReceivedRate) > c.latestDecreaseRate.average-3*c.latestDecreaseRate.stdDeviation &&
 		float64(c.latestReceivedRate) < c.latestDecreaseRate.average+3*c.latestDecreaseRate.stdDeviation {
 		bitsPerFrame := float64(c.target) / 30.0
-		packetsPerFrame := math.Ceil(bitsPerFrame / (1200 * 8))
-		expectedPacketSizeBits := bitsPerFrame / packetsPerFrame
+		// A packet carries at most one MTU, and a frame smaller than that is sent
+		// in a single packet. Dividing by ceil(bitsPerFrame/MTU) instead yields the
+		// mean packet size, which falls discontinuously whenever the packet count
+		// increments: at 30 fps a target rising from 288 to 290 kbps halves it, so
+		// the additive step can shrink while the target grows.
+		expectedPacketSizeBits := math.Min(bitsPerFrame, maxPacketSizeBits)
 
 		responseTime := 100*time.Millisecond + c.latestRTT
 		alpha := 0.5 * math.Min(float64(now.Sub(c.lastUpdate).Milliseconds())/float64(responseTime.Milliseconds()), 1.0)
