@@ -5,6 +5,7 @@ package rtpbuffer
 
 import (
 	"bytes"
+	"encoding/binary"
 	"testing"
 
 	"github.com/pion/rtp"
@@ -171,19 +172,21 @@ func TestRTPBuffer_Overridden_WithRTX_AND_Padding(t *testing.T) {
 	require.NoError(t, err)
 	sb.Add(pkt)
 
+	stored := pkt
+
 	// change payload
 	copy(originalBytes, "altered")
 	retrieved := sb.Get(1)
 	require.NotNil(t, retrieved)
 	require.Equal(t, "\x00\x01originalContent", string(retrieved.Payload()))
 	retrieved.Release()
-	require.Equal(t, 1, retrieved.count)
+	require.Equal(t, 1, stored.count)
 
 	// ensure original packet is released
 	pkt, err = pm.NewPacket(&rtp.Header{SequenceNumber: 2}, originalBytes, 1, 1)
 	require.NoError(t, err)
 	sb.Add(pkt)
-	require.Equal(t, 0, retrieved.count)
+	require.Equal(t, 0, stored.count)
 
 	require.Nil(t, sb.Get(1))
 }
@@ -198,6 +201,7 @@ func TestRTPBuffer_Overridden_WithRTX_NILPayload(t *testing.T) {
 	pkt, err := pm.NewPacket(&rtp.Header{SequenceNumber: 1}, nil, 1, 1)
 	require.NoError(t, err)
 	sb.Add(pkt)
+	stored := pkt
 
 	// change payload
 
@@ -205,13 +209,13 @@ func TestRTPBuffer_Overridden_WithRTX_NILPayload(t *testing.T) {
 	require.NotNil(t, retrieved)
 	require.Equal(t, "\x00\x01", string(retrieved.Payload()))
 	retrieved.Release()
-	require.Equal(t, 1, retrieved.count)
+	require.Equal(t, 1, stored.count)
 
 	// ensure original packet is released
 	pkt, err = pm.NewPacket(&rtp.Header{SequenceNumber: 2}, []byte("altered"), 1, 1)
 	require.NoError(t, err)
 	sb.Add(pkt)
-	require.Equal(t, 0, retrieved.count)
+	require.Equal(t, 0, stored.count)
 
 	require.Nil(t, sb.Get(1))
 }
@@ -370,4 +374,66 @@ func TestRTPBuffer_Padding(t *testing.T) {
 
 		require.ErrorIs(t, err, errPaddingOverflow, "factory should reject invalid padding")
 	})
+}
+
+func TestRTPBuffer_RTXSequenceNumberOnGet(t *testing.T) {
+	pm := NewPacketFactoryCopy()
+	sb, err := NewRTPBuffer(8)
+	require.NoError(t, err)
+
+	var stored *RetainablePacket
+	for seq := uint16(1); seq <= 5; seq++ {
+		pkt, newErr := pm.NewPacket(&rtp.Header{SequenceNumber: seq, SSRC: 1, PayloadType: 96}, []byte{0xAA}, 2, 97)
+		require.NoError(t, newErr)
+		sb.Add(pkt)
+		if seq == 4 {
+			stored = pkt
+		}
+	}
+
+	// Two retrievals of the same packet are two retransmissions.
+	osns := []uint16{2, 4, 4}
+	retrieved := make([]*RetainablePacket, 0, len(osns))
+	for _, osn := range osns {
+		pkt := sb.Get(osn)
+		require.NotNil(t, pkt)
+		retrieved = append(retrieved, pkt)
+	}
+
+	first := retrieved[0].Header().SequenceNumber
+	for idx, pkt := range retrieved {
+		assert.Equal(t, first+uint16(idx), pkt.Header().SequenceNumber)
+		assert.Equal(t, uint32(2), pkt.Header().SSRC)
+		assert.Equal(t, uint8(97), pkt.Header().PayloadType)
+		assert.Equal(t, binary.BigEndian.AppendUint16(nil, osns[idx]), pkt.Payload()[:2])
+		assert.Equal(t, []byte{0xAA}, pkt.Payload()[2:])
+	}
+
+	// A second buffer (another RTX stream) has its own sequence.
+	other, err := NewRTPBuffer(8)
+	require.NoError(t, err)
+	pkt, err := pm.NewPacket(&rtp.Header{SequenceNumber: 1, SSRC: 3, PayloadType: 96}, []byte{0xAA}, 4, 97)
+	require.NoError(t, err)
+	other.Add(pkt)
+	otherFirst := other.Get(1)
+	require.NotNil(t, otherFirst)
+	otherSecond := other.Get(1)
+	require.NotNil(t, otherSecond)
+	assert.Equal(t, otherFirst.Header().SequenceNumber+1, otherSecond.Header().SequenceNumber)
+	otherFirst.Release()
+	otherSecond.Release()
+
+	next := sb.Get(5)
+	require.NotNil(t, next)
+	assert.Equal(t, first+3, next.Header().SequenceNumber)
+	next.Release()
+
+	// The stored packet is shared by both retransmissions of 4 and is not modified.
+	assert.Equal(t, 3, stored.count)
+	assert.Equal(t, uint16(4), stored.Header().SequenceNumber)
+
+	for _, pkt := range retrieved {
+		pkt.Release()
+	}
+	assert.Equal(t, 1, stored.count)
 }
