@@ -13,6 +13,9 @@ import (
 // https://webrtc.googlesource.com/src/+/refs/heads/main/modules/congestion_controller/goog_cc/acknowledged_bitrate_estimator_interface.h
 const maxRateHistoryPackets = 500
 
+// Matches libwebrtc's RobustThroughputEstimator::kMaxReorderingTime.
+const maxRateReorderingTime = time.Second
+
 type rateCalculator struct {
 	window time.Duration
 }
@@ -30,21 +33,61 @@ type rateHistory struct {
 }
 
 func (h *rateHistory) add(next cc.Acknowledgment, window time.Duration) bool {
-	if h.count > 0 && next.Arrival.Before(h.samples[(h.start+h.count-1)%len(h.samples)].arrival) {
+	latest := next.Arrival
+	if h.count > 0 {
+		previous := h.latestArrival()
+		if previous.Sub(next.Arrival) > maxRateReorderingTime {
+			*h = rateHistory{}
+		} else if previous.After(latest) {
+			latest = previous
+		}
+	}
+	deadline := latest.Add(-window)
+	if next.Arrival.Before(deadline) {
 		return false
 	}
-	deadline := next.Arrival.Add(-window)
-	for h.count > 0 && (h.count == len(h.samples) || h.samples[h.start].arrival.Before(deadline)) {
-		h.sum -= h.samples[h.start].size
-		h.samples[h.start] = rateSample{}
-		h.start = (h.start + 1) % len(h.samples)
-		h.count--
+	h.trim(deadline)
+	if h.count == len(h.samples) {
+		if next.Arrival.Before(h.samples[h.start].arrival) {
+			return false
+		}
+		h.removeOldest()
 	}
-	h.samples[(h.start+h.count)%len(h.samples)] = rateSample{arrival: next.Arrival, size: next.Size}
-	h.count++
-	h.sum += next.Size
+	h.insert(rateSample{arrival: next.Arrival, size: next.Size})
 
 	return true
+}
+
+func (h *rateHistory) latestArrival() time.Time {
+	return h.samples[(h.start+h.count-1)%len(h.samples)].arrival
+}
+
+func (h *rateHistory) removeOldest() {
+	h.sum -= h.samples[h.start].size
+	h.samples[h.start] = rateSample{}
+	h.start = (h.start + 1) % len(h.samples)
+	h.count--
+}
+
+func (h *rateHistory) trim(deadline time.Time) {
+	for h.count > 0 && h.samples[h.start].arrival.Before(deadline) {
+		h.removeOldest()
+	}
+}
+
+func (h *rateHistory) insert(sample rateSample) {
+	position := h.count
+	for position > 0 {
+		previous := h.samples[(h.start+position-1)%len(h.samples)]
+		if !sample.arrival.Before(previous.arrival) {
+			break
+		}
+		h.samples[(h.start+position)%len(h.samples)] = previous
+		position--
+	}
+	h.samples[(h.start+position)%len(h.samples)] = sample
+	h.count++
+	h.sum += sample.size
 }
 
 func newRateCalculator(window time.Duration) *rateCalculator {
@@ -76,7 +119,7 @@ func (c *rateCalculator) run(in <-chan []cc.Acknowledgment, onRateUpdate func(in
 				continue
 			}
 
-			dt := next.Arrival.Sub(history.samples[history.start].arrival)
+			dt := history.latestArrival().Sub(history.samples[history.start].arrival)
 			if dt <= 0 {
 				continue
 			}
