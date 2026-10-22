@@ -96,9 +96,10 @@ func (f *FeedbackAdapter) unpackRunLengthChunk(
 	acks = []Acknowledgment{}
 
 	end := start + count
-	for i := start; i != end; i++ {
+	for sequenceNumber := start; sequenceNumber != end; sequenceNumber++ {
 		var arrival time.Time
-		if chunk.PacketStatusSymbol != rtcp.TypeTCCPacketNotReceived {
+		if chunk.PacketStatusSymbol == rtcp.TypeTCCPacketReceivedSmallDelta ||
+			chunk.PacketStatusSymbol == rtcp.TypeTCCPacketReceivedLargeDelta {
 			if len(deltas)-1 < deltaIndex {
 				return deltaIndex, refTime, count, acks, errInvalidFeedback
 			}
@@ -109,7 +110,7 @@ func (f *FeedbackAdapter) unpackRunLengthChunk(
 
 		key := feedbackHistoryKey{
 			ssrc:           0,
-			sequenceNumber: i,
+			sequenceNumber: sequenceNumber,
 		}
 		if ack, ok := f.history.get(key); ok {
 			ack.Arrival = arrival
@@ -129,7 +130,7 @@ func (f *FeedbackAdapter) unpackStatusVectorChunk(
 	acks = []Acknowledgment{}
 	for i, symbol := range symbols {
 		var arrival time.Time
-		if symbol != rtcp.TypeTCCPacketNotReceived {
+		if symbol == rtcp.TypeTCCPacketReceivedSmallDelta || symbol == rtcp.TypeTCCPacketReceivedLargeDelta {
 			if len(deltas)-1 < deltaIndex {
 				return deltaIndex, refTime, uint16(len(symbols)), acks, errInvalidFeedback //nolint:gosec // G115
 			}

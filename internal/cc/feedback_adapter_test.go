@@ -1010,6 +1010,35 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		assert.False(t, results[0].Arrival.IsZero())
 	})
 
+	t.Run("skipsEvictedPacketWithoutDelta", func(t *testing.T) {
+		for name, chunks := range map[string][]rtcp.PacketStatusChunk{
+			"runLength": {
+				&rtcp.RunLengthChunk{PacketStatusSymbol: rtcp.TypeTCCPacketReceivedWithoutDelta, RunLength: 1},
+				&rtcp.RunLengthChunk{PacketStatusSymbol: rtcp.TypeTCCPacketReceivedSmallDelta, RunLength: 1},
+			},
+			"statusVector": {&rtcp.StatusVectorChunk{
+				SymbolSize: rtcp.TypeTCCSymbolSizeTwoBit,
+				SymbolList: []uint16{rtcp.TypeTCCPacketReceivedWithoutDelta, rtcp.TypeTCCPacketReceivedSmallDelta},
+			}},
+		} {
+			t.Run(name, func(t *testing.T) {
+				adapter := NewFeedbackAdapter()
+				pkt := getPacketWithTransportCCExt(t, 1)
+				assert.NoError(t, adapter.OnSent(time.Time{}, &pkt.Header, 1200,
+					interceptor.Attributes{TwccExtensionAttributesKey: hdrExtID}))
+				results, err := adapter.OnTransportCCFeedback(time.Time{}, &rtcp.TransportLayerCC{
+					PacketStatusCount: 2,
+					PacketChunks:      chunks,
+					RecvDeltas:        []*rtcp.RecvDelta{{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 250}},
+				})
+				if assert.NoError(t, err) && assert.Len(t, results, 1) {
+					assert.Equal(t, uint16(1), results[0].SequenceNumber)
+					assert.Equal(t, time.Time{}.Add(250*time.Microsecond), results[0].Arrival)
+				}
+			})
+		}
+	})
+
 	t.Run("doesNotcrashOnInvalidTWCCPacket", func(t *testing.T) {
 		adapter := NewFeedbackAdapter()
 
