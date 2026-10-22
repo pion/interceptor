@@ -1164,3 +1164,29 @@ func BenchmarkFeedbackAdapterTWCCRunLength(b *testing.B) {
 		})
 	}
 }
+
+func TestFeedbackAdapterTWCCReferenceRollover(t *testing.T) {
+	for _, references := range [][]int64{
+		{(1 << 24) - 2, (1 << 24) - 1, 1 << 24, (1 << 24) - 1, (1 << 24) + 1},
+		{0, -1, 1},
+	} {
+		adapter := NewFeedbackAdapter()
+		for seq, reference := range references {
+			packet := getPacketWithTransportCCExt(t, uint16(seq)) //nolint:gosec // Small test sequence.
+			require.NoError(t, adapter.OnSent(time.Time{}, &packet.Header, 1200,
+				interceptor.Attributes{TwccExtensionAttributesKey: hdrExtID}))
+			acks, err := adapter.OnTransportCCFeedback(time.Time{}, &rtcp.TransportLayerCC{
+				BaseSequenceNumber: uint16(seq), //nolint:gosec // Small test sequence.
+				PacketStatusCount:  1,
+				ReferenceTime:      uint32(reference & 0xffffff), //nolint:gosec // Masked to 24 bits.
+				PacketChunks: []rtcp.PacketStatusChunk{&rtcp.RunLengthChunk{
+					PacketStatusSymbol: rtcp.TypeTCCPacketReceivedSmallDelta, RunLength: 1,
+				}},
+				RecvDeltas: []*rtcp.RecvDelta{{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 250}},
+			})
+			require.NoError(t, err)
+			require.Len(t, acks, 1)
+			require.Equal(t, time.Time{}.Add(time.Duration(reference)*64*time.Millisecond+250*time.Microsecond), acks[0].Arrival)
+		}
+	}
+}

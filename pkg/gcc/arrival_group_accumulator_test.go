@@ -7,7 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pion/interceptor"
 	"github.com/pion/interceptor/internal/cc"
+	"github.com/pion/rtcp"
+	"github.com/pion/rtp"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -204,4 +207,31 @@ func TestArrivalGroupAccumulator_ConstantArrival(t *testing.T) {
 	assert.Equal(t, 1, groups)
 	assert.Equal(t, start, got.departure)
 	assert.Equal(t, start, got.arrival)
+}
+
+func TestArrivalGroupAccumulatorTWCCRollover(t *testing.T) {
+	adapter := cc.NewFeedbackAdapter()
+	input := make(chan []cc.Acknowledgment, 3)
+	for seq := range uint16(3) {
+		header := &rtp.Header{}
+		assert.NoError(t, header.SetExtension(1, []byte{0, byte(seq)}))
+		departure := time.Time{}.Add(time.Duration(seq) * 64 * time.Millisecond)
+		assert.NoError(t, adapter.OnSent(departure, header, 1200,
+			interceptor.Attributes{cc.TwccExtensionAttributesKey: uint8(1)}))
+		acks, err := adapter.OnTransportCCFeedback(departure, &rtcp.TransportLayerCC{
+			BaseSequenceNumber: seq, PacketStatusCount: 1,
+			ReferenceTime: (uint32(seq) + 0xffffff) & 0xffffff,
+			PacketChunks: []rtcp.PacketStatusChunk{&rtcp.RunLengthChunk{
+				PacketStatusSymbol: rtcp.TypeTCCPacketReceivedSmallDelta, RunLength: 1,
+			}},
+			RecvDeltas: []*rtcp.RecvDelta{{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 250}},
+		})
+		assert.NoError(t, err)
+		input <- acks
+	}
+	close(input)
+	var groups []arrivalGroup
+	newArrivalGroupAccumulator().run(input, func(group arrivalGroup) { groups = append(groups, group) })
+	assert.Len(t, groups, 2)
+	assert.Equal(t, 64*time.Millisecond, groups[1].arrival.Sub(groups[0].arrival))
 }

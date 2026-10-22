@@ -28,8 +28,10 @@ var (
 // FeedbackAdapter converts incoming RTCP Packets (TWCC and RFC8888) into Acknowledgments.
 // Acknowledgments are the common format that Congestion Controllers in Pion understand.
 type FeedbackAdapter struct {
-	lock    sync.Mutex
-	history *feedbackHistory
+	lock                     sync.Mutex
+	history                  *feedbackHistory
+	referenceTime            int64
+	referenceTimeInitialized bool
 }
 
 // NewFeedbackAdapter returns a new FeedbackAdapter.
@@ -167,7 +169,13 @@ func (f *FeedbackAdapter) OnTransportCCFeedback(
 
 	result := []Acknowledgment{}
 	index := feedback.BaseSequenceNumber
-	refTime := time.Time{}.Add(time.Duration(feedback.ReferenceTime) * 64 * time.Millisecond)
+	referenceTime := int64(feedback.ReferenceTime & 0xffffff)
+	if f.referenceTimeInitialized {
+		// Choose the nearest epoch.
+		delta := (referenceTime-f.referenceTime+(1<<23))&0xffffff - (1 << 23)
+		referenceTime = f.referenceTime + delta
+	}
+	refTime := time.Time{}.Add(time.Duration(referenceTime) * 64 * time.Millisecond)
 	recvDeltas := feedback.RecvDeltas
 	// PacketStatusCount is the number of packets the feedback reports on;
 	// symbols beyond it are padding.
@@ -201,6 +209,11 @@ func (f *FeedbackAdapter) OnTransportCCFeedback(
 		default:
 			return nil, errInvalidFeedback
 		}
+	}
+
+	if feedback.PacketStatusCount > 0 {
+		f.referenceTime = referenceTime
+		f.referenceTimeInitialized = true
 	}
 
 	return result, nil
