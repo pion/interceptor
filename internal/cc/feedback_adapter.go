@@ -6,6 +6,7 @@ package cc
 import (
 	"container/list"
 	"errors"
+	"slices"
 	"sync"
 	"time"
 
@@ -94,6 +95,10 @@ func (f *FeedbackAdapter) unpackRunLengthChunk(
 	count := min(chunk.RunLength, maxStatuses)
 	deltaIndex := 0
 	acks = []Acknowledgment{}
+	if (chunk.PacketStatusSymbol == rtcp.TypeTCCPacketNotReceived ||
+		chunk.PacketStatusSymbol == rtcp.TypeTCCPacketReceivedWithoutDelta) && int(count) > len(f.history.items) {
+		return 0, refTime, count, f.history.twccInRange(start, count), nil
+	}
 
 	end := start + count
 	for sequenceNumber := start; sequenceNumber != end; sequenceNumber++ {
@@ -292,4 +297,21 @@ func (f *feedbackHistory) removeOldest() {
 			delete(f.items, key)
 		}
 	}
+}
+
+func (f *feedbackHistory) twccInRange(start, count uint16) []Acknowledgment {
+	acks := []Acknowledgment{}
+	for key := range f.items {
+		if key.ssrc == 0 && key.sequenceNumber-start < count {
+			if ack, ok := f.get(key); ok {
+				ack.Arrival = time.Time{}
+				acks = append(acks, ack)
+			}
+		}
+	}
+	slices.SortFunc(acks, func(a, b Acknowledgment) int {
+		return int(a.SequenceNumber-start) - int(b.SequenceNumber-start)
+	})
+
+	return acks
 }

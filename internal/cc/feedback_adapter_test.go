@@ -13,6 +13,7 @@ import (
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const hdrExtID = uint8(1)
@@ -1110,4 +1111,56 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 			assert.Empty(t, packets)
 		})
 	})
+}
+
+func TestFeedbackAdapterTWCC_SparseRun(t *testing.T) {
+	for _, symbol := range []uint16{rtcp.TypeTCCPacketNotReceived, rtcp.TypeTCCPacketReceivedWithoutDelta} {
+		adapter := NewFeedbackAdapter()
+		for _, seq := range []uint16{65534, 0, 8188, 8190, 8191, 8193} {
+			adapter.history.add(Acknowledgment{SequenceNumber: seq, Size: 100})
+		}
+		adapter.history.add(Acknowledgment{SSRC: 1, SequenceNumber: 0})
+		feedback := &rtcp.TransportLayerCC{
+			BaseSequenceNumber: 65534, PacketStatusCount: 8195, ReferenceTime: 1,
+			PacketChunks: []rtcp.PacketStatusChunk{
+				&rtcp.RunLengthChunk{PacketStatusSymbol: symbol, RunLength: 8191},
+				&rtcp.RunLengthChunk{PacketStatusSymbol: rtcp.TypeTCCPacketReceivedLargeDelta, RunLength: 2},
+				&rtcp.StatusVectorChunk{SymbolList: []uint16{
+					rtcp.TypeTCCPacketReceivedWithoutDelta, rtcp.TypeTCCPacketReceivedSmallDelta, rtcp.TypeTCCPacketNotReceived,
+				}},
+			},
+			RecvDeltas: []*rtcp.RecvDelta{{Delta: 1000}, {Delta: -250}, {Delta: 500}},
+		}
+		acks, err := adapter.OnTransportCCFeedback(time.Time{}, feedback)
+		require.NoError(t, err)
+		require.Equal(t, []Acknowledgment{
+			{SequenceNumber: 65534, Size: 100},
+			{SequenceNumber: 0, Size: 100},
+			{SequenceNumber: 8188, Size: 100},
+			{SequenceNumber: 8190, Size: 100, Arrival: time.Time{}.Add(64*time.Millisecond + 750*time.Microsecond)},
+			{SequenceNumber: 8191, Size: 100},
+		}, acks)
+	}
+}
+
+func BenchmarkFeedbackAdapterTWCCRunLength(b *testing.B) {
+	for _, count := range []uint16{8191, 65535} {
+		b.Run(fmt.Sprint(count), func(b *testing.B) {
+			adapter := NewFeedbackAdapter()
+			for seq := range uint16(250) {
+				adapter.history.add(Acknowledgment{SequenceNumber: seq})
+			}
+			feedback := &rtcp.TransportLayerCC{PacketStatusCount: count}
+			for remaining := count; remaining > 0; {
+				run := min(remaining, 8191)
+				feedback.PacketChunks = append(feedback.PacketChunks, &rtcp.RunLengthChunk{RunLength: run})
+				remaining -= run
+			}
+			b.ReportAllocs()
+			b.ResetTimer()
+			for range b.N {
+				_, _ = adapter.OnTransportCCFeedback(time.Time{}, feedback)
+			}
+		})
+	}
 }
