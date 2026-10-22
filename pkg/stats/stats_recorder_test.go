@@ -1207,6 +1207,14 @@ func TestQueueNotBlocking(t *testing.T) {
 	}
 }
 
+func TestRecorder_StopBeforeStart(t *testing.T) {
+	r := newRecorder(1, 90_000, logging.NewDefaultLoggerFactory())
+	r.Stop()
+	r.Start()
+	r.QueueOutgoingRTP(time.Now(), &rtp.Header{SSRC: 1}, []byte{1}, nil)
+	assert.Zero(t, r.GetStats().OutboundRTPStreamStats.PacketsSent)
+}
+
 func TestContains(t *testing.T) {
 	for i, tc := range []struct {
 		list     []uint32
