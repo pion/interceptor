@@ -76,3 +76,16 @@ func TestRateControllerRun(t *testing.T) {
 		})
 	}
 }
+
+func TestRateControllerIncreaseDoesNotReduceTarget(t *testing.T) {
+	now := time.Now()
+	for _, target := range []int{1_000_000, 8_000_000} {
+		controller := newRateController(time.Now, target, 100_000, 50_000_000, func(DelayStats) {})
+		controller.latestReceivedRate = 1_350_000
+		controller.latestDecreaseRate.update(1_300_000)
+		controller.latestDecreaseRate.update(1_350_000)
+		controller.lastUpdate = now.Add(-100 * time.Millisecond)
+
+		assert.GreaterOrEqual(t, controller.increase(now), target)
+	}
+}
