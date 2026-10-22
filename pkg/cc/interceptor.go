@@ -7,6 +7,7 @@ package cc
 
 import (
 	"github.com/pion/interceptor"
+	internalcc "github.com/pion/interceptor/internal/cc"
 	"github.com/pion/interceptor/pkg/gcc"
 	"github.com/pion/rtcp"
 )
@@ -41,6 +42,7 @@ type InterceptorFactory struct {
 }
 
 // NewInterceptor returns a new CC interceptor factory.
+// Register it before the NACK responder to enable target-bitrate-based retransmission limiting.
 func NewInterceptor(factory BandwidthEstimatorFactory, opts ...Option) (*InterceptorFactory, error) {
 	if factory == nil {
 		factory = func() (BandwidthEstimator, error) {
@@ -119,6 +121,7 @@ func (c *Interceptor) BindRTCPReader(reader interceptor.RTCPReader) interceptor.
 		if err = c.estimator.WriteRTCP(pkts, attr); err != nil {
 			return 0, nil, err
 		}
+		attr.Set(internalcc.TargetBitrateKey{}, c.estimator.GetTargetBitrate)
 
 		return i, attr, nil
 	})

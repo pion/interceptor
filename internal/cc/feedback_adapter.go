@@ -20,6 +20,9 @@ import (
 // so we don't need to reparse.
 const TwccExtensionAttributesKey = iota
 
+// TargetBitrateKey identifies a func() int returning the current target bitrate in bits per second.
+type TargetBitrateKey struct{}
+
 var (
 	errMissingTWCCExtension = errors.New("missing transport layer cc header extension")
 	errInvalidFeedback      = errors.New("invalid feedback")

@@ -6,12 +6,15 @@ package nack
 import (
 	"encoding/binary"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/pion/interceptor"
+	internalcc "github.com/pion/interceptor/internal/cc"
 	"github.com/pion/interceptor/internal/rtpbuffer"
 	"github.com/pion/interceptor/internal/test"
+	"github.com/pion/interceptor/pkg/cc"
 	"github.com/pion/logging"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
@@ -617,5 +620,122 @@ func TestResponderInterceptor_NoDeadlockWithReentrantRTPWriter(t *testing.T) {
 		// no deadlock with reentrant writer
 	case <-time.After(time.Second):
 		assert.Fail(t, "ResponderInterceptor.Write deadlocked with reentrant RTP writer")
+	}
+}
+
+type nackBitrateEstimator struct {
+	cc.BandwidthEstimator
+	bitrate int
+}
+
+func (e *nackBitrateEstimator) GetTargetBitrate() int { return e.bitrate }
+
+func (*nackBitrateEstimator) WriteRTCP([]rtcp.Packet, interceptor.Attributes) error { return nil }
+
+func TestResponderInterceptor_TargetBitrate(t *testing.T) {
+	estimator := &nackBitrateEstimator{bitrate: 8000}
+	ccFactory, err := cc.NewInterceptor(func() (cc.BandwidthEstimator, error) { return estimator, nil })
+	require.NoError(t, err)
+	controller, err := ccFactory.NewInterceptor("")
+	require.NoError(t, err)
+	reader := controller.BindRTCPReader(interceptor.RTCPReaderFunc(
+		func(buffer []byte, attributes interceptor.Attributes) (int, interceptor.Attributes, error) {
+			return len(buffer), attributes, nil
+		}))
+	feedback, err := rtcp.Marshal([]rtcp.Packet{&rtcp.ReceiverReport{}})
+	require.NoError(t, err)
+	_, attributes, err := reader.Read(feedback, nil)
+	require.NoError(t, err)
+	targetBitrate, ok := attributes.Get(internalcc.TargetBitrateKey{}).(func() int)
+	require.True(t, ok)
+
+	factory, err := NewResponderInterceptor()
+	require.NoError(t, err)
+	instance, err := factory.NewInterceptor("")
+	require.NoError(t, err)
+	responder, ok := instance.(*ResponderInterceptor)
+	require.True(t, ok)
+	t.Cleanup(func() { require.NoError(t, responder.Close()) })
+	now := time.Unix(1700000000, 0)
+	responder.now = func() time.Time { return now }
+	writes := 0
+	for _, ssrc := range []uint32{1, 2} {
+		writer := responder.BindLocalStream(&interceptor.StreamInfo{
+			SSRC: ssrc, RTCPFeedback: []interceptor.RTCPFeedback{{Type: "nack"}},
+		}, interceptor.RTPWriterFunc(func(_ *rtp.Header, _ []byte, _ interceptor.Attributes) (int, error) {
+			writes++
+
+			return 125, nil
+		}))
+		_, err = writer.Write(&rtp.Header{SSRC: ssrc, SequenceNumber: 1}, make([]byte, 113), nil)
+		require.NoError(t, err)
+	}
+	writes = 0
+	request := func(ssrc uint32) {
+		responder.resendPackets(&rtcp.TransportLayerNack{
+			MediaSSRC: ssrc, Nacks: []rtcp.NackPair{{PacketID: 1}},
+		}, targetBitrate)
+	}
+	request(1)
+	now = now.Add(time.Millisecond)
+	request(2)
+	require.Equal(t, 2, writes)
+	now = now.Add(time.Millisecond)
+	request(1)
+	require.Equal(t, 2, writes, "both streams share the budget")
+	now = now.Add(497 * time.Millisecond)
+	request(1)
+	request(2)
+	request(1)
+	require.Equal(t, 4, writes, "500 bytes fill the 8 kbps window")
+	estimator.bitrate = 16000
+	request(1)
+	require.Equal(t, 5, writes, "the getter observes target increases without another RTCP read")
+	estimator.bitrate = 4000
+	request(2)
+	require.Equal(t, 5, writes, "lowering the target preserves the used budget")
+	now = now.Add(time.Second)
+	request(2)
+	require.Equal(t, 6, writes, "expired samples no longer consume the budget")
+	estimator.bitrate = 0
+	now = now.Add(time.Millisecond)
+	request(1)
+	require.Equal(t, 6, writes, "zero target rejects additional startup samples")
+	now = now.Add(time.Millisecond)
+	request(2)
+	require.Equal(t, 6, writes, "zero target keeps rejecting additional retransmissions")
+	responder.resendPackets(&rtcp.TransportLayerNack{
+		MediaSSRC: 1, Nacks: []rtcp.NackPair{{PacketID: 1}},
+	}, nil)
+	require.Equal(t, 7, writes, "without an estimator no bitrate is invented")
+	now = now.Add(497 * time.Millisecond)
+	var admitted atomic.Int32
+	var workers sync.WaitGroup
+	for range 32 {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			if responder.rate.allow(now, 125, 8000) {
+				admitted.Add(1)
+			}
+		}()
+	}
+	workers.Wait()
+	require.EqualValues(t, 3, admitted.Load(), "concurrent requests cannot overspend the shared budget")
+}
+
+func TestRetransmissionRate_StartupBurst(t *testing.T) {
+	for _, tc := range []struct{ bitrate, admitted int }{{0, 1}, {8000, 1}, {192000, 10}} {
+		var rate retransmissionRate
+		for _, elapsed := range []time.Duration{0, time.Second} {
+			now := time.Unix(1700000000, 0).Add(elapsed)
+			admitted := 0
+			for range 1000 {
+				if rate.allow(now, 1200, tc.bitrate) {
+					admitted++
+				}
+			}
+			require.Equal(t, tc.admitted, admitted, "target=%d, elapsed=%s", tc.bitrate, elapsed)
+		}
 	}
 }
