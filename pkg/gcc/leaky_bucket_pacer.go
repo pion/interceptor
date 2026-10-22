@@ -103,7 +103,7 @@ func (p *LeakyBucketPacer) Write(header *rtp.Header, payload []byte, attributes 
 		return 0, errLeakyBucketPacerPoolCastFailed
 	}
 
-	copy(*buf, payload)
+	*buf = append((*buf)[:0], payload...)
 	hdr := header.Clone()
 
 	p.qLock.Lock()
