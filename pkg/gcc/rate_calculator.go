@@ -9,8 +9,42 @@ import (
 	"github.com/pion/interceptor/internal/cc"
 )
 
+// Matches libwebrtc's RobustThroughputEstimatorSettings::max_window_packets.
+// https://webrtc.googlesource.com/src/+/refs/heads/main/modules/congestion_controller/goog_cc/acknowledged_bitrate_estimator_interface.h
+const maxRateHistoryPackets = 500
+
 type rateCalculator struct {
 	window time.Duration
+}
+
+type rateSample struct {
+	arrival time.Time
+	size    int
+}
+
+type rateHistory struct {
+	samples [maxRateHistoryPackets]rateSample
+	start   int
+	count   int
+	sum     int
+}
+
+func (h *rateHistory) add(next cc.Acknowledgment, window time.Duration) bool {
+	if h.count > 0 && next.Arrival.Before(h.samples[(h.start+h.count-1)%len(h.samples)].arrival) {
+		return false
+	}
+	deadline := next.Arrival.Add(-window)
+	for h.count > 0 && (h.count == len(h.samples) || h.samples[h.start].arrival.Before(deadline)) {
+		h.sum -= h.samples[h.start].size
+		h.samples[h.start] = rateSample{}
+		h.start = (h.start + 1) % len(h.samples)
+		h.count--
+	}
+	h.samples[(h.start+h.count)%len(h.samples)] = rateSample{arrival: next.Arrival, size: next.Size}
+	h.count++
+	h.sum += next.Size
+
+	return true
 }
 
 func newRateCalculator(window time.Duration) *rateCalculator {
@@ -20,17 +54,17 @@ func newRateCalculator(window time.Duration) *rateCalculator {
 }
 
 func (c *rateCalculator) run(in <-chan []cc.Acknowledgment, onRateUpdate func(int)) {
-	var history []cc.Acknowledgment
+	history := rateHistory{}
 	init := false
-	sum := 0
 	for acks := range in {
 		for _, next := range acks {
 			if next.Arrival.IsZero() {
 				// Ignore packet if it didn't arrive
 				continue
 			}
-			history = append(history, next)
-			sum += next.Size
+			if !history.add(next, c.window) {
+				continue
+			}
 
 			if !init {
 				init = true
@@ -42,23 +76,11 @@ func (c *rateCalculator) run(in <-chan []cc.Acknowledgment, onRateUpdate func(in
 				continue
 			}
 
-			del := 0
-			for _, ack := range history {
-				deadline := next.Arrival.Add(-c.window)
-				if !ack.Arrival.Before(deadline) {
-					break
-				}
-				del++
-				sum -= ack.Size
-			}
-			history = history[del:]
-			if len(history) == 0 {
-				onRateUpdate(0)
-
+			dt := next.Arrival.Sub(history.samples[history.start].arrival)
+			if dt <= 0 {
 				continue
 			}
-			dt := next.Arrival.Sub(history[0].Arrival)
-			bits := 8 * sum
+			bits := 8 * history.sum
 			rate := int(float64(bits) / dt.Seconds())
 			onRateUpdate(rate)
 		}

@@ -115,3 +115,42 @@ func getACKStream(length int, size int, interval time.Duration) []cc.Acknowledgm
 
 	return res
 }
+
+func TestRateCalculator_ConstantArrival(t *testing.T) {
+	start := time.Unix(1, 0)
+	acks := make([]cc.Acknowledgment, 10000)
+	for i := range acks {
+		acks[i] = cc.Acknowledgment{Arrival: start, Size: 100}
+	}
+	last := []cc.Acknowledgment{{Arrival: start.Add(100 * time.Millisecond), Size: 100}}
+	var rate int
+	allocations := testing.AllocsPerRun(1, func() {
+		in := make(chan []cc.Acknowledgment, 2)
+		in <- acks
+		in <- last
+		close(in)
+		newRateCalculator(time.Second).run(in, func(next int) {
+			rate = next
+		})
+	})
+	assert.LessOrEqual(t, allocations, float64(4))
+	assert.Equal(t, 4_000_000, rate)
+}
+
+func TestRateCalculator_History(t *testing.T) {
+	start := time.Unix(1, 0)
+	history := rateHistory{}
+	for i := range 2 * maxRateHistoryPackets {
+		assert.True(t, history.add(cc.Acknowledgment{
+			Arrival: start.Add(time.Duration(i) * time.Microsecond), Size: i + 1,
+		}, 500*time.Millisecond))
+	}
+	assert.Equal(t, maxRateHistoryPackets, history.count)
+	assert.Equal(t, 375250, history.sum)
+	assert.Equal(t, start.Add(500*time.Microsecond), history.samples[history.start].arrival)
+	assert.False(t, history.add(cc.Acknowledgment{Arrival: start, Size: 100}, 500*time.Millisecond))
+	assert.Equal(t, 375250, history.sum)
+	assert.True(t, history.add(cc.Acknowledgment{Arrival: start.Add(time.Second), Size: 100}, 500*time.Millisecond))
+	assert.Equal(t, 1, history.count)
+	assert.Equal(t, 100, history.sum)
+}

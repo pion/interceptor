@@ -69,10 +69,6 @@ func interArrivalTimePkt(group arrivalGroup, ack cc.Acknowledgment) time.Duratio
 }
 
 func interDepartureTimePkt(group arrivalGroup, ack cc.Acknowledgment) time.Duration {
-	if len(group.packets) == 0 {
-		return 0
-	}
-
 	return ack.Departure.Sub(group.departure)
 }
 
