@@ -12,6 +12,7 @@ import (
 
 	"github.com/pion/interceptor"
 	internalcc "github.com/pion/interceptor/internal/cc"
+	"github.com/pion/interceptor/internal/ntp"
 	"github.com/pion/interceptor/internal/rtpbuffer"
 	"github.com/pion/interceptor/internal/test"
 	"github.com/pion/interceptor/pkg/cc"
@@ -667,13 +668,17 @@ func TestResponderInterceptor_TargetBitrate(t *testing.T) {
 
 			return 125, nil
 		}))
-		_, err = writer.Write(&rtp.Header{SSRC: ssrc, SequenceNumber: 1}, make([]byte, 113), nil)
-		require.NoError(t, err)
+		for seq := range uint16(32) {
+			_, err = writer.Write(&rtp.Header{SSRC: ssrc, SequenceNumber: seq}, make([]byte, 113), nil)
+			require.NoError(t, err)
+		}
 	}
 	writes = 0
+	var sequence uint16
 	request := func(ssrc uint32) {
+		sequence++
 		responder.resendPackets(&rtcp.TransportLayerNack{
-			MediaSSRC: ssrc, Nacks: []rtcp.NackPair{{PacketID: 1}},
+			MediaSSRC: ssrc, Nacks: []rtcp.NackPair{{PacketID: sequence}},
 		}, targetBitrate)
 	}
 	request(1)
@@ -705,7 +710,7 @@ func TestResponderInterceptor_TargetBitrate(t *testing.T) {
 	request(2)
 	require.Equal(t, 6, writes, "zero target keeps rejecting additional retransmissions")
 	responder.resendPackets(&rtcp.TransportLayerNack{
-		MediaSSRC: 1, Nacks: []rtcp.NackPair{{PacketID: 1}},
+		MediaSSRC: 1, Nacks: []rtcp.NackPair{{PacketID: 31}},
 	}, nil)
 	require.Equal(t, 7, writes, "without an estimator no bitrate is invented")
 	now = now.Add(497 * time.Millisecond)
@@ -738,4 +743,61 @@ func TestRetransmissionRate_StartupBurst(t *testing.T) {
 			require.Equal(t, tc.admitted, admitted, "target=%d, elapsed=%s", tc.bitrate, elapsed)
 		}
 	}
+}
+
+func TestResponderInterceptor_PendingRTT(t *testing.T) {
+	factory, err := NewResponderInterceptor()
+	require.NoError(t, err)
+	instance, err := factory.NewInterceptor("")
+	require.NoError(t, err)
+	responder, ok := instance.(*ResponderInterceptor)
+	require.True(t, ok)
+	t.Cleanup(func() { require.NoError(t, responder.Close()) })
+	now := time.Unix(1700000000, 0)
+	responder.now = func() time.Time { return now }
+	var pending *rtpbuffer.Resend
+	writes := 0
+	writer := responder.BindLocalStream(&interceptor.StreamInfo{
+		SSRC: 1, RTCPFeedback: []interceptor.RTCPFeedback{{Type: "nack"}},
+	}, interceptor.RTPWriterFunc(func(_ *rtp.Header, _ []byte, attributes interceptor.Attributes) (int, error) {
+		if resend, ok := attributes[rtpbuffer.ResendKey{}].(*rtpbuffer.Resend); ok {
+			resend.Retain()
+			pending = resend
+			writes++
+		}
+
+		return 12, nil
+	}))
+	_, err = writer.Write(&rtp.Header{SSRC: 1, SequenceNumber: 1}, nil, nil)
+	require.NoError(t, err)
+	responder.updateRTT([]rtcp.ReceptionReport{
+		{SSRC: 1, LastSenderReport: ntp.ToNTP32(now.Add(-time.Second)), Delay: 7 << 13},
+		{SSRC: 1, LastSenderReport: ntp.ToNTP32(now.Add(-time.Second)), Delay: 5 << 13},
+	})
+	nack := &rtcp.TransportLayerNack{MediaSSRC: 1, Nacks: []rtcp.NackPair{{PacketID: 1}}}
+	request := func() { responder.resendPackets(nack, nil) }
+	request()
+	require.Equal(t, 1, writes, "the first retry need not wait for an RTT")
+	now = now.Add(time.Second)
+	var workers sync.WaitGroup
+	for range 1000 {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			request()
+		}()
+	}
+	workers.Wait()
+	require.Equal(t, 1, writes, "pending packets stay suppressed even after an RTT")
+	pending.Release(true)
+	now = now.Add(254 * time.Millisecond)
+	request()
+	require.Equal(t, 1, writes, "RTT + 5 ms starts at completion, not enqueue")
+	now = now.Add(time.Millisecond)
+	request()
+	require.Equal(t, 2, writes)
+	pending.Release(false)
+	request()
+	require.Equal(t, 3, writes, "dropped retries do not start another RTT interval")
+	pending.Release(true)
 }
