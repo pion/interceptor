@@ -14,6 +14,7 @@ import (
 	"github.com/pion/logging"
 	"github.com/pion/rtp"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type mockPacer struct {
@@ -24,15 +25,17 @@ type mockPacer struct {
 
 	allow        bool
 	allowCalled  bool
+	chargedBits  int
 	budget       float64
 	budgetCalled bool
 }
 
 // AllowN implements pacer.
-func (m *mockPacer) AllowN(time.Time, int) bool {
+func (m *mockPacer) AllowN(_ time.Time, bits int) bool {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	m.allowCalled = true
+	m.chargedBits = bits
 
 	return m.allow
 }
@@ -244,4 +247,45 @@ func TestInterceptor(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestInterceptorPacesRTPPadding(t *testing.T) {
+	for _, padding := range []uint8{0, 1, 255} {
+		for _, payloadSize := range []int{0, 3, 1450} {
+			t.Run(fmt.Sprintf("padding=%d/payload=%d", padding, payloadSize), func(t *testing.T) {
+				budget := &mockPacer{budget: 100_000, allow: true}
+				factory := NewInterceptor(setPacerFactory(func(int, int) pacer { return budget }))
+				instance, err := factory.NewInterceptor("")
+				require.NoError(t, err)
+				t.Cleanup(func() { assert.NoError(t, instance.Close()) })
+				packet := &rtp.Packet{Header: rtp.Header{
+					Version: 2, SSRC: 1, SequenceNumber: 17, Padding: padding != 0, PaddingSize: padding,
+				}, Payload: make([]byte, payloadSize)}
+				require.NoError(t, packet.SetExtension(2, []byte{0, 7}))
+				serialized, err := packet.Marshal()
+				require.NoError(t, err)
+				received := make(chan []byte, 1)
+				writer := instance.BindLocalStream(&interceptor.StreamInfo{}, interceptor.RTPWriterFunc(func(header *rtp.Header, payload []byte, _ interceptor.Attributes) (int, error) {
+					outgoing := &rtp.Packet{Header: *header, Payload: payload}
+					wire, marshalErr := outgoing.Marshal()
+					received <- wire
+
+					return len(wire), marshalErr
+				}))
+				queued, err := writer.Write(&packet.Header, packet.Payload, nil)
+				require.NoError(t, err)
+				assert.Equal(t, len(serialized), queued)
+				select {
+				case wire := <-received:
+					assert.Equal(t, serialized, wire)
+				case <-time.After(time.Second):
+					require.FailNow(t, "pacer did not write queued RTP")
+				}
+				budget.lock.Lock()
+				charged := budget.chargedBits
+				budget.lock.Unlock()
+				assert.Equal(t, 8*len(serialized), charged)
+			})
+		}
+	}
 }
