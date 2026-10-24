@@ -98,6 +98,15 @@ type recorder struct {
 	state       uint32
 }
 
+func signed24(v uint32) int64 {
+	v &= 0xFFFFFF
+	if v&0x800000 != 0 {
+		return int64(v) - 0x1000000
+	}
+
+	return int64(v)
+}
+
 func newRecorder(ssrc uint32, clockRate float64, loggerFactory logging.LoggerFactory) *recorder {
 	return &recorder{
 		logger:                        loggerFactory.NewLogger("stats_recorder"),
@@ -259,11 +268,11 @@ func (r *recorder) recordIncomingRR(
 			highest := cycles*(0xFFFF+1) + nr
 			//nolint:gosec // G115
 			expected := int64(highest) - latestStats.remoteInboundFirstSequenceNumber + 1
-			received := max(expected-int64(report.TotalLost), 0)
+			received := max(expected-signed24(report.TotalLost), 0)
 			//nolint:gosec // G115
 			latestStats.RemoteInboundRTPStreamStats.PacketsReceived = uint64(received)
 		}
-		latestStats.RemoteInboundRTPStreamStats.PacketsLost = int64(report.TotalLost)
+		latestStats.RemoteInboundRTPStreamStats.PacketsLost = signed24(report.TotalLost)
 		latestStats.RemoteInboundRTPStreamStats.Jitter = float64(report.Jitter) / r.clockRate
 
 		if report.Delay != 0 && report.LastSenderReport != 0 {
