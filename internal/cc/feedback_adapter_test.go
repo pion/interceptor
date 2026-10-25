@@ -13,6 +13,7 @@ import (
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const hdrExtID = uint8(1)
@@ -225,7 +226,7 @@ func TestUnpackRunLengthChunk(t *testing.T) {
 				assert.NoError(t, fa.OnSent(time.Time{}, h, 0, attributes))
 			}
 
-			n, refTime, acks, err := fa.unpackRunLengthChunk(tc.start, time.Time{}, &tc.chunk, tc.deltas, math.MaxUint16)
+			n, refTime, _, acks, err := fa.unpackRunLengthChunk(tc.start, time.Time{}, &tc.chunk, tc.deltas, math.MaxUint16)
 			assert.NoError(t, err)
 			assert.Len(t, acks, len(tc.acks))
 			assert.Equal(t, tc.n, n)
@@ -408,7 +409,7 @@ func TestUnpackStatusVectorChunk(t *testing.T) {
 				assert.NoError(t, fa.OnSent(time.Time{}, h, 0, attributes))
 			}
 
-			n, refTime, acks, err := fa.unpackStatusVectorChunk(tc.start, time.Time{}, &tc.chunk, tc.deltas, math.MaxUint16)
+			n, refTime, _, acks, err := fa.unpackStatusVectorChunk(tc.start, time.Time{}, &tc.chunk, tc.deltas, math.MaxUint16)
 			assert.NoError(t, err)
 			assert.Len(t, acks, len(tc.acks))
 			assert.Equal(t, tc.n, n)
@@ -974,6 +975,71 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 		}
 	})
 
+	t.Run("skipsPacketsEvictedFromHistory", func(t *testing.T) {
+		t0 := time.Time{}
+		adapter := NewFeedbackAdapter()
+		for i := range uint16(251) {
+			pkt := getPacketWithTransportCCExt(t, i)
+			assert.NoError(
+				t,
+				adapter.OnSent(t0, &pkt.Header, 1200, interceptor.Attributes{TwccExtensionAttributesKey: hdrExtID}),
+			)
+		}
+
+		results, err := adapter.OnTransportCCFeedback(t0, &rtcp.TransportLayerCC{
+			BaseSequenceNumber: 0,
+			PacketStatusCount:  251,
+			PacketChunks: []rtcp.PacketStatusChunk{
+				&rtcp.RunLengthChunk{
+					Type:               rtcp.TypeTCCRunLengthChunk,
+					PacketStatusSymbol: rtcp.TypeTCCPacketReceivedSmallDelta,
+					RunLength:          251,
+				},
+			},
+			RecvDeltas: func() []*rtcp.RecvDelta {
+				ret := make([]*rtcp.RecvDelta, 251)
+				for i := range ret {
+					ret[i] = &rtcp.RecvDelta{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 4}
+				}
+
+				return ret
+			}(),
+		})
+		assert.NoError(t, err)
+		assert.Len(t, results, 250)
+		assert.Equal(t, uint16(1), results[0].SequenceNumber)
+		assert.False(t, results[0].Arrival.IsZero())
+	})
+
+	t.Run("skipsEvictedPacketWithoutDelta", func(t *testing.T) {
+		for name, chunks := range map[string][]rtcp.PacketStatusChunk{
+			"runLength": {
+				&rtcp.RunLengthChunk{PacketStatusSymbol: rtcp.TypeTCCPacketReceivedWithoutDelta, RunLength: 1},
+				&rtcp.RunLengthChunk{PacketStatusSymbol: rtcp.TypeTCCPacketReceivedSmallDelta, RunLength: 1},
+			},
+			"statusVector": {&rtcp.StatusVectorChunk{
+				SymbolSize: rtcp.TypeTCCSymbolSizeTwoBit,
+				SymbolList: []uint16{rtcp.TypeTCCPacketReceivedWithoutDelta, rtcp.TypeTCCPacketReceivedSmallDelta},
+			}},
+		} {
+			t.Run(name, func(t *testing.T) {
+				adapter := NewFeedbackAdapter()
+				pkt := getPacketWithTransportCCExt(t, 1)
+				assert.NoError(t, adapter.OnSent(time.Time{}, &pkt.Header, 1200,
+					interceptor.Attributes{TwccExtensionAttributesKey: hdrExtID}))
+				results, err := adapter.OnTransportCCFeedback(time.Time{}, &rtcp.TransportLayerCC{
+					PacketStatusCount: 2,
+					PacketChunks:      chunks,
+					RecvDeltas:        []*rtcp.RecvDelta{{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 250}},
+				})
+				if assert.NoError(t, err) && assert.Len(t, results, 1) {
+					assert.Equal(t, uint16(1), results[0].SequenceNumber)
+					assert.Equal(t, time.Time{}.Add(250*time.Microsecond), results[0].Arrival)
+				}
+			})
+		}
+	})
+
 	t.Run("doesNotcrashOnInvalidTWCCPacket", func(t *testing.T) {
 		adapter := NewFeedbackAdapter()
 
@@ -1045,4 +1111,82 @@ func TestFeedbackAdapterTWCC(t *testing.T) {
 			assert.Empty(t, packets)
 		})
 	})
+}
+
+func TestFeedbackAdapterTWCC_SparseRun(t *testing.T) {
+	for _, symbol := range []uint16{rtcp.TypeTCCPacketNotReceived, rtcp.TypeTCCPacketReceivedWithoutDelta} {
+		adapter := NewFeedbackAdapter()
+		for _, seq := range []uint16{65534, 0, 8188, 8190, 8191, 8193} {
+			adapter.history.add(Acknowledgment{SequenceNumber: seq, Size: 100})
+		}
+		adapter.history.add(Acknowledgment{SSRC: 1, SequenceNumber: 0})
+		feedback := &rtcp.TransportLayerCC{
+			BaseSequenceNumber: 65534, PacketStatusCount: 8195, ReferenceTime: 1,
+			PacketChunks: []rtcp.PacketStatusChunk{
+				&rtcp.RunLengthChunk{PacketStatusSymbol: symbol, RunLength: 8191},
+				&rtcp.RunLengthChunk{PacketStatusSymbol: rtcp.TypeTCCPacketReceivedLargeDelta, RunLength: 2},
+				&rtcp.StatusVectorChunk{SymbolList: []uint16{
+					rtcp.TypeTCCPacketReceivedWithoutDelta, rtcp.TypeTCCPacketReceivedSmallDelta, rtcp.TypeTCCPacketNotReceived,
+				}},
+			},
+			RecvDeltas: []*rtcp.RecvDelta{{Delta: 1000}, {Delta: -250}, {Delta: 500}},
+		}
+		acks, err := adapter.OnTransportCCFeedback(time.Time{}, feedback)
+		require.NoError(t, err)
+		require.Equal(t, []Acknowledgment{
+			{SequenceNumber: 65534, Size: 100},
+			{SequenceNumber: 0, Size: 100},
+			{SequenceNumber: 8188, Size: 100},
+			{SequenceNumber: 8190, Size: 100, Arrival: time.Time{}.Add(64*time.Millisecond + 750*time.Microsecond)},
+			{SequenceNumber: 8191, Size: 100},
+		}, acks)
+	}
+}
+
+func BenchmarkFeedbackAdapterTWCCRunLength(b *testing.B) {
+	for _, count := range []uint16{8191, 65535} {
+		b.Run(fmt.Sprint(count), func(b *testing.B) {
+			adapter := NewFeedbackAdapter()
+			for seq := range uint16(250) {
+				adapter.history.add(Acknowledgment{SequenceNumber: seq})
+			}
+			feedback := &rtcp.TransportLayerCC{PacketStatusCount: count}
+			for remaining := count; remaining > 0; {
+				run := min(remaining, 8191)
+				feedback.PacketChunks = append(feedback.PacketChunks, &rtcp.RunLengthChunk{RunLength: run})
+				remaining -= run
+			}
+			b.ReportAllocs()
+			b.ResetTimer()
+			for range b.N {
+				_, _ = adapter.OnTransportCCFeedback(time.Time{}, feedback)
+			}
+		})
+	}
+}
+
+func TestFeedbackAdapterTWCCReferenceRollover(t *testing.T) {
+	for _, references := range [][]int64{
+		{(1 << 24) - 2, (1 << 24) - 1, 1 << 24, (1 << 24) - 1, (1 << 24) + 1},
+		{0, -1, 1},
+	} {
+		adapter := NewFeedbackAdapter()
+		for seq, reference := range references {
+			packet := getPacketWithTransportCCExt(t, uint16(seq)) //nolint:gosec // Small test sequence.
+			require.NoError(t, adapter.OnSent(time.Time{}, &packet.Header, 1200,
+				interceptor.Attributes{TwccExtensionAttributesKey: hdrExtID}))
+			acks, err := adapter.OnTransportCCFeedback(time.Time{}, &rtcp.TransportLayerCC{
+				BaseSequenceNumber: uint16(seq), //nolint:gosec // Small test sequence.
+				PacketStatusCount:  1,
+				ReferenceTime:      uint32(reference & 0xffffff), //nolint:gosec // Masked to 24 bits.
+				PacketChunks: []rtcp.PacketStatusChunk{&rtcp.RunLengthChunk{
+					PacketStatusSymbol: rtcp.TypeTCCPacketReceivedSmallDelta, RunLength: 1,
+				}},
+				RecvDeltas: []*rtcp.RecvDelta{{Type: rtcp.TypeTCCPacketReceivedSmallDelta, Delta: 250}},
+			})
+			require.NoError(t, err)
+			require.Len(t, acks, 1)
+			require.Equal(t, time.Time{}.Add(time.Duration(reference)*64*time.Millisecond+250*time.Microsecond), acks[0].Arrival)
+		}
+	}
 }
