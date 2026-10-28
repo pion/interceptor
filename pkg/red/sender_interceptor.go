@@ -1,0 +1,224 @@
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
+// SPDX-License-Identifier: MIT
+
+package red
+
+import (
+	"errors"
+	"slices"
+	"strings"
+	"sync"
+
+	"github.com/pion/interceptor"
+	"github.com/pion/rtp"
+)
+
+const (
+	defaultMaxPacketSize     = 1200
+	maxSenderRedundantBlocks = 2
+	mimeTypeOpus             = "audio/opus"
+)
+
+var errInvalidMaxPacketSize = errors.New("maximum RED packet size must be greater than zero")
+
+// SenderInterceptorFactory creates SenderInterceptors.
+type SenderInterceptorFactory struct {
+	maxPacketSize int
+}
+
+// SenderInterceptor adds previous Opus payloads to outgoing packets using RFC 2198 RED.
+type SenderInterceptor struct {
+	interceptor.NoOp
+	maxPacketSize int
+}
+
+type senderHistoryEntry struct {
+	sequenceNumber uint16
+	timestamp      uint32
+	payload        []byte
+}
+
+type senderStream struct {
+	mutex           sync.Mutex
+	ssrc            uint32
+	opusPayloadType uint8
+	redPayloadType  uint8
+	maxPacketSize   int
+	history         [maxSenderRedundantBlocks]senderHistoryEntry
+	historyCount    int
+}
+
+// NewSenderInterceptor returns a new SenderInterceptorFactory.
+// Options are applied once when creating the factory.
+func NewSenderInterceptor(opts ...SenderOption) (*SenderInterceptorFactory, error) {
+	sender := &SenderInterceptor{maxPacketSize: defaultMaxPacketSize}
+	for _, opt := range opts {
+		if err := opt(sender); err != nil {
+			return nil, err
+		}
+	}
+
+	return &SenderInterceptorFactory{
+		maxPacketSize: sender.maxPacketSize,
+	}, nil
+}
+
+// NewInterceptor constructs a new SenderInterceptor.
+func (factory *SenderInterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, error) {
+	maxPacketSize := factory.maxPacketSize
+	if maxPacketSize == 0 {
+		maxPacketSize = defaultMaxPacketSize
+	}
+
+	return &SenderInterceptor{maxPacketSize: maxPacketSize}, nil
+}
+
+// BindLocalStream wraps an outgoing Opus stream with RED when negotiated RED information is available.
+func (sender *SenderInterceptor) BindLocalStream(
+	info *interceptor.StreamInfo, writer interceptor.RTPWriter,
+) interceptor.RTPWriter {
+	if !isOpusREDStream(info) {
+		return writer
+	}
+
+	stream := &senderStream{
+		ssrc:            info.SSRC,
+		opusPayloadType: info.PayloadType,
+		redPayloadType:  info.PayloadTypeForwardErrorCorrection,
+		maxPacketSize:   sender.maxPacketSize,
+	}
+
+	return interceptor.RTPWriterFunc(func(
+		header *rtp.Header, payload []byte, attributes interceptor.Attributes,
+	) (int, error) {
+		if header == nil || header.SSRC != stream.ssrc {
+			return writer.Write(header, payload, attributes)
+		}
+
+		outputHeader, outputPayload, err := stream.encode(header, payload)
+		if err != nil {
+			return 0, err
+		}
+
+		return writer.Write(outputHeader, outputPayload, attributes)
+	})
+}
+
+func (stream *senderStream) encode(header *rtp.Header, payload []byte) (*rtp.Header, []byte, error) {
+	var blockBuffer [maxSenderRedundantBlocks]Block
+	blocks := stream.prepareRedundantBlocks(header, payload, blockBuffer[:0])
+	if len(blocks) == 0 {
+		return header, payload, nil
+	}
+
+	// Selection prefers newer backups; RED headers are serialized oldest first.
+	slices.Reverse(blocks)
+
+	redPayload, err := (Payload{
+		RedundantBlocks: blocks,
+		PrimaryBlock: Block{
+			PayloadType: stream.opusPayloadType,
+			Payload:     payload,
+		},
+	}).Marshal()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	redHeader := header.Clone()
+	redHeader.PayloadType = stream.redPayloadType
+
+	return &redHeader, redPayload, nil
+}
+
+func (stream *senderStream) resetIfDiscontinuous(header *rtp.Header) {
+	if stream.historyCount == 0 {
+		return
+	}
+
+	newest := stream.history[stream.historyCount-1]
+	timestampOffset := header.Timestamp - newest.timestamp
+	if header.SequenceNumber != newest.sequenceNumber+1 ||
+		timestampOffset == 0 || timestampOffset > maxTimestampOffset {
+		stream.reset()
+	}
+}
+
+func (stream *senderStream) prepareRedundantBlocks(header *rtp.Header, payload []byte, blocks []Block) []Block {
+	stream.mutex.Lock()
+	defer stream.mutex.Unlock()
+	if header.PayloadType != stream.opusPayloadType || len(payload) == 0 {
+		stream.reset()
+
+		return blocks
+	}
+
+	stream.resetIfDiscontinuous(header)
+	packetSize := header.MarshalSize() + int(header.PaddingSize) + primaryHeaderSize + len(payload)
+	for index := stream.historyCount - 1; index >= 0; index-- {
+		entry := stream.history[index]
+		timestampOffset := header.Timestamp - entry.timestamp
+		if timestampOffset == 0 || timestampOffset > maxTimestampOffset {
+			break
+		}
+		if len(entry.payload) == 0 {
+			continue
+		}
+
+		blockSize := redundantHeaderSize + len(entry.payload)
+		if packetSize+blockSize > stream.maxPacketSize {
+			continue
+		}
+
+		blocks = append(blocks, Block{
+			PayloadType:     stream.opusPayloadType,
+			TimestampOffset: uint16(timestampOffset), //nolint:gosec // Offset is bounded above.
+			Payload:         entry.payload,
+		})
+		packetSize += blockSize
+	}
+
+	// History owns immutable payload copies, so replacing entries cannot change
+	// the selected backups while encode serializes them after unlocking.
+	stream.remember(header, payload)
+
+	return blocks
+}
+
+func (stream *senderStream) remember(header *rtp.Header, payload []byte) {
+	entry := senderHistoryEntry{
+		sequenceNumber: header.SequenceNumber,
+		timestamp:      header.Timestamp,
+	}
+	// Oversized primaries cannot become backups, but still occupy a history slot
+	// so continuity checks and the two-packet window follow the original packets.
+	if len(payload) <= maxBlockLength {
+		entry.payload = append([]byte(nil), payload...)
+	}
+
+	if stream.historyCount < maxSenderRedundantBlocks {
+		stream.history[stream.historyCount] = entry
+		stream.historyCount++
+
+		return
+	}
+
+	copy(stream.history[:], stream.history[1:])
+	stream.history[len(stream.history)-1] = entry
+}
+
+func (stream *senderStream) reset() {
+	for index := range stream.historyCount {
+		stream.history[index] = senderHistoryEntry{}
+	}
+	stream.historyCount = 0
+}
+
+func isOpusREDStream(info *interceptor.StreamInfo) bool {
+	return info != nil &&
+		strings.EqualFold(info.MimeType, mimeTypeOpus) &&
+		info.PayloadType <= maxPayloadType &&
+		info.PayloadTypeForwardErrorCorrection != 0 &&
+		info.PayloadTypeForwardErrorCorrection <= maxPayloadType &&
+		info.PayloadType != info.PayloadTypeForwardErrorCorrection
+}
