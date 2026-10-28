@@ -58,9 +58,9 @@ func (m *PacketFactoryCopy) NewPacket(
 	retainablePacket := &RetainablePacket{
 		onRelease:      m.releasePacket,
 		sequenceNumber: header.SequenceNumber,
-		// new packets have retain count of 1
-		count: 1,
 	}
+	// new packets have retain count of 1
+	retainablePacket.count.Store(1)
 
 	var ok bool
 	retainablePacket.header, ok = m.headerPool.Get().(*rtp.Header)
@@ -135,13 +135,15 @@ type PacketFactoryNoOp struct{}
 func (f *PacketFactoryNoOp) NewPacket(
 	header *rtp.Header, payload []byte, _ uint32, _ uint8,
 ) (*RetainablePacket, error) {
-	return &RetainablePacket{
+	rPacket := &RetainablePacket{
 		onRelease:      f.releasePacket,
-		count:          1,
 		header:         header,
 		payload:        payload,
 		sequenceNumber: header.SequenceNumber,
-	}, nil
+	}
+	rPacket.count.Store(1)
+
+	return rPacket, nil
 }
 
 func (f *PacketFactoryNoOp) releasePacket(_ *rtp.Header, _ *[]byte) {

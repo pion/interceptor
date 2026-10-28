@@ -148,13 +148,13 @@ func TestRTPBuffer_Overridden(t *testing.T) {
 	require.NotNil(t, retrieved)
 	require.Equal(t, "originalContent", string(retrieved.Payload()))
 	retrieved.Release()
-	require.Equal(t, 1, retrieved.count)
+	require.Equal(t, int32(1), retrieved.count.Load())
 
 	// ensure original packet is released
 	pkt, err = pm.NewPacket(&rtp.Header{SequenceNumber: 2}, originalBytes, 0, 0)
 	require.NoError(t, err)
 	sb.Add(pkt)
-	require.Equal(t, 0, retrieved.count)
+	require.Equal(t, int32(0), retrieved.count.Load())
 
 	require.Nil(t, sb.Get(1))
 }
@@ -177,13 +177,13 @@ func TestRTPBuffer_Overridden_WithRTX_AND_Padding(t *testing.T) {
 	require.NotNil(t, retrieved)
 	require.Equal(t, "\x00\x01originalContent", string(retrieved.Payload()))
 	retrieved.Release()
-	require.Equal(t, 1, retrieved.count)
+	require.Equal(t, int32(1), retrieved.count.Load())
 
 	// ensure original packet is released
 	pkt, err = pm.NewPacket(&rtp.Header{SequenceNumber: 2}, originalBytes, 1, 1)
 	require.NoError(t, err)
 	sb.Add(pkt)
-	require.Equal(t, 0, retrieved.count)
+	require.Equal(t, int32(0), retrieved.count.Load())
 
 	require.Nil(t, sb.Get(1))
 }
@@ -205,13 +205,13 @@ func TestRTPBuffer_Overridden_WithRTX_NILPayload(t *testing.T) {
 	require.NotNil(t, retrieved)
 	require.Equal(t, "\x00\x01", string(retrieved.Payload()))
 	retrieved.Release()
-	require.Equal(t, 1, retrieved.count)
+	require.Equal(t, int32(1), retrieved.count.Load())
 
 	// ensure original packet is released
 	pkt, err = pm.NewPacket(&rtp.Header{SequenceNumber: 2}, []byte("altered"), 1, 1)
 	require.NoError(t, err)
 	sb.Add(pkt)
-	require.Equal(t, 0, retrieved.count)
+	require.Equal(t, int32(0), retrieved.count.Load())
 
 	require.Nil(t, sb.Get(1))
 }
@@ -269,14 +269,14 @@ func TestRTPBuffer_ClearReleasesPacketsToPool(t *testing.T) {
 
 	// All packets should have count 1
 	for i, pkt := range packets {
-		require.Equal(t, 1, pkt.count, "packet %d should have count 1 before Clear", i)
+		require.Equal(t, int32(1), pkt.count.Load(), "packet %d should have count 1 before Clear", i)
 	}
 
 	sb.Clear()
 
 	// All packets should have count 0 (released)
 	for i, pkt := range packets {
-		require.Equal(t, 0, pkt.count, "packet %d should have count 0 after Clear", i)
+		require.Equal(t, int32(0), pkt.count.Load(), "packet %d should have count 0 after Clear", i)
 	}
 }
 

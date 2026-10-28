@@ -27,7 +27,7 @@ func TestJitterBuffer(t *testing.T) {
 		jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: 5012, Timestamp: 512}, Payload: []byte{0x02}})
 
 		assert.Equal(jb.stats.outOfOrderCount, uint32(1))
-		assert.Equal(jb.packets.Length(), uint16(4))
+		assert.Equal(jb.playbackBuffer.Length(), uint16(3))
 		assert.Equal(jb.lastSequence, uint16(5012))
 	})
 	t.Run("Appends packets and wraps", func(*testing.T) {
@@ -39,7 +39,7 @@ func TestJitterBuffer(t *testing.T) {
 
 		jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: 0, Timestamp: 512}, Payload: []byte{0x02}})
 
-		assert.Equal(jb.packets.Length(), uint16(2))
+		assert.Equal(jb.playbackBuffer.Length(), uint16(2))
 		assert.Equal(jb.lastSequence, uint16(0))
 
 		head, err := jb.Pop()
@@ -63,7 +63,7 @@ func TestJitterBuffer(t *testing.T) {
 				},
 			)
 		}
-		assert.Equal(jb.packets.Length(), uint16(100))
+		assert.Equal(jb.playbackBuffer.Length(), uint16(100))
 		assert.Equal(jb.state, Emitting)
 		assert.Equal(jb.playoutHead, uint16(5012))
 		head, err := jb.Pop()
@@ -88,7 +88,7 @@ func TestJitterBuffer(t *testing.T) {
 				},
 			)
 		}
-		assert.Equal(jb.packets.Length(), uint16(2))
+		assert.Equal(jb.playbackBuffer.Length(), uint16(2))
 		assert.Equal(jb.state, Emitting)
 		assert.Equal(jb.playoutHead, uint16(5012))
 		head, err := jb.Pop()
@@ -105,7 +105,7 @@ func TestJitterBuffer(t *testing.T) {
 			//nolint:gosec // G115
 			jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: sqnum, Timestamp: uint32(512 + i)}, Payload: []byte{0x02}})
 		}
-		assert.Equal(jb.packets.Length(), uint16(100))
+		assert.Equal(jb.playbackBuffer.Length(), uint16(100))
 		assert.Equal(jb.state, Emitting)
 		assert.Equal(jb.playoutHead, uint16(math.MaxUint16-32))
 		head, err := jb.Pop()
@@ -129,35 +129,40 @@ func TestJitterBuffer(t *testing.T) {
 			//nolint:gosec // G115
 			jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: sqnum, Timestamp: uint32(512 + i)}, Payload: []byte{0x02}})
 		}
-		assert.Equal(jb.packets.Length(), uint16(100))
+		assert.Equal(jb.playbackBuffer.Length(), uint16(100))
 		assert.Equal(jb.state, Emitting)
+		// this will discard (one) ts=512 because it is older
+		// and return the oldest ts=513
 		head, err := jb.PopAtTimestamp(uint32(513))
 		assert.Equal(head.SequenceNumber, uint16(math.MaxUint16-32+1))
 		assert.Equal(err, nil)
-		head, err = jb.PopAtTimestamp(uint32(513))
-		assert.Equal(head, (*rtp.Packet)(nil))
+		head, err = jb.PopAtTimestamp(uint32(513)) // 32+1
+		assert.Equal(head, (*rtp.Packet)(nil))     // there is only one ts=513
 		assert.NotEqual(err, nil)
 
+		// PopAtTimestamp establishes a new playoutHead
+		assert.Equal(jb.playoutHead, uint16(math.MaxUint16-32+2))
 		head, err = jb.Pop()
-		assert.Equal(head.SequenceNumber, uint16(math.MaxUint16-32))
+		assert.Equal(head.SequenceNumber, uint16(math.MaxUint16-32+2))
 		assert.Equal(err, nil)
 	})
 
 	t.Run("Can peek at a packet", func(*testing.T) {
 		jb := New()
+		for i := range 100 {
+			sqnum := uint16((math.MaxUint16 - 32 + i)) //nolint:gosec // G115
+			//nolint:gosec // G115
+			jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: sqnum, Timestamp: uint32(512 + i)}, Payload: []byte{0x02}})
+		}
 		jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: 5000, Timestamp: 500}, Payload: []byte{0x02}})
 		jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: 5001, Timestamp: 501}, Payload: []byte{0x02}})
 		jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: 5002, Timestamp: 502}, Payload: []byte{0x02}})
 		pkt, err := jb.Peek(false)
 		assert.Equal(pkt.SequenceNumber, uint16(5002))
 		assert.Equal(err, nil)
-		for i := range 100 {
-			sqnum := uint16((math.MaxUint16 - 32 + i)) //nolint:gosec // G115
-			//nolint:gosec // G115
-			jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: sqnum, Timestamp: uint32(512 + i)}, Payload: []byte{0x02}})
-		}
 		pkt, err = jb.Peek(true)
-		assert.Equal(pkt.SequenceNumber, uint16(5000))
+
+		assert.Equal(pkt.SequenceNumber, uint16(math.MaxUint16-32))
 		assert.Equal(err, nil)
 	})
 
@@ -170,7 +175,7 @@ func TestJitterBuffer(t *testing.T) {
 		}
 		jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: 1019, Timestamp: uint32(9000)}, Payload: []byte{0x02}})
 		jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: 1020, Timestamp: uint32(9000)}, Payload: []byte{0x02}})
-		assert.Equal(jb.packets.Length(), uint16(52))
+		assert.Equal(jb.playbackBuffer.Length(), uint16(50))
 		assert.Equal(jb.state, Emitting)
 		head, err := jb.PopAtSequence(uint16(9000))
 		assert.Equal(head, (*rtp.Packet)(nil))
@@ -184,19 +189,20 @@ func TestJitterBuffer(t *testing.T) {
 			//nolint:gosec // G115
 			jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: sqnum, Timestamp: uint32(512 + i)}, Payload: []byte{0x02}})
 		}
-		jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: 1019, Timestamp: uint32(9000)}, Payload: []byte{0x02}})
-		jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: 1020, Timestamp: uint32(9000)}, Payload: []byte{0x02}})
-		assert.Equal(jb.packets.Length(), uint16(52))
+		jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: 17, Timestamp: uint32(9000)}, Payload: []byte{0x02}})
+		jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: 18, Timestamp: uint32(9000)}, Payload: []byte{0x02}})
+		jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: 19, Timestamp: uint32(9000)}, Payload: []byte{0x02}})
+		assert.Equal(jb.playbackBuffer.Length(), uint16(53))
 		assert.Equal(jb.state, Emitting)
 		head, err := jb.PopAtTimestamp(uint32(9000))
-		assert.Equal(head.SequenceNumber, uint16(1019))
+		assert.Equal(head.SequenceNumber, uint16(17))
 		assert.Equal(err, nil)
 		head, err = jb.PopAtTimestamp(uint32(9000))
-		assert.Equal(head.SequenceNumber, uint16(1020))
+		assert.Equal(head.SequenceNumber, uint16(18))
 		assert.Equal(err, nil)
 
 		head, err = jb.Pop()
-		assert.Equal(head.SequenceNumber, uint16(math.MaxUint16-32))
+		assert.Equal(head.SequenceNumber, uint16(19))
 		assert.Equal(err, nil)
 	})
 
@@ -209,7 +215,7 @@ func TestJitterBuffer(t *testing.T) {
 		}
 		jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: 1019, Timestamp: uint32(9000)}, Payload: []byte{0x02}})
 		jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: 1020, Timestamp: uint32(9000)}, Payload: []byte{0x02}})
-		assert.Equal(jb.packets.Length(), uint16(52))
+		assert.Equal(jb.playbackBuffer.Length(), uint16(50))
 		assert.Equal(jb.state, Emitting)
 		head, err := jb.PeekAtSequence(uint16(1019))
 		assert.Equal(head.SequenceNumber, uint16(1019))
@@ -276,6 +282,6 @@ func TestJitterBuffer(t *testing.T) {
 		jb.Clear(true)
 		assert.Equal(jb.lastSequence, uint16(0))
 		assert.Equal(jb.stats.outOfOrderCount, uint32(0))
-		assert.Equal(jb.packets.Length(), uint16(0))
+		assert.Equal(jb.playbackBuffer.Length(), uint16(0))
 	})
 }
