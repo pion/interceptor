@@ -4,6 +4,7 @@
 package flexfec
 
 import (
+	"bytes"
 	"errors"
 	"sync"
 
@@ -94,9 +95,10 @@ func (r *FecInterceptor) BindLocalStream(
 
 			var fecPackets []rtp.Packet
 			stream.mu.Lock()
+			// The caller may reuse its buffers after Write returns.
 			stream.packetBuffer = append(stream.packetBuffer, rtp.Packet{
-				Header:  *header,
-				Payload: payload,
+				Header:  header.Clone(),
+				Payload: bytes.Clone(payload),
 			})
 
 			// Check if we have enough packets to generate FEC
