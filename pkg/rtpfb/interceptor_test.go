@@ -385,3 +385,42 @@ func TestReceiverReportBeforeFirstAcknowledgement(t *testing.T) {
 	assert.Equal(t, uint16(17), report.PacketReports[0].RTPSequenceNumber)
 	assert.True(t, report.PacketReports[0].Arrived)
 }
+
+func TestInterceptorCountsRTPPadding(t *testing.T) {
+	for _, twcc := range []bool{false, true} {
+		for _, padding := range []uint8{0, 1, 255} {
+			for _, payloadSize := range []int{0, 3} {
+				t.Run(fmt.Sprintf("twcc=%v/padding=%d/payload=%d", twcc, padding, payloadSize), func(t *testing.T) {
+					history := &mockHistory{}
+					factory, err := NewInterceptor(setHistory(history))
+					require.NoError(t, err)
+					instance, err := factory.NewInterceptor("")
+					require.NoError(t, err)
+					t.Cleanup(func() { assert.NoError(t, instance.Close()) })
+					info := &interceptor.StreamInfo{}
+					packet := &rtp.Packet{Header: rtp.Header{
+						Version: 2, SSRC: 1, SequenceNumber: 17, Padding: padding != 0, PaddingSize: padding,
+					}, Payload: make([]byte, payloadSize)}
+					if twcc {
+						info.RTPHeaderExtensions = []interceptor.RTPHeaderExtension{{URI: transportCCURI, ID: 2}}
+						require.NoError(t, packet.SetExtension(2, []byte{0, 7}))
+					}
+					serialized, err := packet.Marshal()
+					require.NoError(t, err)
+					writer := instance.BindLocalStream(info, interceptor.RTPWriterFunc(func(header *rtp.Header, payload []byte, _ interceptor.Attributes) (int, error) {
+						received := &rtp.Packet{Header: *header, Payload: payload}
+						wire, marshalErr := received.Marshal()
+						assert.Equal(t, serialized, wire)
+
+						return len(wire), marshalErr
+					}))
+					written, err := writer.Write(&packet.Header, packet.Payload, nil)
+					require.NoError(t, err)
+					assert.Equal(t, len(serialized), written)
+					require.Len(t, history.log, 1)
+					assert.Equal(t, len(serialized), history.log[0].Size)
+				})
+			}
+		}
+	}
+}
