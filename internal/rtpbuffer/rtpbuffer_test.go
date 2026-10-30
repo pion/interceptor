@@ -397,6 +397,7 @@ func TestRTPBuffer_RTXSequenceNumberOnGet(t *testing.T) {
 	for _, osn := range osns {
 		pkt := sb.Get(osn)
 		require.NotNil(t, pkt)
+		pkt.AssignRTXSequenceNumber()
 		retrieved = append(retrieved, pkt)
 	}
 
@@ -417,14 +418,22 @@ func TestRTPBuffer_RTXSequenceNumberOnGet(t *testing.T) {
 	other.Add(pkt)
 	otherFirst := other.Get(1)
 	require.NotNil(t, otherFirst)
+	otherFirst.AssignRTXSequenceNumber()
 	otherSecond := other.Get(1)
 	require.NotNil(t, otherSecond)
+	otherSecond.AssignRTXSequenceNumber()
 	assert.Equal(t, otherFirst.Header().SequenceNumber+1, otherSecond.Header().SequenceNumber)
 	otherFirst.Release()
 	otherSecond.Release()
 
+	// A copy that is never assigned a sequence number leaves no gap.
+	rejected := sb.Get(3)
+	require.NotNil(t, rejected)
+	rejected.Release()
+
 	next := sb.Get(5)
 	require.NotNil(t, next)
+	next.AssignRTXSequenceNumber()
 	assert.Equal(t, first+3, next.Header().SequenceNumber)
 	next.Release()
 
@@ -436,4 +445,33 @@ func TestRTPBuffer_RTXSequenceNumberOnGet(t *testing.T) {
 		pkt.Release()
 	}
 	assert.Equal(t, 1, stored.count)
+}
+
+func TestRTPBuffer_RTXCopyHeaderIsolation(t *testing.T) {
+	pm := NewPacketFactoryCopy()
+	sb, err := NewRTPBuffer(8)
+	require.NoError(t, err)
+
+	header := &rtp.Header{SequenceNumber: 1, SSRC: 1, PayloadType: 96, CSRC: []uint32{10, 20}}
+	require.NoError(t, header.SetExtension(7, []byte{0x01, 0x02}))
+	stored, err := pm.NewPacket(header, []byte{0xAA}, 2, 97)
+	require.NoError(t, err)
+	sb.Add(stored)
+
+	first := sb.Get(1)
+	require.NotNil(t, first)
+	defer first.Release()
+	second := sb.Get(1)
+	require.NotNil(t, second)
+	defer second.Release()
+
+	// Mutate the first copy in place: extension payload, extension ID, and CSRC.
+	require.NoError(t, first.Header().SetExtension(7, []byte{0xFF, 0xFE}))
+	first.Header().GetExtension(7)[0] = 0xEE
+	first.Header().CSRC[0] = 99
+
+	for name, pkt := range map[string]*RetainablePacket{"second copy": second, "stored packet": stored} {
+		assert.Equal(t, []byte{0x01, 0x02}, pkt.Header().GetExtension(7), name)
+		assert.Equal(t, []uint32{10, 20}, pkt.Header().CSRC, name)
+	}
 }

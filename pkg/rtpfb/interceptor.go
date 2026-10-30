@@ -32,6 +32,7 @@ type packetLog interface {
 		departure time.Time,
 	)
 	onTWCCFeedback(ts time.Time, ack acknowledgement) (time.Duration, bool)
+	twccInRange(start, count uint16) []uint16
 	onCCFBFeedback(ts time.Time, ssrc uint32, ack acknowledgement) (time.Duration, bool)
 	buildReport() []PacketReport
 }
@@ -244,7 +245,7 @@ func (i *Interceptor) processFeedback(ts time.Time, pkts []rtcp.Packet) (time.Du
 				}
 			}
 		case *rtcp.TransportLayerCC:
-			for _, ack := range convertTWCC(fb) {
+			for _, ack := range convertTWCC(fb, i.history.twccInRange) {
 				rtt, ok := i.history.onTWCCFeedback(ts, ack)
 				if ok && rtt < shortestRTT {
 					shortestRTT = rtt

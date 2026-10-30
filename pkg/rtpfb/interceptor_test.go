@@ -86,6 +86,16 @@ func (m *mockHistory) onTWCCFeedback(ts time.Time, ack acknowledgement) (time.Du
 	return m.rtt(ack)
 }
 
+func (m *mockHistory) twccInRange(start, count uint16) []uint16 {
+	history := newHistory()
+	for _, packet := range m.log {
+		history.addOutgoing(packet.SSRC, packet.RTPSequenceNumber, packet.IsTWCC,
+			packet.TWCCSequenceNumber, packet.Size, packet.Departure)
+	}
+
+	return history.twccInRange(start, count)
+}
+
 func TestInterceptor(t *testing.T) {
 	mockTimeStamp := time.Time{}.Add(120 * time.Second)
 	t.Run("calls_add_outgoing", func(t *testing.T) {

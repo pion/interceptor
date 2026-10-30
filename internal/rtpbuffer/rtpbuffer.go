@@ -87,9 +87,9 @@ func (r *RTPBuffer) Clear() {
 
 // Get returns the RetainablePacket for the requested sequence number.
 //
-// For a packet stored for RFC 4588 retransmission, every call is treated as a
-// retransmission: it returns a copy with the next sequence number of the RTX
-// stream, and leaves the stored packet unchanged.
+// For a packet stored for RFC 4588 retransmission, it returns a copy with its
+// own header and leaves the stored packet unchanged. The copy gets the next
+// sequence number of the RTX stream from AssignRTXSequenceNumber.
 func (r *RTPBuffer) Get(seq uint16) *RetainablePacket {
 	diff := r.highestAdded - seq
 	if diff >= Uint16SizeHalf {
@@ -117,5 +117,5 @@ func (r *RTPBuffer) Get(seq uint16) *RetainablePacket {
 		r.rtxSequencer = rtp.NewRandomSequencer()
 	}
 
-	return pkt.newRTXCopy(r.rtxSequencer.NextSequenceNumber())
+	return pkt.newRTXCopy(r.rtxSequencer)
 }

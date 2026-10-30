@@ -6,10 +6,13 @@ package gcc
 import (
 	"container/list"
 	"errors"
+	"io"
+	"maps"
 	"sync"
 	"time"
 
 	"github.com/pion/interceptor"
+	"github.com/pion/interceptor/internal/rtpbuffer"
 	"github.com/pion/logging"
 	"github.com/pion/rtp"
 )
@@ -19,8 +22,8 @@ var errLeakyBucketPacerPoolCastFailed = errors.New("failed to access leaky bucke
 type item struct {
 	header     *rtp.Header
 	payload    *[]byte
-	size       int
 	attributes interceptor.Attributes
+	resend     *rtpbuffer.Resend
 }
 
 // LeakyBucketPacer implements a leaky bucket pacing algorithm.
@@ -98,22 +101,29 @@ func (p *LeakyBucketPacer) getTargetBitrate() int {
 // Write sends a packet with header and payload the a previously registered
 // stream.
 func (p *LeakyBucketPacer) Write(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
+	p.qLock.Lock()
+	defer p.qLock.Unlock()
+	select {
+	case <-p.done:
+		return 0, io.ErrClosedPipe
+	default:
+	}
+	resend, _ := attributes[rtpbuffer.ResendKey{}].(*rtpbuffer.Resend)
 	buf, ok := p.pool.Get().(*[]byte)
 	if !ok {
 		return 0, errLeakyBucketPacerPoolCastFailed
 	}
 
-	copy(*buf, payload)
+	*buf = append((*buf)[:0], payload...)
 	hdr := header.Clone()
 
-	p.qLock.Lock()
+	resend.Retain()
 	p.queue.PushBack(&item{
 		header:     &hdr,
 		payload:    buf,
-		size:       len(payload),
-		attributes: attributes,
+		attributes: maps.Clone(attributes),
+		resend:     resend,
 	})
-	p.qLock.Unlock()
 
 	return header.MarshalSize() + len(payload), nil
 }
@@ -132,33 +142,17 @@ func (p *LeakyBucketPacer) Run() {
 			budget := int(float64(now.Sub(lastSent).Milliseconds()) * float64(p.getTargetBitrate()) / 8000.0)
 			p.qLock.Lock()
 			for p.queue.Len() != 0 && budget > 0 {
-				p.log.Infof("budget=%v, len(queue)=%v, targetBitrate=%v", budget, p.queue.Len(), p.getTargetBitrate())
-				next, ok := p.queue.Remove(p.queue.Front()).(*item)
-				p.qLock.Unlock()
+				next, ok := p.queue.Front().Value.(*item)
 				if !ok {
 					p.log.Warnf("failed to access leaky bucket pacer queue, cast failed")
+					p.queue.Remove(p.queue.Front())
 
 					continue
 				}
-
-				p.writerLock.RLock()
-				writer, ok := p.ssrcToWriter[next.header.SSRC]
-				p.writerLock.RUnlock()
-				if !ok {
-					p.log.Warnf("no writer found for ssrc: %v", next.header.SSRC)
-					p.pool.Put(next.payload)
-					p.qLock.Lock()
-
-					continue
-				}
-
-				n, err := writer.Write(next.header, (*next.payload)[:next.size], next.attributes)
-				if err != nil {
-					p.log.Errorf("failed to write packet: %v", err)
-				}
+				p.queue.Remove(p.queue.Front())
+				p.qLock.Unlock()
+				budget -= p.write(next)
 				lastSent = now
-				budget -= n
-
 				p.pool.Put(next.payload)
 				p.qLock.Lock()
 			}
@@ -167,9 +161,43 @@ func (p *LeakyBucketPacer) Run() {
 	}
 }
 
+func (p *LeakyBucketPacer) write(next *item) int {
+	p.writerLock.RLock()
+	writer, ok := p.ssrcToWriter[next.header.SSRC]
+	p.writerLock.RUnlock()
+	if !ok {
+		p.log.Warnf("no writer found for ssrc: %v", next.header.SSRC)
+		next.resend.Release(false)
+
+		return 0
+	}
+	n, err := writer.Write(next.header, *next.payload, next.attributes)
+	if err != nil {
+		p.log.Errorf("failed to write packet: %v", err)
+	}
+
+	next.resend.Release(err == nil)
+
+	return n
+}
+
 // Close closes the LeakyBucketPacer.
 func (p *LeakyBucketPacer) Close() error {
-	close(p.done)
+	p.qLock.Lock()
+	select {
+	case <-p.done:
+	default:
+		close(p.done)
+	}
+	queue := p.queue
+	p.queue = list.New()
+	p.qLock.Unlock()
+	for elem := queue.Front(); elem != nil; elem = elem.Next() {
+		if next, ok := elem.Value.(*item); ok {
+			p.pool.Put(next.payload)
+			next.resend.Release(false)
+		}
+	}
 
 	return nil
 }

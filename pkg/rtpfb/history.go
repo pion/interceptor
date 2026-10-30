@@ -4,6 +4,7 @@
 package rtpfb
 
 import (
+	"slices"
 	"sync"
 	"time"
 
@@ -120,6 +121,28 @@ func (h *history) onTWCCFeedback(ts time.Time, ack acknowledgement) (time.Durati
 	}
 
 	return h.onFeedback(ts, counter, ack)
+}
+
+func (h *history) twccInRange(start, count uint16) []uint16 {
+	h.lock.Lock()
+	defer h.lock.Unlock()
+	var result []uint16
+	if int(count) <= len(h.twccToCounter) {
+		for offset := range count {
+			if _, ok := h.twccToCounter[start+offset]; ok {
+				result = append(result, start+offset)
+			}
+		}
+	} else {
+		for sequenceNumber := range h.twccToCounter {
+			if sequenceNumber-start < count {
+				result = append(result, sequenceNumber)
+			}
+		}
+		slices.SortFunc(result, func(a, b uint16) int { return int(a-start) - int(b-start) })
+	}
+
+	return result
 }
 
 // onCCFBFeedback maps an acknowledgement to the counter by ssrc and sequence
