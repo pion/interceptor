@@ -120,7 +120,7 @@ func (r *FecInterceptor) BindLocalStream(
 			var fecPackets []rtp.Packet
 			stream.mu.Lock()
 			if r.multiFrame {
-				fecPackets = r.collectMultiFrame(stream, header, payload)
+				fecPackets = r.collectMultiFrame(stream, header, payload, attributes)
 			} else {
 				stream.packetBuffer = append(stream.packetBuffer, rtp.Packet{
 					Header:  *header,

@@ -5,9 +5,12 @@ package flexfec
 
 import (
 	"testing"
+	"time"
 
 	"github.com/pion/interceptor"
+	"github.com/pion/interceptor/internal/ntp"
 	"github.com/pion/interceptor/internal/test"
+	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -75,4 +78,65 @@ func TestMultiFrame_RoundTripRecoversLossAcrossFrames(t *testing.T) {
 	group := media[:4]
 	assert.NotEqual(t, group[0].Timestamp, group[3].Timestamp, "group must span frames")
 	checkAnyPacketCanBeRecovered(t, group, fec)
+}
+
+func TestMultiFrame_GapAtFrameBoundaryKeepsFrameRate(t *testing.T) {
+	factory, err := NewFecInterceptor(MultiFrame(6), ProtectionLevel(0.1), MaxExcessOverhead(0), DisableRTTAdaptation())
+	require.NoError(t, err)
+	icpt, err := factory.NewInterceptor("")
+	require.NoError(t, err)
+	fecInterceptor, ok := icpt.(*FecInterceptor)
+	require.True(t, ok)
+
+	writer := icpt.BindLocalStream(&interceptor.StreamInfo{
+		SSRC:                              protectedStreamSSRC,
+		ClockRate:                         90000,
+		PayloadTypeForwardErrorCorrection: payloadType,
+		SSRCForwardErrorCorrection:        ssrc,
+	}, interceptor.RTPWriterFunc(func(*rtp.Header, []byte, interceptor.Attributes) (int, error) { return 0, nil }))
+
+	// One packet per frame, no marker bits, 3000 ticks apart, and a sequence gap
+	// exactly where the third frame starts.
+	for i, seq := range []uint16{1, 2, 5, 6, 7} {
+		_, err := writer.Write(&rtp.Header{
+			SSRC: protectedStreamSSRC, SequenceNumber: seq, Timestamp: uint32(3000 * i), //nolint:gosec
+		}, []byte{0x01}, nil)
+		require.NoError(t, err)
+	}
+
+	stream := fecInterceptor.streams[protectedStreamSSRC]
+	stream.mu.Lock()
+	defer stream.mu.Unlock()
+	assert.InDelta(t, 3000, stream.multiFrame.frameInterval, 0.5, "every frame end was seen")
+}
+
+func TestMultiFrame_ZeroRTTIsAMeasurement(t *testing.T) {
+	factory, err := NewFecInterceptor(MultiFrame(6), ProtectionLevel(0.1), MaxExcessOverhead(0))
+	require.NoError(t, err)
+	icpt, err := factory.NewInterceptor("")
+	require.NoError(t, err)
+	fecInterceptor, ok := icpt.(*FecInterceptor)
+	require.True(t, ok)
+
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	fecInterceptor.now = func() time.Time { return now }
+
+	stream := test.NewMockStream(&interceptor.StreamInfo{
+		SSRC:                              protectedStreamSSRC,
+		ClockRate:                         90000,
+		PayloadTypeForwardErrorCorrection: payloadType,
+		SSRCForwardErrorCorrection:        ssrc,
+	}, icpt)
+	defer func() { assert.NoError(t, stream.Close()) }()
+
+	// The report echoes our sender report with no delay: an RTT of exactly 0.
+	stream.ReceiveRTCP([]rtcp.Packet{&rtcp.ReceiverReport{
+		Reports: []rtcp.ReceptionReport{{SSRC: protectedStreamSSRC, LastSenderReport: ntp.ToNTP32(now)}},
+	}})
+	<-stream.ReadRTCP()
+
+	state := &fecInterceptor.streams[protectedStreamSSRC].multiFrame
+	state.frameInterval = 3000 // 30 fps
+
+	assert.Equal(t, uint32(1), fecInterceptor.frameLimit(state), "λ = max(1, round(30·0))")
 }

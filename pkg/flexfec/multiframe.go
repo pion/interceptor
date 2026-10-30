@@ -10,6 +10,7 @@ import (
 
 	"github.com/pion/interceptor"
 	"github.com/pion/interceptor/internal/ntp"
+	"github.com/pion/interceptor/internal/rtpbuffer"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 )
@@ -40,13 +41,20 @@ type multiFrameState struct {
 	// Number of complete frames in the current protection group.
 	frames uint32
 
+	// Highest sequence number buffered so far, kept across groups so that
+	// retransmitted or reordered packets can be recognized.
+	lastSeq uint16
+	haveSeq bool
+
 	// Frame rate estimation from RTP timestamps of frame ends.
 	lastFrameTS   uint32
 	haveFrameTS   bool
 	frameInterval float64 // in RTP clock ticks, 0 while unknown
 
-	// Smoothed RTT from RTCP receiver reports, 0 while unknown.
-	rtt time.Duration
+	// Smoothed RTT from RTCP receiver reports. A measured RTT of 0 is valid,
+	// so whether one was measured is tracked separately.
+	rtt     time.Duration
+	haveRTT bool
 }
 
 // fecCount returns the number of FEC packets that brings a group of k media packets closest to
@@ -60,7 +68,7 @@ func (r *FecInterceptor) fecCount(k int) uint32 {
 
 // frameLimit returns λ = max(1, min(f·RTT, maxFrames)).
 func (r *FecInterceptor) frameLimit(state *multiFrameState) uint32 {
-	if r.disableRTTAdaptation || state.rtt <= 0 || state.frameInterval <= 0 {
+	if r.disableRTTAdaptation || !state.haveRTT || state.frameInterval <= 0 {
 		return r.maxFrames
 	}
 
@@ -87,6 +95,17 @@ func (state *multiFrameState) onFrameEnd(timestamp uint32) {
 	}
 	state.lastFrameTS = timestamp
 	state.haveFrameTS = true
+}
+
+// isStale reports whether a packet should bypass protection: retransmissions that keep the
+// media SSRC (no RTX) and late reordered packets are already covered by an earlier group or
+// the NACK path, and must not break up the current group.
+func (state *multiFrameState) isStale(header *rtp.Header, attributes interceptor.Attributes) bool {
+	if _, isResend := attributes[rtpbuffer.ResendKey{}]; isResend {
+		return true
+	}
+
+	return state.haveSeq && int16(header.SequenceNumber-state.lastSeq) <= 0 //nolint:gosec // G115, wrap-aware diff
 }
 
 // flushGroup protects everything buffered for the stream and starts a new group.
@@ -125,22 +144,37 @@ func (r *FecInterceptor) maybeCloseGroup(stream *streamState) []rtp.Packet {
 // collectMultiFrame adds a media packet to the current protection group and returns the FEC
 // packets to send after it, if the group was closed.
 // The caller must hold stream.mu.
-func (r *FecInterceptor) collectMultiFrame(stream *streamState, header *rtp.Header, payload []byte) []rtp.Packet {
+func (r *FecInterceptor) collectMultiFrame(
+	stream *streamState, header *rtp.Header, payload []byte, attributes interceptor.Attributes,
+) []rtp.Packet {
+	state := &stream.multiFrame
+
+	if state.isStale(header, attributes) {
+		return nil
+	}
+
 	var fecPackets []rtp.Packet
 
 	if n := len(stream.packetBuffer); n > 0 {
 		last := &stream.packetBuffer[n-1]
+		frameEnded := header.Timestamp != last.Timestamp && !last.Marker
 		switch {
 		case header.SequenceNumber != last.SequenceNumber+1:
-			// The encoder needs consecutive sequence numbers, so protect what we have
-			// rather than lose protection for the whole group.
+			// Packets were skipped. The encoder needs consecutive sequence numbers, so
+			// protect what we have rather than lose protection for the whole group.
+			if frameEnded {
+				state.onFrameEnd(last.Timestamp) // keep the frame rate estimate accurate
+			}
 			fecPackets = r.flushGroup(stream)
-		case header.Timestamp != last.Timestamp && !last.Marker:
+		case frameEnded:
 			// A new frame started although the previous one had no marker bit.
-			stream.multiFrame.onFrameEnd(last.Timestamp)
+			state.onFrameEnd(last.Timestamp)
 			fecPackets = r.maybeCloseGroup(stream)
 		}
 	}
+
+	state.lastSeq = header.SequenceNumber
+	state.haveSeq = true
 
 	// Packets may stay buffered for several frames, longer than callers can be
 	// expected to keep their buffers untouched, so keep a private copy.
@@ -214,8 +248,9 @@ func (r *FecInterceptor) updateRTT(reports []rtcp.ReceptionReport) {
 		sample := time.Duration(rtt) * time.Second / (1 << 16)
 
 		stream.mu.Lock()
-		if stream.multiFrame.rtt == 0 {
+		if !stream.multiFrame.haveRTT {
 			stream.multiFrame.rtt = sample
+			stream.multiFrame.haveRTT = true
 		} else {
 			stream.multiFrame.rtt += time.Duration(rttAlpha * float64(sample-stream.multiFrame.rtt))
 		}

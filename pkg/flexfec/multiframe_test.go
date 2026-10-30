@@ -9,6 +9,7 @@ import (
 
 	"github.com/pion/interceptor"
 	"github.com/pion/interceptor/internal/ntp"
+	"github.com/pion/interceptor/internal/rtpbuffer"
 	"github.com/pion/interceptor/internal/test"
 	"github.com/pion/interceptor/pkg/flexfec"
 	"github.com/pion/rtcp"
@@ -314,4 +315,69 @@ func TestMultiFrame_InvalidOptions(t *testing.T) {
 		_, err = factory.NewInterceptor("")
 		assert.Error(t, err)
 	})
+}
+
+func TestMultiFrame_LateRetransmissionDoesNotSplitGroup(t *testing.T) {
+	// Without RTX a retransmission keeps the media SSRC and its old sequence number.
+	sender, enc := newMFSender(t,
+		flexfec.MultiFrame(3),
+		flexfec.ProtectionLevel(0.1),
+		flexfec.MaxExcessOverhead(0),
+		flexfec.DisableRTTAdaptation(),
+	)
+
+	sender.frame(1, true) // seq 1
+	sender.frame(1, true) // seq 2
+	require.NoError(t, sender.stream.WriteRTP(&rtp.Packet{
+		Header:  rtp.Header{SSRC: mfMediaSSRC, PayloadType: mfMediaPT, SequenceNumber: 1, Timestamp: 90000, Marker: true},
+		Payload: []byte{0x01},
+	}))
+	sender.frame(1, true) // seq 3
+
+	require.Len(t, enc.calls, 1)
+	assert.Equal(t, encodeCall{seqs: seqRange(1, 3), numFEC: 1}, enc.calls[0])
+
+	m, f := mfMediaPT, mfFECPT
+	assert.Equal(t, []uint8{m, m, m, m, f}, sender.written(), "retransmission is still sent")
+}
+
+func TestMultiFrame_ResendAttributeBypassesGrouping(t *testing.T) {
+	enc := &recordingEncoder{}
+	factory, err := flexfec.NewFecInterceptor(
+		flexfec.FECEncoderFactory(recordingFactory{enc}),
+		flexfec.MultiFrame(2),
+		flexfec.ProtectionLevel(0.1),
+		flexfec.MaxExcessOverhead(0),
+		flexfec.DisableRTTAdaptation(),
+	)
+	require.NoError(t, err)
+	icpt, err := factory.NewInterceptor("")
+	require.NoError(t, err)
+
+	var written []uint16
+	writer := icpt.BindLocalStream(&interceptor.StreamInfo{
+		SSRC:                              mfMediaSSRC,
+		ClockRate:                         90000,
+		PayloadTypeForwardErrorCorrection: mfFECPT,
+		SSRCForwardErrorCorrection:        mfFECSSRC,
+	}, interceptor.RTPWriterFunc(func(h *rtp.Header, _ []byte, _ interceptor.Attributes) (int, error) {
+		written = append(written, h.SequenceNumber)
+
+		return 0, nil
+	}))
+
+	write := func(seq uint16, ts uint32, attrs interceptor.Attributes) {
+		_, err := writer.Write(&rtp.Header{
+			SSRC: mfMediaSSRC, PayloadType: mfMediaPT, SequenceNumber: seq, Timestamp: ts, Marker: true,
+		}, []byte{0x01}, attrs)
+		require.NoError(t, err)
+	}
+
+	write(10, 1000, nil)
+	write(5, 900, interceptor.Attributes{rtpbuffer.ResendKey{}: rtpbuffer.NewResend(func(bool) {})})
+	write(11, 4000, nil)
+
+	require.Len(t, enc.calls, 1)
+	assert.Equal(t, []uint16{10, 11}, enc.calls[0].seqs)
+	assert.Equal(t, []uint16{10, 5, 11, 0}, written, "resend passes through, FEC follows the group")
 }

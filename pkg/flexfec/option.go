@@ -61,6 +61,9 @@ func MultiFrame(maxFrames uint32) FecOption {
 // ProtectionLevel sets the target FEC overhead PL = m/(k+m) used in MultiFrame mode, where k is
 // the number of media packets and m the number of FEC packets in a protection group. It must be
 // in (0, 1). If unset, it is derived from NumMediaPackets and NumFECPackets.
+//
+// At most one FEC packet is sent per media packet, so the overhead never exceeds 0.5. With a
+// level above 0.5, every frame is protected as its own group.
 func ProtectionLevel(level float64) FecOption {
 	return func(f *FecInterceptor) error {
 		if !(level > 0 && level < 1) {
