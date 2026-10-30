@@ -41,13 +41,18 @@ type internalStats struct {
 
 	lastSenderReports []uint64
 
-	lastReceiverReferenceTimes []uint64
+	lastReceiverReferenceTimes []receiverReferenceTime
 
 	InboundRTPStreamStats
 	OutboundRTPStreamStats
 
 	RemoteInboundRTPStreamStats
 	RemoteOutboundRTPStreamStats
+}
+
+type receiverReferenceTime struct {
+	ssrc         uint32
+	ntpTimestamp uint64
 }
 
 type incomingRTP struct {
@@ -214,7 +219,9 @@ func (r *recorder) recordOutgoingRTCP(latestStats internalStats, v *outgoingRTCP
 		case *rtcp.ExtendedReport:
 			for _, block := range rtcpPkt.Reports {
 				if xr, ok := block.(*rtcp.ReceiverReferenceTimeReportBlock); ok {
-					latestStats.lastReceiverReferenceTimes = append(latestStats.lastReceiverReferenceTimes, xr.NTPTimestamp)
+					latestStats.lastReceiverReferenceTimes = append(latestStats.lastReceiverReferenceTimes, receiverReferenceTime{
+						ssrc: rtcpPkt.SenderSSRC, ntpTimestamp: xr.NTPTimestamp,
+					})
 					if len(latestStats.lastReceiverReferenceTimes) > r.maxLastReceiverReferenceTimes {
 						latestStats.lastReceiverReferenceTimes = latestStats.lastReceiverReferenceTimes[len(
 							latestStats.lastReceiverReferenceTimes,
@@ -286,21 +293,30 @@ func (r *recorder) recordIncomingRR(
 }
 
 func (r *recorder) recordIncomingXR(latestStats internalStats, pkt *rtcp.ExtendedReport, ts time.Time) internalStats {
+	if pkt.SenderSSRC != r.ssrc {
+		return latestStats
+	}
 	for _, report := range pkt.Reports {
-		if xr, ok := report.(*rtcp.DLRRReportBlock); ok {
-			for _, xrReport := range xr.Reports {
-				if xrReport.LastRR != 0 && xrReport.DLRR != 0 && xrReport.SSRC == r.ssrc {
-					for i := min(r.maxLastReceiverReferenceTimes, len(latestStats.lastReceiverReferenceTimes)) - 1; i >= 0; i-- {
-						lastRR := latestStats.lastReceiverReferenceTimes[i]
-						if (lastRR&0x0000FFFFFFFF0000)>>16 == uint64(xrReport.LastRR) {
-							dlrr := time.Duration(float64(xrReport.DLRR) / 65536.0 * float64(time.Second))
-							latestStats.RemoteOutboundRTPStreamStats.RoundTripTime = (ts.Add(-dlrr)).Sub(ntp.ToTime(lastRR))
-							//nolint:lll
-							latestStats.RemoteOutboundRTPStreamStats.TotalRoundTripTime += latestStats.RemoteOutboundRTPStreamStats.RoundTripTime
-							latestStats.RemoteOutboundRTPStreamStats.RoundTripTimeMeasurements++
-						}
-					}
+		xr, ok := report.(*rtcp.DLRRReportBlock)
+		if !ok {
+			continue
+		}
+		for _, xrReport := range xr.Reports {
+			if xrReport.LastRR == 0 || xrReport.DLRR == 0 {
+				continue
+			}
+			for i := min(r.maxLastReceiverReferenceTimes, len(latestStats.lastReceiverReferenceTimes)) - 1; i >= 0; i-- {
+				lastRR := latestStats.lastReceiverReferenceTimes[i]
+				if lastRR.ssrc != xrReport.SSRC || (lastRR.ntpTimestamp&0x0000FFFFFFFF0000)>>16 != uint64(xrReport.LastRR) {
+					continue
 				}
+				dlrr := time.Duration(float64(xrReport.DLRR) / 65536.0 * float64(time.Second))
+				latestStats.RemoteOutboundRTPStreamStats.RoundTripTime = (ts.Add(-dlrr)).Sub(ntp.ToTime(lastRR.ntpTimestamp))
+				//nolint:lll
+				latestStats.RemoteOutboundRTPStreamStats.TotalRoundTripTime += latestStats.RemoteOutboundRTPStreamStats.RoundTripTime
+				latestStats.RemoteOutboundRTPStreamStats.RoundTripTimeMeasurements++
+
+				break
 			}
 		}
 	}
@@ -343,7 +359,7 @@ func (r *recorder) recordIncomingRTCP(latestStats internalStats, incoming *incom
 			latestStats = r.recordIncomingRR(latestStats, pkt.Reports, incoming.ts)
 
 		case *rtcp.ExtendedReport:
-			return r.recordIncomingXR(latestStats, pkt, incoming.ts)
+			latestStats = r.recordIncomingXR(latestStats, pkt, incoming.ts)
 		}
 	}
 
