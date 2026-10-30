@@ -25,10 +25,55 @@ type RetainablePacket struct {
 	sequenceNumber uint16
 	lastResend     time.Time
 	pending        bool
+
+	// rtx is set when the header and payload were rewritten for RFC 4588 retransmission.
+	rtx bool
+	// parent is the stored packet a retransmission copy was made from, see RTPBuffer.Get.
+	parent *RetainablePacket
+	// rtxSequencer numbers the RTX stream of a retransmission copy, see AssignRTXSequenceNumber.
+	rtxSequencer rtp.Sequencer
+}
+
+// rtxPacket is a retransmission of a stored RTX packet. It shares the payload of the
+// stored packet, but has its own header so it can carry its own sequence number.
+type rtxPacket struct {
+	RetainablePacket
+	rtxHeader rtp.Header
+}
+
+// newRTXCopy returns a retransmission of p numbered by sequencer.
+// p must be retained, the returned packet releases it when it is released.
+func (p *RetainablePacket) newRTXCopy(sequencer rtp.Sequencer) *RetainablePacket {
+	// Clone so that CSRC and extensions are not shared with p or other copies.
+	pkt := &rtxPacket{rtxHeader: p.header.Clone()}
+	pkt.header = &pkt.rtxHeader
+	pkt.payload = p.payload
+	pkt.sequenceNumber = p.sequenceNumber
+	pkt.count = 1
+	pkt.parent = p
+	pkt.rtxSequencer = sequencer
+
+	return &pkt.RetainablePacket
+}
+
+// AssignRTXSequenceNumber gives a retransmission copy returned by RTPBuffer.Get
+// the next sequence number of its RTX stream. Call it once the retransmission
+// was admitted, right before writing it, so rejected retries leave no gaps.
+// It does nothing for other packets.
+func (p *RetainablePacket) AssignRTXSequenceNumber() {
+	if p.rtxSequencer == nil {
+		return
+	}
+	p.header.SequenceNumber = p.rtxSequencer.NextSequenceNumber()
+	p.rtxSequencer = nil
 }
 
 // BeginResend reserves a packet unless it is pending or was recently resent.
+// Retransmission copies share this state with the stored packet.
 func (p *RetainablePacket) BeginResend(now time.Time, interval time.Duration) bool {
+	if p.parent != nil {
+		return p.parent.BeginResend(now, interval)
+	}
 	p.countMu.Lock()
 	defer p.countMu.Unlock()
 	if p.pending || (!p.lastResend.IsZero() && now.Sub(p.lastResend) < interval) {
@@ -40,7 +85,13 @@ func (p *RetainablePacket) BeginResend(now time.Time, interval time.Duration) bo
 }
 
 // EndResend clears pending and records successful retransmissions.
+// Retransmission copies share this state with the stored packet.
 func (p *RetainablePacket) EndResend(now time.Time, sent bool) {
+	if p.parent != nil {
+		p.parent.EndResend(now, sent)
+
+		return
+	}
 	p.countMu.Lock()
 	defer p.countMu.Unlock()
 	p.pending = false
@@ -79,6 +130,15 @@ func (p *RetainablePacket) Release() {
 	p.count--
 
 	if p.count == 0 {
+		if p.parent != nil {
+			p.parent.Release()
+			p.parent = nil
+			p.header = nil
+			p.payload = nil
+
+			return
+		}
+
 		// release back to pool
 		p.onRelease(p.header, p.buffer)
 		p.header = nil

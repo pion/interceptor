@@ -236,6 +236,7 @@ func (n *ResponderInterceptor) resendPacket(stream *localStream, packet *rtpbuff
 		packet.Release()
 	})
 	attributes := interceptor.Attributes{rtpbuffer.ResendKey{}: resend}
+	packet.AssignRTXSequenceNumber()
 	_, err := stream.rtpWriter.Write(packet.Header(), packet.Payload(), attributes)
 	if err != nil {
 		n.log.Warnf("failed resending nacked packet: %+v", err)
