@@ -19,12 +19,16 @@ type SenderInterceptorFactory struct {
 	opts []Option
 }
 
+// packetChanBufferSize is the number of packets buffered for the report loop
+// before new packets are dropped.
+const packetChanBufferSize = 1000
+
 var errClosed = errors.New("interceptor is closed")
 
 // NewInterceptor constructs a new SenderInterceptor.
 func (s *SenderInterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, error) {
 	senderInterceptor := &SenderInterceptor{
-		packetChan: make(chan packet),
+		packetChan: make(chan packet, packetChanBufferSize),
 		close:      make(chan struct{}),
 		interval:   100 * time.Millisecond,
 		now:        time.Now,
@@ -191,10 +195,13 @@ func (s *SenderInterceptor) BindRemoteStream(
 					arrivalTime:    s.now().Sub(s.startTime).Microseconds(),
 					ssrc:           info.SSRC,
 				}
-				select {
-				case <-s.close:
+				if s.isClosed() {
 					return 0, nil, errClosed
+				}
+				select {
 				case s.packetChan <- p:
+				default:
+					s.log.Trace("packet channel is full, dropping packet")
 				}
 			}
 
@@ -225,6 +232,17 @@ func (s *SenderInterceptor) isClosed() bool {
 	}
 }
 
+func (s *SenderInterceptor) recordQueuedPackets() {
+	for range len(s.packetChan) {
+		select {
+		case p := <-s.packetChan:
+			s.recorder.Record(p.ssrc, p.sequenceNumber, p.arrivalTime)
+		default:
+			return
+		}
+	}
+}
+
 func (s *SenderInterceptor) loop(writer interceptor.RTCPWriter) {
 	defer s.wg.Done()
 
@@ -246,6 +264,7 @@ func (s *SenderInterceptor) loop(writer interceptor.RTCPWriter) {
 			s.recorder.Record(p.ssrc, p.sequenceNumber, p.arrivalTime)
 
 		case <-ticker.Ch():
+			s.recordQueuedPackets()
 			// build and send twcc
 			pkts := s.recorder.BuildFeedbackPacket()
 			if len(pkts) == 0 {

@@ -348,3 +348,41 @@ func TestConcurrentClose(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestReadWithoutRTCPWriter(t *testing.T) {
+	f, err := NewSenderInterceptor()
+	assert.NoError(t, err)
+
+	intcp, err := f.NewInterceptor("")
+	assert.NoError(t, err)
+	defer func() {
+		assert.NoError(t, intcp.Close())
+	}()
+
+	raw, err := (&rtp.Packet{
+		Header:  rtp.Header{Version: 2, SequenceNumber: 1, SSRC: 123456},
+		Payload: []byte{},
+	}).Marshal()
+	assert.NoError(t, err)
+
+	reader := intcp.BindRemoteStream(&interceptor.StreamInfo{SSRC: 123456}, interceptor.RTPReaderFunc(
+		func(b []byte, a interceptor.Attributes) (int, interceptor.Attributes, error) {
+			return copy(b, raw), a, nil
+		},
+	))
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for range 2 * packetChanBufferSize {
+			_, _, err := reader.Read(make([]byte, 1500), nil)
+			assert.NoError(t, err)
+		}
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		assert.Fail(t, "read blocked without a bound RTCP writer")
+	}
+}
