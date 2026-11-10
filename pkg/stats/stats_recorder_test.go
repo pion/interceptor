@@ -1099,26 +1099,23 @@ func TestStatsRecorder(t *testing.T) {
 
 func TestStatsRecorder_DLRR_Precision(t *testing.T) {
 	recorder := newRecorder(5000, 90_000, logging.NewDefaultLoggerFactory())
-
+	recorder.Start()
+	defer recorder.Stop()
+	sentAt := time.Unix(1700000000, 0)
+	reference := ntp.ToNTP(sentAt)
+	recorder.QueueOutgoingRTCP(sentAt, []rtcp.Packet{&rtcp.ExtendedReport{
+		SenderSSRC: 17,
+		Reports:    []rtcp.ReportBlock{&rtcp.ReceiverReferenceTimeReportBlock{NTPTimestamp: reference}},
+	}}, nil)
 	report := &rtcp.ExtendedReport{
-		Reports: []rtcp.ReportBlock{
-			&rtcp.DLRRReportBlock{
-				Reports: []rtcp.DLRRReport{
-					{
-						SSRC:   5000,
-						LastRR: 762,
-						DLRR:   30000,
-					},
-				},
-			},
-		},
+		SenderSSRC: 5000,
+		Reports: []rtcp.ReportBlock{&rtcp.DLRRReportBlock{Reports: []rtcp.DLRRReport{
+			{SSRC: 17, LastRR: uint32(reference >> 16 & 0xffffffff), DLRR: 30000},
+		}}},
 	}
+	recorder.QueueIncomingRTCP(sentAt.Add(time.Second), mustMarshalRTCPs(t, report), nil)
 
-	s := recorder.recordIncomingXR(internalStats{
-		lastReceiverReferenceTimes: []uint64{50000000},
-	}, report, time.Time{})
-
-	assert.Equal(t, int64(s.RemoteOutboundRTPStreamStats.RoundTripTime), int64(-9223372036854775808))
+	assert.Equal(t, 542236329*time.Nanosecond, recorder.GetStats().RemoteOutboundRTPStreamStats.RoundTripTime)
 }
 
 func TestStatsRecorderPayloadAndHeaderBytes(t *testing.T) {
