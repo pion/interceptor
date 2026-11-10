@@ -140,7 +140,7 @@ func (i *Interceptor) bindTWCCStream(twccHdrExtID uint8, writer interceptor.RTPW
 			header.SequenceNumber,
 			true,
 			twccHdrExt.TransportSequence,
-			header.MarshalSize()+len(payload),
+			header.MarshalSize()+len(payload)+int(header.PaddingSize),
 			ts,
 		)
 
@@ -161,7 +161,7 @@ func (i *Interceptor) bindCCFBStream(writer interceptor.RTPWriter) interceptor.R
 			header.SequenceNumber,
 			false,
 			0,
-			header.MarshalSize()+len(payload),
+			header.MarshalSize()+len(payload)+int(header.PaddingSize),
 			ts,
 		)
 

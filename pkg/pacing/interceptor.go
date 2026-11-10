@@ -250,7 +250,7 @@ func (i *Interceptor) BindLocalStream(
 			return 0, errPacerOverflow
 		}
 
-		return header.MarshalSize() + len(payload), nil
+		return header.MarshalSize() + len(payload) + int(header.PaddingSize), nil
 	})
 }
 
@@ -318,5 +318,5 @@ type packet struct {
 }
 
 func (p *packet) len() int {
-	return p.header.MarshalSize() + len(p.payload)
+	return p.header.MarshalSize() + len(p.payload) + int(p.header.PaddingSize)
 }
