@@ -200,7 +200,7 @@ func (r *recorder) recordOutgoingRTCP(latestStats internalStats, v *outgoingRTCP
 			}
 			latestStats.InboundRTPStreamStats.NACKCount++
 		case *rtcp.SenderReport:
-			if !contains(pkt.DestinationSSRC(), r.ssrc) {
+			if rtcpPkt.SSRC != r.ssrc {
 				r.logger.Debugf("skipping outgoing RTCP pkt: %v", pkt)
 
 				continue
@@ -336,10 +336,12 @@ func (r *recorder) recordIncomingRTCP(latestStats internalStats, incoming *incom
 		case *rtcp.ReceiverReport:
 			latestStats = r.recordIncomingRR(latestStats, pkt.Reports, incoming.ts)
 		case *rtcp.SenderReport:
-			latestStats.RemoteOutboundRTPStreamStats.PacketsSent = uint64(pkt.PacketCount)
-			latestStats.RemoteOutboundRTPStreamStats.BytesSent = uint64(pkt.OctetCount)
-			latestStats.RemoteTimeStamp = ntp.ToTime(pkt.NTPTime)
-			latestStats.ReportsSent++
+			if pkt.SSRC == r.ssrc {
+				latestStats.RemoteOutboundRTPStreamStats.PacketsSent = uint64(pkt.PacketCount)
+				latestStats.RemoteOutboundRTPStreamStats.BytesSent = uint64(pkt.OctetCount)
+				latestStats.RemoteTimeStamp = ntp.ToTime(pkt.NTPTime)
+				latestStats.ReportsSent++
+			}
 			latestStats = r.recordIncomingRR(latestStats, pkt.Reports, incoming.ts)
 
 		case *rtcp.ExtendedReport:
