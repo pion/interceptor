@@ -51,6 +51,27 @@ func (r *RingBuffer) Peek() *rtpbuffer.RetainablePacket {
 	return rPacket
 }
 
+// At returns the queued packet with sequenceNumber without removing it, or nil.
+// The queue is normally consecutive sequence numbers, so the slot is computed
+// directly; SetPlayoutHead can break that, so a mismatch falls back to a scan.
+func (r *RingBuffer) At(sequenceNumber uint16) *rtpbuffer.RetainablePacket {
+	if r.Empty() {
+		return nil
+	}
+	if offset := sequenceNumber - r.buffer[r.read].Header().SequenceNumber; offset < r.length {
+		if rPacket := r.buffer[(r.read+offset)%r.size]; rPacket.Header().SequenceNumber == sequenceNumber {
+			return rPacket
+		}
+	}
+	for i := range r.length {
+		if rPacket := r.buffer[(r.read+i)%r.size]; rPacket.Header().SequenceNumber == sequenceNumber {
+			return rPacket
+		}
+	}
+
+	return nil
+}
+
 func (r *RingBuffer) PopAt(sequenceNumber uint16) *rtpbuffer.RetainablePacket {
 	return r.popMatching(func(rPacket *rtpbuffer.RetainablePacket) bool {
 		return sequenceNumber == rPacket.Header().SequenceNumber

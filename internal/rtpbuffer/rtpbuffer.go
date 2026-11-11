@@ -36,7 +36,9 @@ func NewRTPBuffer(size uint16) (*RTPBuffer, error) {
 	}, nil
 }
 
-// Add places the RetainablePacket in the RTPBuffer.
+// Add places the RetainablePacket in the RTPBuffer, taking ownership of the
+// caller's reference. A packet for a sequence number that is already buffered,
+// or that is too old to fit the window, is released instead of stored.
 func (r *RTPBuffer) Add(packet *RetainablePacket) {
 	seq := packet.sequenceNumber
 	if !r.started {
@@ -48,9 +50,9 @@ func (r *RTPBuffer) Add(packet *RetainablePacket) {
 	}
 
 	diff := seq - r.highestAdded
-	if diff == 0 {
-		return
-	} else if diff < Uint16SizeHalf {
+	switch {
+	case diff == 0:
+	case diff < Uint16SizeHalf:
 		for i := r.highestAdded + 1; i != seq; i++ {
 			idx := i % r.size
 			prevPacket := r.packets[idx]
@@ -60,11 +62,21 @@ func (r *RTPBuffer) Add(packet *RetainablePacket) {
 			r.packets[idx] = nil
 		}
 		r.highestAdded = seq
+	case r.highestAdded-seq >= r.size:
+		// Get could never return it, and its slot belongs to a newer packet.
+		packet.Release()
+
+		return
 	}
 
 	idx := seq % r.size
 	prevPacket := r.packets[idx]
 	if prevPacket != nil {
+		if prevPacket.sequenceNumber == seq {
+			packet.Release()
+
+			return
+		}
 		prevPacket.Release()
 	}
 	r.packets[idx] = packet
