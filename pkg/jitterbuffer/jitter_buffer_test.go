@@ -263,6 +263,26 @@ func TestJitterBuffer(t *testing.T) {
 		}
 	})
 
+	t.Run("Skips missing packets when enabled", func(*testing.T) {
+		jb := New(WithMinimumPacketCount(1), WithSkipMissingPackets(true))
+
+		// Push packets 0-4, but no packet 2.
+		for i := range uint16(5) {
+			if i == 2 {
+				continue
+			}
+			jb.Push(&rtp.Packet{Header: rtp.Header{SequenceNumber: i, Timestamp: uint32(512 + i)}, Payload: []byte{0x00}})
+		}
+
+		for _, expectedSequenceNumber := range []uint16{0, 1, 3, 4} {
+			pkt, err := jb.Pop()
+			assert.NoError(err)
+			assert.NotNil(pkt)
+			assert.Equal(expectedSequenceNumber, pkt.SequenceNumber)
+		}
+		assert.Equal(jb.PlayoutHead(), uint16(5))
+	})
+
 	t.Run("Allows clearing the buffer", func(*testing.T) {
 		jb := New()
 		jb.Clear(false)

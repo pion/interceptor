@@ -72,6 +72,7 @@ type JitterBuffer struct {
 	lastSequence  uint16
 	playoutHead   uint16
 	playoutReady  bool
+	skipMissing   bool
 	state         State
 	stats         Stats
 	listeners     map[Event][]EventListener
@@ -114,6 +115,14 @@ func New(opts ...Option) *JitterBuffer {
 func WithMinimumPacketCount(count uint16) Option {
 	return func(jb *JitterBuffer) {
 		jb.minStartCount = count
+	}
+}
+
+// WithSkipMissingPackets allows Pop to continue with the next available packet
+// when the packet at the playout head is missing.
+func WithSkipMissingPackets(skipMissing bool) Option {
+	return func(jb *JitterBuffer) {
+		jb.skipMissing = skipMissing
 	}
 }
 
@@ -219,6 +228,15 @@ func (jb *JitterBuffer) Pop() (*rtp.Packet, error) {
 	}
 	packet, err := jb.packets.PopAt(jb.playoutHead)
 	if err != nil {
+		if errors.Is(err, ErrNotFound) && jb.skipMissing {
+			packet, err = jb.packets.Pop()
+			if err == nil {
+				jb.playoutHead = packet.SequenceNumber + 1
+				jb.updateState()
+
+				return packet, nil
+			}
+		}
 		jb.stats.underflowCount++
 		jb.emit(BufferUnderflow)
 

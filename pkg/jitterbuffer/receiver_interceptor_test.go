@@ -96,3 +96,31 @@ func TestReceiverBuffersAndPlaysout(t *testing.T) {
 	err = testInterceptor.Close()
 	assert.NoError(t, err)
 }
+
+func TestReceiverSkipsMissingPacketsWhenEnabled(t *testing.T) {
+	factory, err := NewInterceptor(
+		WithJitterBufferOptions(WithMinimumPacketCount(1), WithSkipMissingPackets(true)),
+	)
+	assert.NoError(t, err)
+
+	testInterceptor, err := factory.NewInterceptor("")
+	assert.NoError(t, err)
+
+	stream := test.NewMockStream(&interceptor.StreamInfo{
+		SSRC:      123456,
+		ClockRate: 90000,
+	}, testInterceptor)
+
+	for _, sequenceNumber := range []uint16{0, 1, 3, 4} {
+		stream.ReceiveRTP(&rtp.Packet{Header: rtp.Header{
+			SequenceNumber: sequenceNumber,
+		}})
+	}
+
+	for _, expectedSequenceNumber := range []uint16{0, 1, 3, 4} {
+		read := <-stream.ReadRTP()
+		assert.EqualValues(t, expectedSequenceNumber, read.Packet.Header.SequenceNumber)
+	}
+	assert.NoError(t, stream.Close())
+	assert.NoError(t, testInterceptor.Close())
+}

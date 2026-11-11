@@ -27,3 +27,12 @@ func WithLoggerFactory(loggerFactory logging.LoggerFactory) ReceiverInterceptorO
 		return nil
 	}
 }
+
+// WithJitterBufferOptions configures the jitter buffer created by the receiver interceptor.
+func WithJitterBufferOptions(opts ...Option) ReceiverInterceptorOption {
+	return func(d *ReceiverInterceptor) error {
+		d.buffer = New(opts...)
+
+		return nil
+	}
+}

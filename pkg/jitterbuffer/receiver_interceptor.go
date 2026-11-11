@@ -13,14 +13,15 @@ import (
 
 // InterceptorFactory is a interceptor.Factory for a GeneratorInterceptor.
 type InterceptorFactory struct {
-	opts []ReceiverInterceptorOption
+	opts       []ReceiverInterceptorOption
+	bufferOpts []Option
 }
 
 // NewInterceptor constructs a new ReceiverInterceptor.
 func (g *InterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, error) {
 	receiverInterceptor := &ReceiverInterceptor{
 		close:  make(chan struct{}),
-		buffer: New(),
+		buffer: New(g.bufferOpts...),
 	}
 
 	for _, opt := range g.opts {
@@ -68,7 +69,7 @@ type ReceiverInterceptor struct {
 
 // NewInterceptor returns a new InterceptorFactory.
 func NewInterceptor(opts ...ReceiverInterceptorOption) (*InterceptorFactory, error) {
-	return &InterceptorFactory{opts}, nil
+	return &InterceptorFactory{opts: opts}, nil
 }
 
 // BindRemoteStream lets you modify any incoming RTP packets. It is called once for per RemoteStream.
