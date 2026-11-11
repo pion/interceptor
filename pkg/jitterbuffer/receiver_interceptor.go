@@ -19,7 +19,6 @@ type InterceptorFactory struct {
 // NewInterceptor constructs a new ReceiverInterceptor.
 func (g *InterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, error) {
 	receiverInterceptor := &ReceiverInterceptor{
-		close:   make(chan struct{}),
 		buffers: make(map[uint32]*JitterBuffer),
 	}
 
@@ -61,8 +60,6 @@ type ReceiverInterceptor struct {
 	buffers       map[uint32]*JitterBuffer
 	bufferOptions []Option
 	m             sync.Mutex
-	wg            sync.WaitGroup
-	close         chan struct{}
 	log           logging.LeveledLogger
 	loggerFactory logging.LoggerFactory
 }
@@ -113,7 +110,6 @@ func (i *ReceiverInterceptor) BindRemoteStream(
 
 // UnbindRemoteStream is called when the Stream is removed. It can be used to clean up any data related to that track.
 func (i *ReceiverInterceptor) UnbindRemoteStream(info *interceptor.StreamInfo) {
-	defer i.wg.Wait()
 	i.m.Lock()
 	defer i.m.Unlock()
 	if buffer, ok := i.buffers[info.SSRC]; ok {
@@ -124,7 +120,6 @@ func (i *ReceiverInterceptor) UnbindRemoteStream(info *interceptor.StreamInfo) {
 
 // Close closes the interceptor.
 func (i *ReceiverInterceptor) Close() error {
-	defer i.wg.Wait()
 	i.m.Lock()
 	defer i.m.Unlock()
 	for ssrc, buffer := range i.buffers {

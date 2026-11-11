@@ -7,7 +7,6 @@ package jitterbuffer
 
 import (
 	"errors"
-	"sync"
 
 	"github.com/pion/interceptor/internal/rtpbuffer"
 	"github.com/pion/rtp"
@@ -66,6 +65,9 @@ type (
 // A JitterBuffer will accept Pushed packets, put them in sequence number
 // order, and allows removing in either sequence number order or via a
 // provided timestamp.
+//
+// A JitterBuffer is not safe for concurrent use; callers sharing one across
+// goroutines must synchronize access themselves.
 type JitterBuffer struct {
 	packetFactory    rtpbuffer.PacketFactory
 	reorderBuffer    *rtpbuffer.RTPBuffer
@@ -79,7 +81,6 @@ type JitterBuffer struct {
 	state            State
 	stats            Stats
 	listeners        map[Event][]EventListener
-	mutex            sync.Mutex
 }
 
 // Stats Track interesting statistics for the life of this JitterBuffer
@@ -133,6 +134,29 @@ func WithMinimumPacketCount(count uint16) Option {
 	}
 }
 
+// WithSize sets how many sequence numbers the buffer can hold. It is rounded
+// up to a power of two and capped at 32768 (half the sequence number space).
+// The default is 1024.
+func WithSize(size uint16) Option {
+	return func(jb *JitterBuffer) {
+		jb.overflowLen = nextPowerOfTwo(size)
+	}
+}
+
+const maxSize = 1 << 15
+
+func nextPowerOfTwo(v uint16) uint16 {
+	if v > maxSize {
+		return maxSize
+	}
+	n := uint16(1)
+	for n < v {
+		n <<= 1
+	}
+
+	return n
+}
+
 // DisableCopy bypasses copy of underlying packets. It should be used when
 // you are not re-using underlying buffers of packets that have been written.
 func DisableCopy() Option {
@@ -150,18 +174,12 @@ func (jb *JitterBuffer) Listen(event Event, cb EventListener) {
 
 // PlayoutHead returns the SequenceNumber that will be attempted to Pop next.
 func (jb *JitterBuffer) PlayoutHead() uint16 {
-	jb.mutex.Lock()
-	defer jb.mutex.Unlock()
-
 	return jb.playoutHead
 }
 
 // SetPlayoutHead allows you to manually specify the packet you wish to pop next
 // If you have encountered a packet that hasn't resolved you can skip it.
 func (jb *JitterBuffer) SetPlayoutHead(playoutHead uint16) {
-	jb.mutex.Lock()
-	defer jb.mutex.Unlock()
-
 	jb.playoutHead = playoutHead
 	jb.expectedSequence = playoutHead
 	jb.drain()
@@ -180,9 +198,6 @@ func (jb *JitterBuffer) updateStats(lastPktSeqNo uint16) {
 // the data so if the memory is expected to be reused, the caller should
 // take this in to account and pass a copy of the packet they wish to buffer.
 func (jb *JitterBuffer) Push(packet *rtp.Packet) {
-	jb.mutex.Lock()
-	defer jb.mutex.Unlock()
-
 	rPacket, err := jb.packetFactory.NewPacket(&packet.Header, packet.Payload, 0, 0)
 	if err != nil {
 		return
@@ -235,8 +250,6 @@ func (jb *JitterBuffer) updateState() {
 //
 //	At the last sequence received
 func (jb *JitterBuffer) Peek(playoutHead bool) (*rtp.Packet, error) {
-	jb.mutex.Lock()
-	defer jb.mutex.Unlock()
 	if !jb.reorderBuffer.Started() {
 		return nil, ErrBufferUnderrun
 	}
@@ -272,8 +285,6 @@ func (jb *JitterBuffer) Pop() (*rtp.Packet, error) {
 
 // Same as Pop, except it returns a RetainablePacket.
 func (jb *JitterBuffer) popRetainable() (*rtpbuffer.RetainablePacket, error) {
-	jb.mutex.Lock()
-	defer jb.mutex.Unlock()
 	if jb.state != Emitting {
 		return nil, ErrPopWhileBuffering
 	}
@@ -292,8 +303,6 @@ func (jb *JitterBuffer) popRetainable() (*rtpbuffer.RetainablePacket, error) {
 
 // PopAtSequence will pop an RTP packet from the jitter buffer at the specified Sequence.
 func (jb *JitterBuffer) PopAtSequence(sq uint16) (*rtp.Packet, error) {
-	jb.mutex.Lock()
-	defer jb.mutex.Unlock()
 	if jb.state != Emitting {
 		return nil, ErrPopWhileBuffering
 	}
@@ -313,9 +322,26 @@ func (jb *JitterBuffer) PopAtSequence(sq uint16) (*rtp.Packet, error) {
 // PeekAtSequence will return an RTP packet from the jitter buffer at the specified Sequence
 // without removing it from the buffer.
 func (jb *JitterBuffer) PeekAtSequence(sq uint16) (*rtp.Packet, error) {
-	jb.mutex.Lock()
-	defer jb.mutex.Unlock()
-	packet := jb.reorderBuffer.Get(sq)
+	packet := jb.reorderBuffer.Peek(sq)
+	if packet == nil {
+		return nil, ErrNotFound
+	}
+
+	return jb.view(packet), nil
+}
+
+// RemoveAtSequence removes the packet with the specified Sequence from the
+// buffer and returns it, regardless of playout state. Packets still queued for
+// playout at or before sq are discarded.
+func (jb *JitterBuffer) RemoveAtSequence(sq uint16) (*rtp.Packet, error) {
+	for head := jb.playbackBuffer.Peek(); head != nil; head = jb.playbackBuffer.Peek() {
+		if int16(head.Header().SequenceNumber-sq) > 0 { //nolint:gosec // G115
+			break
+		}
+		jb.playbackBuffer.Pop().Release()
+	}
+
+	packet := jb.reorderBuffer.Remove(sq)
 	if packet == nil {
 		return nil, ErrNotFound
 	}
@@ -326,8 +352,6 @@ func (jb *JitterBuffer) PeekAtSequence(sq uint16) (*rtp.Packet, error) {
 // PopAtTimestamp pops an RTP packet from the jitter buffer with the provided timestamp
 // Call this method repeatedly to drain the buffer at the timestamp.
 func (jb *JitterBuffer) PopAtTimestamp(ts uint32) (*rtp.Packet, error) {
-	jb.mutex.Lock()
-	defer jb.mutex.Unlock()
 	if jb.state != Emitting {
 		return nil, ErrPopWhileBuffering
 	}
@@ -344,11 +368,17 @@ func (jb *JitterBuffer) PopAtTimestamp(ts uint32) (*rtp.Packet, error) {
 	return jb.takePacket(packet), nil
 }
 
-// Unwrap the packet.
+// Unwrap the packet and drop the caller's reference to it.
 func (jb *JitterBuffer) takePacket(rPacket *rtpbuffer.RetainablePacket) *rtp.Packet {
-	if pkt := rPacket.Unwrapped(); pkt != nil {
-		rPacket.Release()
+	pkt := jb.view(rPacket)
+	rPacket.Release()
 
+	return pkt
+}
+
+// view returns the cached *rtp.Packet for rPacket, building it on first use.
+func (jb *JitterBuffer) view(rPacket *rtpbuffer.RetainablePacket) *rtp.Packet {
+	if pkt := rPacket.Unwrapped(); pkt != nil {
 		return pkt
 	}
 
@@ -365,7 +395,6 @@ func (jb *JitterBuffer) takePacket(rPacket *rtpbuffer.RetainablePacket) *rtp.Pac
 		Payload: payload,
 	}
 	rPacket.SetUnwrapped(pkt)
-	rPacket.Release()
 
 	return pkt
 }
@@ -390,8 +419,6 @@ func (jb *JitterBuffer) drain() {
 
 // Clear will empty the buffer and optionally reset the state.
 func (jb *JitterBuffer) Clear(resetState bool) {
-	jb.mutex.Lock()
-	defer jb.mutex.Unlock()
 	jb.reorderBuffer.Clear()
 	jb.playbackBuffer.Clear()
 
