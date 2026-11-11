@@ -136,7 +136,7 @@ func (f *PacketFactoryNoOp) NewPacket(
 	header *rtp.Header, payload []byte, _ uint32, _ uint8,
 ) (*RetainablePacket, error) {
 	rPacket := &RetainablePacket{
-		onRelease:      f.releasePacket,
+		onRelease:      releaseNoOp,
 		header:         header,
 		payload:        payload,
 		sequenceNumber: header.SequenceNumber,
@@ -146,6 +146,4 @@ func (f *PacketFactoryNoOp) NewPacket(
 	return rPacket, nil
 }
 
-func (f *PacketFactoryNoOp) releasePacket(_ *rtp.Header, _ *[]byte) {
-	// no-op
-}
+func releaseNoOp(_ *rtp.Header, _ *[]byte) {}

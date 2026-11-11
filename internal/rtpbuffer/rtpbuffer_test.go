@@ -371,3 +371,120 @@ func TestRTPBuffer_Padding(t *testing.T) {
 		require.ErrorIs(t, err, errPaddingOverflow, "factory should reject invalid padding")
 	})
 }
+
+const testBufferSize = 8
+
+func newTestPacket(t *testing.T, factory *PacketFactoryCopy, seq uint16, payload byte) *RetainablePacket {
+	t.Helper()
+	pkt, err := factory.NewPacket(&rtp.Header{SequenceNumber: seq}, []byte{payload}, 0, 0)
+	require.NoError(t, err)
+
+	return pkt
+}
+
+// payloadAt returns the payload byte stored for seq, or -1 if seq is not buffered.
+func payloadAt(buf *RTPBuffer, seq uint16) int {
+	pkt := buf.Peek(seq)
+	if pkt == nil {
+		return -1
+	}
+
+	return int(pkt.Payload()[0])
+}
+
+func TestRTPBufferAddDuplicatesAndReAdds(t *testing.T) {
+	for _, start := range []uint16{0, 100, 32767, 65530, 65535} {
+		factory := NewPacketFactoryCopy()
+		newBuffer := func() *RTPBuffer {
+			buf, err := NewRTPBuffer(testBufferSize)
+			require.NoError(t, err)
+			for i := range uint16(4) {
+				buf.Add(newTestPacket(t, factory, start+i, 1))
+			}
+
+			return buf
+		}
+		highest := start + 3
+
+		t.Run("duplicate keeps the buffered packet and releases the new one", func(t *testing.T) {
+			for _, seq := range []uint16{start, start + 1, highest} {
+				buf := newBuffer()
+				dup := newTestPacket(t, factory, seq, 2)
+				buf.Add(dup)
+				assert.Equal(t, 1, payloadAt(buf, seq), "seq %d", seq)
+				assert.Equal(t, int32(0), dup.count.Load(), "dropped duplicate %d must be released", seq)
+			}
+		})
+
+		t.Run("removed packet can be added again", func(t *testing.T) {
+			for _, seq := range []uint16{start, start + 1, highest} {
+				buf := newBuffer()
+				removed := buf.Remove(seq)
+				require.NotNil(t, removed, "seq %d", seq)
+				assert.Equal(t, -1, payloadAt(buf, seq), "seq %d", seq)
+
+				buf.Add(newTestPacket(t, factory, seq, 2))
+				assert.Equal(t, 2, payloadAt(buf, seq), "seq %d", seq)
+			}
+		})
+
+		t.Run("packet older than the window is dropped without evicting", func(t *testing.T) {
+			buf := newBuffer()
+			// highest-size shares a slot with highest.
+			stale := newTestPacket(t, factory, highest-testBufferSize, 2)
+			buf.Add(stale)
+			assert.Equal(t, 1, payloadAt(buf, highest))
+			assert.Equal(t, -1, payloadAt(buf, highest-testBufferSize))
+			assert.Equal(t, int32(0), stale.count.Load(), "dropped packet must be released")
+		})
+
+		t.Run("jump of half the sequence space does not evict", func(t *testing.T) {
+			buf := newBuffer()
+			buf.Add(newTestPacket(t, factory, highest+Uint16SizeHalf, 2))
+			for i := range uint16(4) {
+				assert.Equal(t, 1, payloadAt(buf, start+i), "seq %d", start+i)
+			}
+		})
+	}
+}
+
+func TestRTPBufferPeekRemove(t *testing.T) {
+	factory := NewPacketFactoryCopy()
+	buf, err := NewRTPBuffer(testBufferSize)
+	require.NoError(t, err)
+
+	assert.Nil(t, buf.Peek(0), "empty buffer")
+	assert.Nil(t, buf.Remove(0), "empty buffer")
+
+	start := uint16(65532) // the window wraps through 0
+	for i := range uint16(testBufferSize) {
+		buf.Add(newTestPacket(t, factory, start+i, byte(i)))
+	}
+	highest := start + testBufferSize - 1
+
+	t.Run("peek does not retain", func(t *testing.T) {
+		pkt := buf.Peek(start)
+		require.NotNil(t, pkt)
+		assert.Equal(t, int32(1), pkt.count.Load())
+	})
+
+	t.Run("window edges", func(t *testing.T) {
+		assert.NotNil(t, buf.Peek(highest))
+		assert.NotNil(t, buf.Peek(highest-(testBufferSize-1)))
+		assert.Nil(t, buf.Peek(highest-testBufferSize))
+		assert.Nil(t, buf.Peek(highest+1))
+		assert.Nil(t, buf.Remove(highest-testBufferSize))
+		assert.Nil(t, buf.Remove(highest+1))
+	})
+
+	t.Run("remove hands over the buffer's reference once", func(t *testing.T) {
+		pkt := buf.Remove(start + 2)
+		require.NotNil(t, pkt)
+		assert.Equal(t, int32(1), pkt.count.Load())
+		assert.Nil(t, buf.Peek(start+2))
+		assert.Nil(t, buf.Remove(start+2))
+		assert.NotNil(t, buf.Peek(start+1), "neighbors untouched")
+		assert.NotNil(t, buf.Peek(start+3), "neighbors untouched")
+		pkt.Release()
+	})
+}

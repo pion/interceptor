@@ -7,7 +7,6 @@ package jitterbuffer
 
 import (
 	"errors"
-	"sync"
 
 	"github.com/pion/interceptor/internal/rtpbuffer"
 	"github.com/pion/rtp"
@@ -66,12 +65,16 @@ type (
 // A JitterBuffer will accept Pushed packets, put them in sequence number
 // order, and allows removing in either sequence number order or via a
 // provided timestamp.
+//
+// A JitterBuffer is not safe for concurrent use; callers sharing one across
+// goroutines must synchronize access themselves.
 type JitterBuffer struct {
 	packetFactory    rtpbuffer.PacketFactory
 	reorderBuffer    *rtpbuffer.RTPBuffer
 	playbackBuffer   *RingBuffer
 	minStartCount    uint16
 	overflowLen      uint16
+	copyPackets      bool
 	lastSequence     uint16
 	expectedSequence uint16
 	playoutHead      uint16
@@ -79,7 +82,6 @@ type JitterBuffer struct {
 	state            State
 	stats            Stats
 	listeners        map[Event][]EventListener
-	mutex            sync.Mutex
 }
 
 // Stats Track interesting statistics for the life of this JitterBuffer
@@ -116,7 +118,11 @@ func New(opts ...Option) *JitterBuffer {
 		o(jb)
 	}
 
-	if jb.packetFactory == nil {
+	jb.minStartCount = min(jb.minStartCount, jb.overflowLen)
+
+	if jb.copyPackets {
+		jb.packetFactory = rtpbuffer.NewPacketFactoryCopy()
+	} else {
 		jb.packetFactory = &rtpbuffer.PacketFactoryNoOp{}
 	}
 	jb.reorderBuffer, _ = rtpbuffer.NewRTPBuffer(jb.overflowLen)
@@ -126,18 +132,56 @@ func New(opts ...Option) *JitterBuffer {
 }
 
 // WithMinimumPacketCount will set the required number of packets to be received before
-// any attempt to pop a packet can succeed.
+// any attempt to pop a packet can succeed. The default is 50. A count larger than
+// the buffer size (see WithSize) is lowered to the buffer size.
 func WithMinimumPacketCount(count uint16) Option {
 	return func(jb *JitterBuffer) {
 		jb.minStartCount = count
 	}
 }
 
-// DisableCopy bypasses copy of underlying packets. It should be used when
-// you are not re-using underlying buffers of packets that have been written.
+// WithSize sets how many sequence numbers the buffer can hold. It is rounded
+// up to a power of two and capped at 32768 (half the sequence number space).
+// Zero keeps the default of 1024. The minimum packet count is lowered to the
+// resulting size if it is larger.
+func WithSize(size uint16) Option {
+	return func(jb *JitterBuffer) {
+		if size != 0 {
+			jb.overflowLen = nextPowerOfTwo(size)
+		}
+	}
+}
+
+const maxSize = 1 << 15
+
+func nextPowerOfTwo(v uint16) uint16 {
+	if v > maxSize {
+		return maxSize
+	}
+	n := uint16(1)
+	for n < v {
+		n <<= 1
+	}
+
+	return n
+}
+
+// WithCopy makes Push copy each packet's header and payload into pooled
+// buffers, so callers may reuse their packet memory once Push returns.
+// Packets returned by the buffer are independent copies. Packets with
+// payloads larger than 1460 bytes are dropped in this mode.
+func WithCopy() Option {
+	return func(jb *JitterBuffer) {
+		jb.copyPackets = true
+	}
+}
+
+// DisableCopy restores the default of buffering the caller's packets without
+// copying, undoing an earlier WithCopy. Callers must not reuse a pushed
+// packet's memory while the buffer may still return it.
 func DisableCopy() Option {
 	return func(jb *JitterBuffer) {
-		jb.packetFactory = &rtpbuffer.PacketFactoryNoOp{}
+		jb.copyPackets = false
 	}
 }
 
@@ -150,18 +194,12 @@ func (jb *JitterBuffer) Listen(event Event, cb EventListener) {
 
 // PlayoutHead returns the SequenceNumber that will be attempted to Pop next.
 func (jb *JitterBuffer) PlayoutHead() uint16 {
-	jb.mutex.Lock()
-	defer jb.mutex.Unlock()
-
 	return jb.playoutHead
 }
 
 // SetPlayoutHead allows you to manually specify the packet you wish to pop next
 // If you have encountered a packet that hasn't resolved you can skip it.
 func (jb *JitterBuffer) SetPlayoutHead(playoutHead uint16) {
-	jb.mutex.Lock()
-	defer jb.mutex.Unlock()
-
 	jb.playoutHead = playoutHead
 	jb.expectedSequence = playoutHead
 	jb.drain()
@@ -176,23 +214,19 @@ func (jb *JitterBuffer) updateStats(lastPktSeqNo uint16) {
 	jb.lastSequence = lastPktSeqNo
 }
 
-// Push an RTP packet into the jitter buffer, this does not clone
-// the data so if the memory is expected to be reused, the caller should
-// take this in to account and pass a copy of the packet they wish to buffer.
+// Push an RTP packet into the jitter buffer. Unless WithCopy is set this does
+// not clone the data, so if the memory is expected to be reused, the caller
+// should pass a copy of the packet they wish to buffer.
 func (jb *JitterBuffer) Push(packet *rtp.Packet) {
-	jb.mutex.Lock()
-	defer jb.mutex.Unlock()
-
 	rPacket, err := jb.packetFactory.NewPacket(&packet.Header, packet.Payload, 0, 0)
 	if err != nil {
 		return
 	}
 
-	// With the no-copy factory the RetainablePacket references the caller's
-	// header and payload directly, so the caller's *rtp.Packet is already a
-	// valid unwrapped view. Cache it so peeks/pops return it without
-	// allocating a fresh *rtp.Packet.
-	if _, ok := jb.packetFactory.(*rtpbuffer.PacketFactoryNoOp); ok {
+	// Without copying, the RetainablePacket references the caller's header and
+	// payload directly, so the caller's *rtp.Packet is already a valid view.
+	// Cache it so peeks/pops return it without allocating.
+	if !jb.copyPackets {
 		rPacket.SetUnwrapped(packet)
 	}
 
@@ -235,8 +269,6 @@ func (jb *JitterBuffer) updateState() {
 //
 //	At the last sequence received
 func (jb *JitterBuffer) Peek(playoutHead bool) (*rtp.Packet, error) {
-	jb.mutex.Lock()
-	defer jb.mutex.Unlock()
 	if !jb.reorderBuffer.Started() {
 		return nil, ErrBufferUnderrun
 	}
@@ -272,8 +304,6 @@ func (jb *JitterBuffer) Pop() (*rtp.Packet, error) {
 
 // Same as Pop, except it returns a RetainablePacket.
 func (jb *JitterBuffer) popRetainable() (*rtpbuffer.RetainablePacket, error) {
-	jb.mutex.Lock()
-	defer jb.mutex.Unlock()
 	if jb.state != Emitting {
 		return nil, ErrPopWhileBuffering
 	}
@@ -284,7 +314,7 @@ func (jb *JitterBuffer) popRetainable() (*rtpbuffer.RetainablePacket, error) {
 
 		return nil, ErrNotFound
 	}
-	jb.playoutHead = (jb.playoutHead + 1)
+	jb.playoutHead = packet.Header().SequenceNumber + 1
 	jb.updateState()
 
 	return packet, nil
@@ -292,8 +322,6 @@ func (jb *JitterBuffer) popRetainable() (*rtpbuffer.RetainablePacket, error) {
 
 // PopAtSequence will pop an RTP packet from the jitter buffer at the specified Sequence.
 func (jb *JitterBuffer) PopAtSequence(sq uint16) (*rtp.Packet, error) {
-	jb.mutex.Lock()
-	defer jb.mutex.Unlock()
 	if jb.state != Emitting {
 		return nil, ErrPopWhileBuffering
 	}
@@ -311,11 +339,66 @@ func (jb *JitterBuffer) PopAtSequence(sq uint16) (*rtp.Packet, error) {
 }
 
 // PeekAtSequence will return an RTP packet from the jitter buffer at the specified Sequence
-// without removing it from the buffer.
+// without removing it from the buffer. Like RemoveAtSequence, it finds a packet
+// still queued for playout even if newer packets pushed it out of the window.
 func (jb *JitterBuffer) PeekAtSequence(sq uint16) (*rtp.Packet, error) {
-	jb.mutex.Lock()
-	defer jb.mutex.Unlock()
-	packet := jb.reorderBuffer.Get(sq)
+	packet := jb.reorderBuffer.Peek(sq)
+	if packet == nil {
+		packet = jb.playbackBuffer.At(sq)
+	}
+	if packet == nil {
+		return nil, ErrNotFound
+	}
+
+	return jb.view(packet), nil
+}
+
+// RemoveAtSequence removes the packet with the specified Sequence from the
+// buffer and returns it, regardless of playout state. Playout is consumed
+// through sq whether or not it was buffered: packets still queued at or before
+// sq are discarded, and playout resumes with the packets after sq. A packet
+// still queued for playout is returned even if newer packets have pushed it
+// out of the sequence window.
+func (jb *JitterBuffer) RemoveAtSequence(sq uint16) (*rtp.Packet, error) {
+	packet := jb.reorderBuffer.Remove(sq)
+
+	// sq is at or after the drain point when it is less than half the sequence
+	// space ahead of it.
+	if sq-jb.expectedSequence < rtpbuffer.Uint16SizeHalf {
+		// Everything queued precedes the drain point and so sq. Moving the
+		// drain point past sq stops drain waiting forever for sq (or a gap
+		// before it) instead of queueing the packets after it.
+		jb.playbackBuffer.Clear()
+		jb.expectedSequence = sq + 1
+		jb.drain()
+		jb.updateState()
+	} else {
+		// sq is behind the drain point, and the queue is shorter than half the
+		// sequence space, so comparing queued packets with sq is unambiguous.
+		for head := jb.playbackBuffer.Peek(); head != nil; head = jb.playbackBuffer.Peek() {
+			if diff := head.Header().SequenceNumber - sq; diff != 0 && diff < rtpbuffer.Uint16SizeHalf {
+				break
+			}
+			queued := jb.playbackBuffer.Pop()
+			if packet == nil && queued.Header().SequenceNumber == sq {
+				// The window moved past sq and its slot was reused, but the
+				// queue still holds a reference: hand that one to the caller.
+				packet = queued
+
+				continue
+			}
+			queued.Release()
+		}
+	}
+
+	// The next packet to pop is the queue head, or the next one drain will
+	// move in.
+	if head := jb.playbackBuffer.Peek(); head != nil {
+		jb.playoutHead = head.Header().SequenceNumber
+	} else {
+		jb.playoutHead = jb.expectedSequence
+	}
+
 	if packet == nil {
 		return nil, ErrNotFound
 	}
@@ -326,8 +409,6 @@ func (jb *JitterBuffer) PeekAtSequence(sq uint16) (*rtp.Packet, error) {
 // PopAtTimestamp pops an RTP packet from the jitter buffer with the provided timestamp
 // Call this method repeatedly to drain the buffer at the timestamp.
 func (jb *JitterBuffer) PopAtTimestamp(ts uint32) (*rtp.Packet, error) {
-	jb.mutex.Lock()
-	defer jb.mutex.Unlock()
 	if jb.state != Emitting {
 		return nil, ErrPopWhileBuffering
 	}
@@ -344,28 +425,30 @@ func (jb *JitterBuffer) PopAtTimestamp(ts uint32) (*rtp.Packet, error) {
 	return jb.takePacket(packet), nil
 }
 
-// Unwrap the packet.
+// Unwrap the packet and drop the caller's reference to it.
 func (jb *JitterBuffer) takePacket(rPacket *rtpbuffer.RetainablePacket) *rtp.Packet {
-	if pkt := rPacket.Unwrapped(); pkt != nil {
-		rPacket.Release()
+	pkt := jb.view(rPacket)
+	rPacket.Release()
 
+	return pkt
+}
+
+// view returns the cached *rtp.Packet for rPacket. Without copying, Push
+// caches the caller's packet. With copying, the first read builds a copy that
+// does not alias the factory's pooled buffers, which are reused once the
+// packet is released.
+func (jb *JitterBuffer) view(rPacket *rtpbuffer.RetainablePacket) *rtp.Packet {
+	if pkt := rPacket.Unwrapped(); pkt != nil {
 		return pkt
 	}
 
-	header := *rPacket.Header()
-	payload := rPacket.Payload()
-	if _, ok := jb.packetFactory.(*rtpbuffer.PacketFactoryNoOp); !ok {
-		out := make([]byte, len(payload))
-		copy(out, payload)
-		payload = out
-	}
-
+	// A shallow header copy is safe: the factory gives each pooled header a
+	// freshly cloned header and never writes into its old CSRC/extension slices.
 	pkt := &rtp.Packet{
-		Header:  header,
-		Payload: payload,
+		Header:  *rPacket.Header(),
+		Payload: append([]byte(nil), rPacket.Payload()...),
 	}
 	rPacket.SetUnwrapped(pkt)
-	rPacket.Release()
 
 	return pkt
 }
@@ -388,10 +471,9 @@ func (jb *JitterBuffer) drain() {
 	}
 }
 
-// Clear will empty the buffer and optionally reset the state.
+// Clear will empty the buffer and optionally reset the state. Configuration
+// such as the minimum packet count is kept.
 func (jb *JitterBuffer) Clear(resetState bool) {
-	jb.mutex.Lock()
-	defer jb.mutex.Unlock()
 	jb.reorderBuffer.Clear()
 	jb.playbackBuffer.Clear()
 
@@ -402,6 +484,5 @@ func (jb *JitterBuffer) Clear(resetState bool) {
 		jb.playoutReady = false
 		jb.state = Buffering
 		jb.stats = Stats{0, 0, 0}
-		jb.minStartCount = 50
 	}
 }

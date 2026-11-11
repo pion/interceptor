@@ -36,7 +36,9 @@ func NewRTPBuffer(size uint16) (*RTPBuffer, error) {
 	}, nil
 }
 
-// Add places the RetainablePacket in the RTPBuffer.
+// Add places the RetainablePacket in the RTPBuffer, taking ownership of the
+// caller's reference. A packet for a sequence number that is already buffered,
+// or that is too old to fit the window, is released instead of stored.
 func (r *RTPBuffer) Add(packet *RetainablePacket) {
 	seq := packet.sequenceNumber
 	if !r.started {
@@ -48,9 +50,9 @@ func (r *RTPBuffer) Add(packet *RetainablePacket) {
 	}
 
 	diff := seq - r.highestAdded
-	if diff == 0 {
-		return
-	} else if diff < Uint16SizeHalf {
+	switch {
+	case diff == 0:
+	case diff < Uint16SizeHalf:
 		for i := r.highestAdded + 1; i != seq; i++ {
 			idx := i % r.size
 			prevPacket := r.packets[idx]
@@ -60,11 +62,21 @@ func (r *RTPBuffer) Add(packet *RetainablePacket) {
 			r.packets[idx] = nil
 		}
 		r.highestAdded = seq
+	case r.highestAdded-seq >= r.size:
+		// Get could never return it, and its slot belongs to a newer packet.
+		packet.Release()
+
+		return
 	}
 
 	idx := seq % r.size
 	prevPacket := r.packets[idx]
 	if prevPacket != nil {
+		if prevPacket.sequenceNumber == seq {
+			packet.Release()
+
+			return
+		}
 		prevPacket.Release()
 	}
 	r.packets[idx] = packet
@@ -104,6 +116,46 @@ func (r *RTPBuffer) Get(seq uint16) *RetainablePacket {
 	}
 
 	return pkt
+}
+
+// Peek returns the RetainablePacket for the requested sequence number without
+// retaining it. The result is only valid until the packet is next released, so
+// callers must not use it concurrently with Add, Remove or Clear.
+func (r *RTPBuffer) Peek(seq uint16) *RetainablePacket {
+	idx, ok := r.index(seq)
+	if !ok {
+		return nil
+	}
+
+	return r.packets[idx]
+}
+
+// Remove takes the RetainablePacket for the requested sequence number out of
+// the buffer, transferring the buffer's reference to the caller.
+func (r *RTPBuffer) Remove(seq uint16) *RetainablePacket {
+	idx, ok := r.index(seq)
+	if !ok {
+		return nil
+	}
+	pkt := r.packets[idx]
+	r.packets[idx] = nil
+
+	return pkt
+}
+
+// index returns the slot holding seq, or false if seq is not buffered.
+func (r *RTPBuffer) index(seq uint16) (uint16, bool) {
+	diff := r.highestAdded - seq
+	if diff >= Uint16SizeHalf || diff >= r.size {
+		return 0, false
+	}
+	idx := seq % r.size
+	pkt := r.packets[idx]
+	if pkt == nil || pkt.sequenceNumber != seq {
+		return 0, false
+	}
+
+	return idx, true
 }
 
 func (r *RTPBuffer) Started() bool { return r.started }
