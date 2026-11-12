@@ -6,6 +6,7 @@ package flexfec
 import (
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/pion/interceptor"
 	"github.com/pion/rtp"
@@ -16,6 +17,7 @@ type streamState struct {
 	mu             sync.Mutex
 	flexFecEncoder FlexEncoder
 	packetBuffer   []rtp.Packet
+	multiFrame     multiFrameState
 }
 
 // FecInterceptor implements FlexFec.
@@ -26,6 +28,14 @@ type FecInterceptor struct {
 	numMediaPackets uint32
 	numFecPackets   uint32
 	encoderFactory  EncoderFactory
+
+	// MultiFrame mode, see the MultiFrame option.
+	multiFrame           bool
+	maxFrames            uint32
+	protectionLevel      float64
+	maxExcessOverhead    float64
+	disableRTTAdaptation bool
+	now                  func() time.Time
 }
 
 // FecInterceptorFactory creates new FecInterceptors.
@@ -45,12 +55,23 @@ func (r *FecInterceptorFactory) NewInterceptor(_ string) (interceptor.Intercepto
 		numMediaPackets: 5,
 		numFecPackets:   2,
 		encoderFactory:  FlexEncoder03Factory{},
+
+		maxExcessOverhead: defaultMaxExcessOverhead,
+		now:               time.Now,
 	}
 
 	for _, opt := range r.opts {
 		if err := opt(interceptor); err != nil {
 			return nil, err
 		}
+	}
+
+	if interceptor.multiFrame && interceptor.protectionLevel == 0 {
+		total := interceptor.numMediaPackets + interceptor.numFecPackets
+		if interceptor.numFecPackets == 0 || total == 0 {
+			return nil, errInvalidProtectionLevel
+		}
+		interceptor.protectionLevel = float64(interceptor.numFecPackets) / float64(total)
 	}
 
 	return interceptor, nil
@@ -82,6 +103,10 @@ func (r *FecInterceptor) BindLocalStream(
 		flexFecEncoder: r.encoderFactory.NewEncoder(info.PayloadTypeForwardErrorCorrection, info.SSRCForwardErrorCorrection),
 		packetBuffer:   make([]rtp.Packet, 0),
 	}
+	stream.multiFrame.clockRate = info.ClockRate
+	if stream.multiFrame.clockRate == 0 {
+		stream.multiFrame.clockRate = defaultClockRate
+	}
 	r.streams[mediaSSRC] = stream
 	r.mu.Unlock()
 
@@ -94,16 +119,20 @@ func (r *FecInterceptor) BindLocalStream(
 
 			var fecPackets []rtp.Packet
 			stream.mu.Lock()
-			stream.packetBuffer = append(stream.packetBuffer, rtp.Packet{
-				Header:  *header,
-				Payload: payload,
-			})
+			if r.multiFrame {
+				fecPackets = r.collectMultiFrame(stream, header, payload, attributes)
+			} else {
+				stream.packetBuffer = append(stream.packetBuffer, rtp.Packet{
+					Header:  *header,
+					Payload: payload,
+				})
 
-			// Check if we have enough packets to generate FEC
-			if len(stream.packetBuffer) == int(r.numMediaPackets) {
-				fecPackets = stream.flexFecEncoder.EncodeFec(stream.packetBuffer, r.numFecPackets)
-				// Reset the packet buffer now that we've sent the corresponding FEC packets.
-				stream.packetBuffer = nil
+				// Check if we have enough packets to generate FEC
+				if len(stream.packetBuffer) == int(r.numMediaPackets) {
+					fecPackets = stream.flexFecEncoder.EncodeFec(stream.packetBuffer, r.numFecPackets)
+					// Reset the packet buffer now that we've sent the corresponding FEC packets.
+					stream.packetBuffer = nil
+				}
 			}
 			stream.mu.Unlock()
 
