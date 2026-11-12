@@ -39,6 +39,7 @@ by anyone. With the following tenets in mind.
 * [Stats](https://github.com/pion/interceptor/tree/master/pkg/stats) A [webrtc-stats](https://www.w3.org/TR/webrtc-stats/) compliant statistics generation
 * [Interval PLI](https://github.com/pion/interceptor/tree/master/pkg/intervalpli) Generate PLI on a interval. Useful when no decoder is available.
 * [FlexFec](https://github.com/pion/interceptor/tree/master/pkg/flexfec) – [FlexFEC-03](https://datatracker.ietf.org/doc/html/draft-ietf-payload-flexible-fec-scheme-03) encoder implementation
+* [Opus RED](https://github.com/pion/interceptor/tree/master/pkg/red) – [RFC 2198](https://www.rfc-editor.org/rfc/rfc2198.html) redundant Opus encoding and recovery
 
 ### Planned Interceptors
 * Bandwidth Estimation
