@@ -25,6 +25,13 @@ type StreamInfo struct {
 	Channels                          uint16
 	SDPFmtpLine                       string
 	RTCPFeedback                      []RTCPFeedback
+
+	// RetransmissionPayloadTypes maps media payload types to their RTX payload types
+	// (RFC 4588). It lets a stream whose codec changes while bound retransmit each
+	// packet with the RTX payload type of that packet's codec. When the map is set,
+	// payload types missing from it have no RTX and are retransmitted on SSRC as-is.
+	// When the map is nil, every packet uses PayloadTypeRetransmission.
+	RetransmissionPayloadTypes map[uint8]uint8
 }
 
 // RTCPFeedback signals the connection to use additional RTCP packet types.
