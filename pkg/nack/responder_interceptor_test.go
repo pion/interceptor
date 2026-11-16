@@ -329,6 +329,75 @@ func TestResponderInterceptor_RFC4588(t *testing.T) {
 	}
 }
 
+func TestResponderInterceptor_RFC4588PayloadTypePerCodec(t *testing.T) {
+	f, err := NewResponderInterceptor()
+	require.NoError(t, err)
+
+	i, err := f.NewInterceptor("")
+	require.NoError(t, err)
+
+	// Bound with codec 96 (RTX 97); the sender later switches to codec 102 (RTX 103).
+	// Payload type 100 is not in the map: it has no RTX, so it is resent unchanged on SSRC 1.
+	stream := test.NewMockStream(&interceptor.StreamInfo{
+		SSRC:                       1,
+		SSRCRetransmission:         2,
+		PayloadType:                96,
+		PayloadTypeRetransmission:  97,
+		RetransmissionPayloadTypes: map[uint8]uint8{96: 97, 102: 103},
+		RTCPFeedback:               []interceptor.RTCPFeedback{{Type: "nack"}},
+	}, i)
+	defer func() {
+		require.NoError(t, stream.Close())
+	}()
+
+	sent := []struct {
+		seqNum                      uint16
+		payloadType, rtxPayloadType uint8
+	}{
+		{seqNum: 10, payloadType: 96, rtxPayloadType: 97},
+		{seqNum: 11, payloadType: 102, rtxPayloadType: 103},
+		{seqNum: 12, payloadType: 100, rtxPayloadType: 0},
+	}
+	for _, pkt := range sent {
+		require.NoError(t, stream.WriteRTP(&rtp.Packet{Header: rtp.Header{
+			SequenceNumber: pkt.seqNum, SSRC: 1, PayloadType: pkt.payloadType,
+		}}))
+
+		select {
+		case p := <-stream.WrittenRTP():
+			require.Equal(t, pkt.payloadType, p.PayloadType)
+		case <-time.After(10 * time.Millisecond):
+			assert.Fail(t, "written rtp packet not found")
+		}
+	}
+
+	stream.ReceiveRTCP([]rtcp.Packet{
+		&rtcp.TransportLayerNack{
+			MediaSSRC:  1,
+			SenderSSRC: 2,
+			Nacks:      []rtcp.NackPair{{PacketID: 10, LostPackets: 0b11}}, // 10, 11, 12
+		},
+	})
+
+	for _, pkt := range sent {
+		select {
+		case p := <-stream.WrittenRTP():
+			if pkt.rtxPayloadType == 0 {
+				require.Equal(t, uint32(1), p.SSRC)
+				require.Equal(t, pkt.seqNum, p.SequenceNumber)
+				require.Equal(t, pkt.payloadType, p.PayloadType)
+
+				continue
+			}
+			require.Equal(t, uint32(2), p.SSRC)
+			require.Equal(t, pkt.seqNum, binary.BigEndian.Uint16(p.Payload))
+			require.Equal(t, pkt.rtxPayloadType, p.PayloadType)
+		case <-time.After(10 * time.Millisecond):
+			assert.Fail(t, "written rtp packet not found")
+		}
+	}
+}
+
 //nolint:cyclop
 func TestResponderInterceptor_BypassUnknownSSRCs(t *testing.T) {
 	f, err := NewResponderInterceptor(

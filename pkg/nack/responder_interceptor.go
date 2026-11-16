@@ -4,6 +4,7 @@
 package nack
 
 import (
+	"maps"
 	"math"
 	"sync"
 	"time"
@@ -138,6 +139,10 @@ func (n *ResponderInterceptor) BindLocalStream(
 	n.streams[info.SSRC] = stream
 	n.streamsMu.Unlock()
 
+	// The codec of a bound stream can change (e.g. ReplaceTrack), so pick the RTX
+	// payload type from each packet's own payload type.
+	rtxPayloadTypes := maps.Clone(info.RetransmissionPayloadTypes)
+
 	return interceptor.RTPWriterFunc(
 		func(header *rtp.Header, payload []byte, attributes interceptor.Attributes) (int, error) {
 			// If this packet doesn't belong to the main SSRC, do not add it to rtpBuffer
@@ -145,7 +150,13 @@ func (n *ResponderInterceptor) BindLocalStream(
 				return writer.Write(header, payload, attributes)
 			}
 
-			pkt, err := n.packetFactory.NewPacket(header, payload, info.SSRCRetransmission, info.PayloadTypeRetransmission)
+			rtxPayloadType := info.PayloadTypeRetransmission
+			if rtxPayloadTypes != nil {
+				// A codec missing from the map has no RTX; 0 resends it on the media SSRC.
+				rtxPayloadType = rtxPayloadTypes[header.PayloadType]
+			}
+
+			pkt, err := n.packetFactory.NewPacket(header, payload, info.SSRCRetransmission, rtxPayloadType)
 			if err != nil {
 				return 0, err
 			}
