@@ -348,3 +348,67 @@ func TestConcurrentClose(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestInterceptorECN(t *testing.T) {
+	mTick := &test.MockTicker{C: make(chan time.Time)}
+	factory, err := NewSenderInterceptor(SenderTicker(func(time.Duration) ticker { return mTick }))
+	assert.NoError(t, err)
+	intcp, err := factory.NewInterceptor("")
+	assert.NoError(t, err)
+	defer func() { assert.NoError(t, intcp.Close()) }()
+
+	reports := make(chan []rtcp.Packet, 1)
+	intcp.BindRTCPWriter(interceptor.RTCPWriterFunc(
+		func(packets []rtcp.Packet, _ interceptor.Attributes) (int, error) {
+			reports <- packets
+
+			return 0, nil
+		},
+	))
+	header := rtp.Header{Version: 2, SSRC: 123456}
+	reader := intcp.BindRemoteStream(&interceptor.StreamInfo{SSRC: header.SSRC}, interceptor.RTPReaderFunc(
+		func(buf []byte, attrs interceptor.Attributes) (int, interceptor.Attributes, error) {
+			n, marshalErr := header.MarshalTo(buf)
+			header.SequenceNumber++
+
+			return n, attrs, marshalErr
+		},
+	))
+	cases := []struct {
+		attrs interceptor.Attributes
+		ecn   rtcp.ECN
+	}{
+		{interceptor.Attributes{interceptor.ECNKey: rtcp.ECNNonECT}, rtcp.ECNNonECT},
+		{interceptor.Attributes{interceptor.ECNKey: rtcp.ECNECT1}, rtcp.ECNECT1},
+		{interceptor.Attributes{interceptor.ECNKey: rtcp.ECNECT0}, rtcp.ECNECT0},
+		{interceptor.Attributes{interceptor.ECNKey: rtcp.ECNCE}, rtcp.ECNCE},
+		{nil, rtcp.ECNNonECT},
+		{interceptor.Attributes{interceptor.ECNKey: byte(3)}, rtcp.ECNNonECT},
+		{interceptor.Attributes{"ECN": rtcp.ECNCE, int(interceptor.ECNKey): rtcp.ECNCE}, rtcp.ECNNonECT},
+	}
+	for _, testCase := range cases {
+		_, _, err = reader.Read(make([]byte, 1500), testCase.attrs)
+		assert.NoError(t, err)
+	}
+	mTick.Tick(time.Now())
+
+	select {
+	case packets := <-reports:
+		if !assert.Len(t, packets, 1) {
+			return
+		}
+		report, ok := packets[0].(*rtcp.CCFeedbackReport)
+		if !assert.True(t, ok) || !assert.Len(t, report.ReportBlocks, 1) {
+			return
+		}
+		metrics := report.ReportBlocks[0].MetricBlocks
+		if !assert.Len(t, metrics, len(cases)) {
+			return
+		}
+		for i, testCase := range cases {
+			assert.Equal(t, testCase.ecn, metrics[i].ECN)
+		}
+	case <-time.After(time.Second):
+		assert.Fail(t, "ECN feedback report not received")
+	}
+}

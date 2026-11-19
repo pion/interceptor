@@ -10,11 +10,14 @@ import (
 	"github.com/pion/rtp"
 )
 
-type unmarshaledDataKeyType int
+type attributeKey int
 
 const (
-	rtpHeaderKey unmarshaledDataKeyType = iota
+	rtpHeaderKey attributeKey = iota
 	rtcpPacketsKey
+
+	// ECNKey identifies a packet's ECN marking, stored as an rtcp.ECN.
+	ECNKey
 )
 
 var errInvalidType = errors.New("found value of invalid type in attributes map")
