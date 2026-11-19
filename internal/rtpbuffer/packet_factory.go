@@ -21,9 +21,8 @@ type PacketFactory interface {
 
 // PacketFactoryCopy is PacketFactory that takes a copy of packets when added to the RTPBuffer.
 type PacketFactoryCopy struct {
-	headerPool   *sync.Pool
-	payloadPool  *sync.Pool
-	rtxSequencer rtp.Sequencer
+	headerPool  *sync.Pool
+	payloadPool *sync.Pool
 }
 
 // NewPacketFactoryCopy constructs a PacketFactory that takes a copy of packets when added to the RTPBuffer.
@@ -41,7 +40,6 @@ func NewPacketFactoryCopy() *PacketFactoryCopy {
 				return &buf
 			},
 		},
-		rtxSequencer: rtp.NewRandomSequencer(),
 	}
 }
 
@@ -99,8 +97,8 @@ func (m *PacketFactoryCopy) NewPacket(
 		retainablePacket.header.SSRC = rtxSsrc
 		// Rewrite the payload type.
 		retainablePacket.header.PayloadType = rtxPayloadType
-		// Rewrite the sequence number.
-		retainablePacket.header.SequenceNumber = m.rtxSequencer.NextSequenceNumber()
+		// The RTX sequence number is assigned by RTPBuffer.Get when the packet is sent.
+		retainablePacket.rtx = true
 		// Remove padding if present.
 		if retainablePacket.header.Padding {
 			// Older versions of pion/rtp didn't have the Header.PaddingSize field and as a workaround
