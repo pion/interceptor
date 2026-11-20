@@ -259,5 +259,10 @@ func TestReceiverFixedDurationMapping(t *testing.T) {
 			input:    []rtp.Packet{first, other, timestampREDPacket(t, 4, 3_840, timestampBlock(960, 2))},
 			expected: []rtp.Packet{first, other, makePlainPacket(2, 2_880, []byte{2}), makePlainPacket(4, 3_840, []byte{4})},
 		},
+		{
+			name:     "SequenceZeroInWindow",
+			input:    []rtp.Packet{makePlainPacket(0, 0, []byte{0}), timestampREDPacket(t, 3, 2_880, timestampBlock(960, 2))},
+			expected: []rtp.Packet{makePlainPacket(0, 0, []byte{0}), makePlainPacket(2, 1_920, []byte{2}), makePlainPacket(3, 2_880, []byte{3})},
+		},
 	}, ReceiverPacketDuration(20*time.Millisecond))
 }

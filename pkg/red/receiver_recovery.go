@@ -18,12 +18,12 @@ type recoveryCandidate struct {
 }
 
 func (stream *receiverStream) recoveryCandidates(
-	header rtp.Header, blocks []Block, position sequencePosition,
+	header rtp.Header, blocks []Block, position int64,
 ) []recoveryCandidate {
 	if len(blocks) == 0 {
 		return nil
 	}
-	received := stream.history.receivedWith(position.extended)
+	received := stream.history.receivedWith(position)
 	// adding one clears every set bit when the received sequences are contiguous.
 	hasGap := received&(received+1) != 0
 	if !hasGap && stream.timestampStep == 0 {
@@ -90,7 +90,7 @@ func (stream *receiverStream) usableRedundantBlocks(blocks []Block) []Block {
 }
 
 func (stream *receiverStream) fixedDurationCandidates(
-	header rtp.Header, blocks []Block, position sequencePosition,
+	header rtp.Header, blocks []Block, position int64,
 ) []recoveryCandidate {
 	candidates := make([]recoveryCandidate, 0, len(blocks))
 	for _, block := range blocks {
@@ -100,7 +100,7 @@ func (stream *receiverStream) fixedDurationCandidates(
 		}
 		candidates = append(candidates, recoveryCandidate{
 			block:     block,
-			extended:  position.extended - int64(offset/stream.timestampStep),
+			extended:  position - int64(offset/stream.timestampStep),
 			timestamp: header.Timestamp - offset,
 		})
 	}
@@ -142,25 +142,22 @@ func (stream *receiverStream) gapCandidates(
 	return candidates
 }
 
-func (history *receiveHistory) matchesPrimary(position sequencePosition, timestamp uint32) bool {
-	if !history.seen(position) {
-		return true
-	}
-	entry := history.entries[receiveHistoryIndex(position.extended)]
+func (history *receiveHistory) matchesPrimary(position int64, timestamp uint32) bool {
+	entry, ok := history.entry(position)
 
-	return entry.media && entry.timestamp == timestamp
+	return !ok || entry.media && entry.timestamp == timestamp
 }
 
-func (history *receiveHistory) mediaAnchors(position sequencePosition, timestamp uint32) []receiveHistoryEntry {
+func (history *receiveHistory) mediaAnchors(position int64, timestamp uint32) []receiveHistoryEntry {
 	anchors := make([]receiveHistoryEntry, 0, receiveWindowSize+1)
-	for _, entry := range history.entries {
-		if entry.valid && entry.media && !history.stale(position, entry.extended) {
+	for extended := history.highest - receiveWindowSize + 1; extended <= history.highest; extended++ {
+		if entry, ok := history.entry(extended); ok && entry.media && !history.stale(position, extended) {
 			anchors = append(anchors, entry)
 		}
 	}
-	if !history.seen(position) {
+	if !history.contains(position) {
 		anchors = append(anchors, receiveHistoryEntry{
-			extended: position.extended, timestamp: timestamp, media: true,
+			extended: position, timestamp: timestamp, media: true,
 		})
 	}
 	slices.SortFunc(anchors, func(left, right receiveHistoryEntry) int {
@@ -182,19 +179,17 @@ func (history *receiveHistory) missingSequences(left, right int64) []int64 {
 }
 
 func (history *receiveHistory) matchesTimestampStep(
-	position sequencePosition, timestamp, step uint32,
+	position int64, timestamp, step uint32,
 ) bool {
-	if position.reset {
-		return true
-	}
-	for _, entry := range history.entries {
-		if !entry.valid || history.stale(position, entry.extended) {
+	for extended := history.highest - receiveWindowSize + 1; extended <= history.highest; extended++ {
+		entry, ok := history.entry(extended)
+		if !ok || history.stale(position, extended) {
 			continue
 		}
 		if !entry.media {
 			return false
 		}
-		sequenceDistance := position.extended - entry.extended
+		sequenceDistance := position - entry.extended
 		expected := uint32((sequenceDistance * int64(step)) & 0xffffffff) //nolint:gosec // Mask restores wrapped ticks.
 		if timestamp-entry.timestamp != expected {
 			return false
