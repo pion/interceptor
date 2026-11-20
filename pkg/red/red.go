@@ -69,6 +69,7 @@ func (p Payload) Marshal() ([]byte, error) {
 
 	raw[headerOffset] = p.PrimaryBlock.PayloadType
 	copy(raw[payloadOffset:], p.PrimaryBlock.Payload)
+
 	return raw, nil
 }
 

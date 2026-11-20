@@ -58,17 +58,17 @@ func newTestReceiver(
 }
 
 func newTestReceiverWithOptions(
-	t testing.TB, info *interceptor.StreamInfo, downstream interceptor.RTPReader, opts ...ReceiverOption,
+	tb testing.TB, info *interceptor.StreamInfo, downstream interceptor.RTPReader, opts ...ReceiverOption,
 ) interceptor.RTPReader {
-	t.Helper()
+	tb.Helper()
 
 	factory, err := NewReceiverInterceptor(opts...)
-	require.NoError(t, err)
+	require.NoError(tb, err)
 
 	receiver, err := factory.NewInterceptor("")
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		require.NoError(t, receiver.Close())
+	require.NoError(tb, err)
+	tb.Cleanup(func() {
+		require.NoError(tb, receiver.Close())
 	})
 
 	return receiver.BindRemoteStream(info, downstream)
