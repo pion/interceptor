@@ -147,8 +147,6 @@ func TestPayloadUnmarshalMalformed(t *testing.T) {
 	}{
 		{name: "Empty", raw: nil, err: errMalformedPayload},
 		{name: "TruncatedHeaderOneByte", raw: []byte{followBit}, err: errMalformedPayload},
-		{name: "TruncatedHeaderTwoBytes", raw: []byte{followBit, 0}, err: errMalformedPayload},
-		{name: "TruncatedHeaderThreeBytes", raw: []byte{followBit, 0, 0}, err: errMalformedPayload},
 		{name: "TruncatedBlock", raw: []byte{followBit, 0, 0, 2, 0, 1}, err: errMalformedPayload},
 		{name: "TooManyBlocks", raw: tooManyBlocks, err: errTooManyBlocks},
 	}

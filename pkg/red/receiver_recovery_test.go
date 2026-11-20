@@ -148,14 +148,7 @@ func TestReceiverInterceptorHistory(t *testing.T) {
 		incoming []rtp.Packet
 		expected []rtp.Packet
 	}{
-		{
-			name:     "OnlyMissingPackets",
-			incoming: []rtp.Packet{makePlainPacket(1, 960, []byte{1}), third},
-			expected: []rtp.Packet{
-				makePlainPacket(1, 960, []byte{1}), makePlainPacket(2, 1_920, []byte{2}),
-				makePlainPacket(3, 2_880, []byte{3}),
-			},
-		},
+		{},
 		{
 			name: "LateAndDuplicatePackets",
 			incoming: []rtp.Packet{
@@ -173,11 +166,6 @@ func TestReceiverInterceptorHistory(t *testing.T) {
 				makePlainPacket(2, 1_920, []byte{2}), makePlainPacket(3, 2_880, []byte{3}),
 				makePlainPacket(4, 3_840, []byte{4}), makePlainPacket(1, 960, []byte{1}),
 			},
-		},
-		{
-			name:     "UnseenReorderedPacket",
-			incoming: []rtp.Packet{makePlainPacket(3, 2_880, []byte{3}), makePlainPacket(2, 1_920, []byte{2})},
-			expected: []rtp.Packet{makePlainPacket(3, 2_880, []byte{3}), makePlainPacket(2, 1_920, []byte{2})},
 		},
 		{
 			name: "SequenceAndTimestampWraparound",

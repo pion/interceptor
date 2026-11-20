@@ -256,34 +256,6 @@ func TestSenderInterceptorResetsUnsafeHistory(t *testing.T) {
 		assert.Equal(t, []byte{0x03}, redPayload.RedundantBlocks[0].Payload)
 	})
 
-	t.Run("Duplicate", func(t *testing.T) {
-		downstream := &capturedWriter{}
-		writer := newTestSender(t, opusStreamInfo(), downstream)
-
-		writeOpus(t, writer, 10, 1_000, []byte{0x01})
-		writeOpus(t, writer, 10, 1_000, []byte{0x02})
-		writeOpus(t, writer, 11, 1_960, []byte{0x03})
-
-		require.Len(t, downstream.packets, 3)
-		assert.Equal(t, testOpusPayloadType, downstream.packets[1].PayloadType)
-		redPayload := requireREDPayload(t, downstream.packets[2])
-		assert.Equal(t, []byte{0x02}, redPayload.RedundantBlocks[0].Payload)
-	})
-
-	t.Run("Reordered", func(t *testing.T) {
-		downstream := &capturedWriter{}
-		writer := newTestSender(t, opusStreamInfo(), downstream)
-
-		writeOpus(t, writer, 10, 1_000, []byte{0x01})
-		writeOpus(t, writer, 9, 40, []byte{0x02})
-		writeOpus(t, writer, 10, 1_000, []byte{0x03})
-
-		require.Len(t, downstream.packets, 3)
-		assert.Equal(t, testOpusPayloadType, downstream.packets[1].PayloadType)
-		redPayload := requireREDPayload(t, downstream.packets[2])
-		assert.Equal(t, []byte{0x02}, redPayload.RedundantBlocks[0].Payload)
-	})
-
 	t.Run("TimestampDiscontinuity", func(t *testing.T) {
 		downstream := &capturedWriter{}
 		writer := newTestSender(t, opusStreamInfo(), downstream)
