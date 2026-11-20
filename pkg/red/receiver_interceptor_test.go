@@ -330,18 +330,27 @@ func TestReceiverInterceptorRejectsInvalidPackets(t *testing.T) {
 	}
 }
 
-func TestReceiverInterceptorBypassesIneligibleStream(t *testing.T) {
-	info := opusStreamInfo()
-	info.MimeType = "video/VP8"
-	downstream := &queuedRTPReader{}
+func TestInterceptorsBypassIneligibleStreams(t *testing.T) {
+	tests := []struct {
+		name   string
+		change func(*interceptor.StreamInfo)
+	}{
+		{"NonOpus", func(info *interceptor.StreamInfo) { info.MimeType = "video/VP8" }},
+		{"NoREDPayloadType", func(info *interceptor.StreamInfo) { info.PayloadTypeForwardErrorCorrection = 0 }},
+		{"SamePayloadType", func(info *interceptor.StreamInfo) { info.PayloadTypeForwardErrorCorrection = info.PayloadType }},
+		{"InvalidOpusPayloadType", func(info *interceptor.StreamInfo) { info.PayloadType = maxPayloadType + 1 }},
+		{"InvalidREDPayloadType", func(info *interceptor.StreamInfo) { info.PayloadTypeForwardErrorCorrection = maxPayloadType + 1 }},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			info := opusStreamInfo()
+			test.change(info)
 
-	factory, err := NewReceiverInterceptor()
-	require.NoError(t, err)
-	receiver, err := factory.NewInterceptor("")
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		require.NoError(t, receiver.Close())
-	})
+			writer := &capturedWriter{}
+			assert.Same(t, writer, newTestSender(t, info, writer))
 
-	assert.Same(t, downstream, receiver.BindRemoteStream(info, downstream))
+			reader := &queuedRTPReader{}
+			assert.Same(t, reader, newTestReceiverWithOptions(t, info, reader))
+		})
+	}
 }

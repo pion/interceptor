@@ -358,58 +358,6 @@ func TestSenderInterceptorHandlesWraparound(t *testing.T) {
 	})
 }
 
-func TestSenderInterceptorBypassesIneligiblePackets(t *testing.T) {
-	tests := []struct {
-		name string
-		info *interceptor.StreamInfo
-	}{
-		{name: "NonOpus", info: func() *interceptor.StreamInfo {
-			info := opusStreamInfo()
-			info.MimeType = "video/VP8"
-
-			return info
-		}()},
-		{name: "NoREDPayloadType", info: func() *interceptor.StreamInfo {
-			info := opusStreamInfo()
-			info.PayloadTypeForwardErrorCorrection = 0
-
-			return info
-		}()},
-		{name: "SamePayloadType", info: func() *interceptor.StreamInfo {
-			info := opusStreamInfo()
-			info.PayloadTypeForwardErrorCorrection = info.PayloadType
-
-			return info
-		}()},
-		{name: "InvalidOpusPayloadType", info: func() *interceptor.StreamInfo {
-			info := opusStreamInfo()
-			info.PayloadType = maxPayloadType + 1
-
-			return info
-		}()},
-		{name: "InvalidREDPayloadType", info: func() *interceptor.StreamInfo {
-			info := opusStreamInfo()
-			info.PayloadTypeForwardErrorCorrection = maxPayloadType + 1
-
-			return info
-		}()},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			downstream := &capturedWriter{}
-			writer := newTestSender(t, test.info, downstream)
-
-			writeOpus(t, writer, 1, 1_000, []byte{0x01})
-			writeOpus(t, writer, 2, 1_960, []byte{0x02})
-
-			require.Len(t, downstream.packets, 2)
-			assert.Equal(t, testOpusPayloadType, downstream.packets[0].PayloadType)
-			assert.Equal(t, testOpusPayloadType, downstream.packets[1].PayloadType)
-		})
-	}
-}
-
 func TestSenderInterceptorDoesNotResetHistoryForAnotherSSRC(t *testing.T) {
 	downstream := &capturedWriter{}
 	writer := newTestSender(t, opusStreamInfo(), downstream)
