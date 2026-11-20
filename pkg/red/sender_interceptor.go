@@ -58,19 +58,12 @@ func NewSenderInterceptor(opts ...SenderOption) (*SenderInterceptorFactory, erro
 		}
 	}
 
-	return &SenderInterceptorFactory{
-		maxPacketSize: sender.maxPacketSize,
-	}, nil
+	return &SenderInterceptorFactory{maxPacketSize: sender.maxPacketSize}, nil
 }
 
 // NewInterceptor constructs a new SenderInterceptor.
 func (factory *SenderInterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, error) {
-	maxPacketSize := factory.maxPacketSize
-	if maxPacketSize == 0 {
-		maxPacketSize = defaultMaxPacketSize
-	}
-
-	return &SenderInterceptor{maxPacketSize: maxPacketSize}, nil
+	return &SenderInterceptor{maxPacketSize: factory.maxPacketSize}, nil
 }
 
 // BindLocalStream wraps an outgoing Opus stream with RED when negotiated RED information is available.
