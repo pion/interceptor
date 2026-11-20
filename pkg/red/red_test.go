@@ -4,7 +4,6 @@
 package red
 
 import (
-	"io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -58,14 +57,6 @@ func TestPayloadMarshal(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, []byte{0xff, 0xff, 0xff, 0xff, 0x7f}, raw[:5])
 	})
-}
-
-func TestPayloadMarshalToShortBuffer(t *testing.T) {
-	payload := Payload{PrimaryBlock: Block{PayloadType: 111, Payload: []byte{0x01}}}
-
-	n, err := payload.MarshalTo(make([]byte, payload.MarshalSize()-1))
-	assert.Zero(t, n)
-	assert.ErrorIs(t, err, io.ErrShortBuffer)
 }
 
 func TestPayloadMarshalValidation(t *testing.T) {

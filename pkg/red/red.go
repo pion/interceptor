@@ -7,7 +7,6 @@ package red
 import (
 	"errors"
 	"fmt"
-	"io"
 )
 
 const (
@@ -52,30 +51,7 @@ func (p Payload) Marshal() ([]byte, error) {
 		return nil, err
 	}
 
-	size := p.MarshalSize()
-	raw := make([]byte, size)
-	p.marshalTo(raw)
-
-	return raw, nil
-}
-
-// MarshalTo serializes a RED payload into raw.
-func (p Payload) MarshalTo(raw []byte) (int, error) {
-	if err := p.validate(); err != nil {
-		return 0, err
-	}
-
-	size := p.MarshalSize()
-	if len(raw) < size {
-		return 0, io.ErrShortBuffer
-	}
-
-	p.marshalTo(raw)
-
-	return size, nil
-}
-
-func (p Payload) marshalTo(raw []byte) {
+	raw := make([]byte, p.MarshalSize())
 	headerOffset := 0
 	payloadOffset := len(p.RedundantBlocks)*redundantHeaderSize + primaryHeaderSize
 
@@ -92,6 +68,7 @@ func (p Payload) marshalTo(raw []byte) {
 
 	raw[headerOffset] = p.PrimaryBlock.PayloadType
 	copy(raw[payloadOffset:], p.PrimaryBlock.Payload)
+	return raw, nil
 }
 
 // MarshalSize returns the number of bytes needed to serialize the payload.
