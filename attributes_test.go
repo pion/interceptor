@@ -103,6 +103,45 @@ func TestAttributesGetRTPHeader(t *testing.T) {
 	})
 }
 
+func TestAttributesSetRTPHeader(t *testing.T) {
+	t.Run("SetAndReplace", func(t *testing.T) {
+		attributes := Attributes{}
+		first := &rtp.Header{PayloadType: 111}
+		second := &rtp.Header{PayloadType: 63}
+
+		attributes.SetRTPHeader(first)
+		header, err := attributes.GetRTPHeader(nil)
+		assert.NoError(t, err)
+		assert.Same(t, first, header)
+
+		attributes.SetRTPHeader(second)
+		header, err = attributes.GetRTPHeader(nil)
+		assert.NoError(t, err)
+		assert.Same(t, second, header)
+	})
+
+	t.Run("Clear", func(t *testing.T) {
+		attributes := Attributes{}
+		attributes.SetRTPHeader(&rtp.Header{PayloadType: 63})
+		attributes.SetRTPHeader(nil)
+
+		expected := &rtp.Header{Version: 2, PayloadType: 111}
+		raw, err := expected.Marshal()
+		assert.NoError(t, err)
+		header, err := attributes.GetRTPHeader(raw)
+		assert.NoError(t, err)
+		assert.Equal(t, expected, header)
+	})
+
+	t.Run("NilAttributes", func(t *testing.T) {
+		var attributes Attributes
+		assert.NotPanics(t, func() {
+			attributes.SetRTPHeader(&rtp.Header{})
+			attributes.SetRTPHeader(nil)
+		})
+	})
+}
+
 func TestAttributesGetRTCPPackets(t *testing.T) {
 	t.Run("NilPacket", func(t *testing.T) {
 		attributes := Attributes{}
