@@ -121,7 +121,7 @@ func TestReceiverInterceptorRecoversMissingPacketsInOrder(t *testing.T) {
 		assert.False(t, recovered.Padding)
 		assert.False(t, recovered.Extension)
 		assert.Empty(t, recovered.Extensions)
-		assert.Equal(t, outerHeader.CSRC, recovered.CSRC)
+		assert.Empty(t, recovered.CSRC)
 	}
 	assert.True(t, third.Marker)
 	assert.True(t, third.Extension)

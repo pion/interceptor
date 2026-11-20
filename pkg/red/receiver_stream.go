@@ -255,7 +255,6 @@ func recoveredPacket(header rtp.Header, block Block, extendedSequence int64) rtp
 			SequenceNumber: uint16(extendedSequence & 0xffff), //nolint:gosec // Masking restores the wrapped value.
 			Timestamp:      header.Timestamp - uint32(block.TimestampOffset),
 			SSRC:           header.SSRC,
-			CSRC:           append([]uint32(nil), header.CSRC...),
 		},
 		Payload: block.Payload,
 	}
