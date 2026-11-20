@@ -5,6 +5,7 @@
 package red
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 )
@@ -85,72 +86,39 @@ func (p Payload) MarshalSize() int {
 // remain valid only while raw remains unchanged.
 func (p *Payload) Unmarshal(raw []byte) error {
 	*p = Payload{}
-	if len(raw) < primaryHeaderSize {
+	if len(raw) == 0 {
 		return errMalformedPayload
 	}
 
-	type blockHeader struct {
-		payloadType     uint8
-		timestampOffset uint16
-		blockLength     int
-	}
-
-	var headers [maxRedundantBlocks]blockHeader
-	headerCount := 0
-	headerOffset := 0
-	var primaryPayloadType uint8
-
-	for {
-		if headerOffset >= len(raw) {
-			return fmt.Errorf("%w: missing primary block header", errMalformedPayload)
-		}
-
-		if raw[headerOffset]&followBit == 0 {
-			primaryPayloadType = raw[headerOffset] & maxPayloadType
-			headerOffset += primaryHeaderSize
-
-			break
-		}
-
-		if headerCount == maxRedundantBlocks {
+	primaryOffset := 0
+	for primaryOffset < len(raw) && raw[primaryOffset]&followBit != 0 {
+		if primaryOffset == maxRedundantBlocks*redundantHeaderSize {
 			return errTooManyBlocks
 		}
-		if len(raw)-headerOffset < redundantHeaderSize {
-			return fmt.Errorf("%w: truncated redundant block header", errMalformedPayload)
-		}
-
-		headers[headerCount] = blockHeader{
-			payloadType:     raw[headerOffset] & maxPayloadType,
-			timestampOffset: uint16(raw[headerOffset+1])<<6 | uint16(raw[headerOffset+2])>>2,
-			blockLength:     int(raw[headerOffset+2]&0x03)<<8 | int(raw[headerOffset+3]),
-		}
-		headerCount++
-		headerOffset += redundantHeaderSize
+		primaryOffset += redundantHeaderSize
+	}
+	if primaryOffset >= len(raw) {
+		return fmt.Errorf("%w: truncated block headers", errMalformedPayload)
 	}
 
-	parsed := Payload{
-		RedundantBlocks: make([]Block, headerCount),
-		PrimaryBlock: Block{
-			PayloadType: primaryPayloadType,
-		},
-	}
-	payloadOffset := headerOffset
-	for i := range headerCount {
-		header := headers[i]
-		if len(raw)-payloadOffset < header.blockLength {
+	blocks := make([]Block, primaryOffset/redundantHeaderSize)
+	payloadOffset := primaryOffset + primaryHeaderSize
+	for i := range blocks {
+		header := binary.BigEndian.Uint32(raw[i*redundantHeaderSize:])
+		length := int(header & maxBlockLength)
+		if len(raw)-payloadOffset < length {
 			return fmt.Errorf("%w: redundant block length exceeds payload", errMalformedPayload)
 		}
-
-		parsed.RedundantBlocks[i] = Block{
-			PayloadType:     header.payloadType,
-			TimestampOffset: header.timestampOffset,
-			Payload:         raw[payloadOffset : payloadOffset+header.blockLength],
+		blocks[i] = Block{
+			PayloadType:     uint8((header >> 24) & maxPayloadType),
+			TimestampOffset: uint16((header >> 10) & maxTimestampOffset),
+			Payload:         raw[payloadOffset : payloadOffset+length],
 		}
-		payloadOffset += header.blockLength
+		payloadOffset += length
 	}
-	parsed.PrimaryBlock.Payload = raw[payloadOffset:]
 
-	*p = parsed
+	p.RedundantBlocks = blocks
+	p.PrimaryBlock = Block{PayloadType: raw[primaryOffset], Payload: raw[payloadOffset:]}
 
 	return nil
 }
