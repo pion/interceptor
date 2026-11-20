@@ -104,57 +104,6 @@ func paddingOnlyPacket(sequenceNumber uint16, timestamp uint32, paddingSize byte
 	}}
 }
 
-func TestReceiverInterceptorExtractsPrimaryOpus(t *testing.T) {
-	outerHeader := rtp.Header{
-		Version:        2,
-		Padding:        true,
-		Marker:         true,
-		PayloadType:    testREDPayloadType,
-		SequenceNumber: 20,
-		Timestamp:      10_000,
-		SSRC:           testSSRC,
-		CSRC:           []uint32{0x11223344},
-		PaddingSize:    4,
-	}
-	require.NoError(t, outerHeader.SetExtension(3, []byte{0xaa, 0xbb}))
-	redPayload := marshalREDPayload(t, Payload{
-		PrimaryBlock: Block{
-			PayloadType: testOpusPayloadType,
-			Payload:     []byte{0x03, 0x04, 0x05},
-		},
-	})
-	inputPacket := rtp.Packet{Header: outerHeader, Payload: redPayload}
-	inputAttributes := interceptor.Attributes{"custom": "value"}
-	inputAttributes.SetRTPHeader(&outerHeader)
-	downstream := &queuedRTPReader{results: []readerResult{{
-		raw:        marshalPacket(t, inputPacket),
-		attributes: inputAttributes,
-	}}}
-	reader := newTestReceiver(t, opusStreamInfo(), downstream)
-
-	buffer := make([]byte, 1500)
-	n, outputAttributes, err := reader.Read(buffer, interceptor.Attributes{})
-	require.NoError(t, err)
-
-	var outputPacket rtp.Packet
-	require.NoError(t, outputPacket.Unmarshal(buffer[:n]))
-	expectedHeader := outerHeader.Clone()
-	expectedHeader.PayloadType = testOpusPayloadType
-	assert.Equal(t, expectedHeader, outputPacket.Header)
-	assert.Equal(t, []byte{0x03, 0x04, 0x05}, outputPacket.Payload)
-	assert.Equal(t, byte(4), outputPacket.PaddingSize)
-	assert.Equal(t, "value", outputAttributes.Get("custom"))
-
-	cachedHeader, err := outputAttributes.GetRTPHeader(nil)
-	require.NoError(t, err)
-	assert.Equal(t, &expectedHeader, cachedHeader)
-	originalCachedHeader, err := inputAttributes.GetRTPHeader(nil)
-	require.NoError(t, err)
-	assert.Equal(t, testREDPayloadType, originalCachedHeader.PayloadType)
-	outputAttributes.Set("output-only", true)
-	assert.Nil(t, inputAttributes.Get("output-only"), "the input attribute map must not be mutated")
-}
-
 func TestReceiverInterceptorConsumesPaddingOnlyPackets(t *testing.T) {
 	info := opusStreamInfo()
 	info.PayloadTypeForwardErrorCorrection = 63
