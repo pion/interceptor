@@ -12,11 +12,7 @@ import (
 	"github.com/pion/rtp"
 )
 
-const (
-	receiveWindowSize     = 64
-	sequenceNumberModulus = int64(1 << 16)
-	sequenceNumberHalf    = sequenceNumberModulus / 2
-)
+const receiveWindowSize = 64
 
 type receiverOutput struct {
 	raw        []byte
@@ -266,7 +262,7 @@ func (history *receiveHistory) position(sequenceNumber uint16) int64 {
 		return int64(sequenceNumber)
 	}
 
-	return extendSequenceNumber(sequenceNumber, history.highest)
+	return history.highest + int64(int16(sequenceNumber-uint16(history.highest))) //nolint:gosec // Wrapping is intended.
 }
 
 func (history *receiveHistory) contains(extended int64) bool {
@@ -308,14 +304,4 @@ func (history *receiveHistory) commit(
 
 func (history *receiveHistory) mark(entry receiveHistoryEntry) {
 	history.entries[entry.extended&(receiveWindowSize-1)] = entry
-}
-func extendSequenceNumber(sequenceNumber uint16, reference int64) int64 {
-	extended := reference&^(sequenceNumberModulus-1) | int64(sequenceNumber)
-	if extended-reference > sequenceNumberHalf {
-		extended -= sequenceNumberModulus
-	} else if reference-extended > sequenceNumberHalf {
-		extended += sequenceNumberModulus
-	}
-
-	return extended
 }
