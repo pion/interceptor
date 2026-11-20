@@ -6,6 +6,7 @@ package red
 import (
 	"fmt"
 	"io"
+	"maps"
 
 	"github.com/pion/interceptor"
 	"github.com/pion/rtp"
@@ -62,7 +63,7 @@ func (stream *receiverStream) Read(
 func (stream *receiverStream) readIncoming(
 	buffer []byte, attributes interceptor.Attributes,
 ) (int, interceptor.Attributes, bool, error) {
-	readAttributes := cloneAttributes(attributes)
+	readAttributes := maps.Clone(attributes)
 	readAttributes.SetRTPHeader(nil)
 	n, receivedAttributes, err := stream.reader.Read(buffer, readAttributes)
 	if err != nil {
@@ -250,7 +251,7 @@ func newReceiverOutput(packet rtp.Packet, attributes interceptor.Attributes) (re
 		return receiverOutput{}, err
 	}
 
-	outputAttributes := cloneAttributes(attributes)
+	outputAttributes := maps.Clone(attributes)
 	if outputAttributes == nil {
 		outputAttributes = interceptor.Attributes{}
 	}

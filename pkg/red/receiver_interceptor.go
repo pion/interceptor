@@ -67,16 +67,3 @@ func (receiver *ReceiverInterceptor) BindRemoteStream(
 		timestampStep:   receiver.timestampStep,
 	}
 }
-
-func cloneAttributes(attributes interceptor.Attributes) interceptor.Attributes {
-	if attributes == nil {
-		return nil
-	}
-
-	cloned := make(interceptor.Attributes, len(attributes))
-	for key, value := range attributes {
-		cloned.Set(key, value)
-	}
-
-	return cloned
-}
