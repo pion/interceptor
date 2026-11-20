@@ -20,6 +20,16 @@ type recoveryCandidate struct {
 func (stream *receiverStream) recoveryCandidates(
 	header rtp.Header, blocks []Block, position sequencePosition,
 ) []recoveryCandidate {
+	if len(blocks) == 0 {
+		return nil
+	}
+	received := stream.history.receivedWith(position.extended)
+	// adding one clears every set bit when the received sequences are contiguous.
+	hasGap := received&(received+1) != 0
+	if !hasGap && stream.timestampStep == 0 {
+		return nil
+	}
+
 	usable := stream.usableRedundantBlocks(blocks)
 	if len(usable) == 0 {
 		return nil
@@ -35,7 +45,7 @@ func (stream *receiverStream) recoveryCandidates(
 	// RED carries media timestamps, not original sequence numbers. Without an
 	// explicit cadence contract, only a completely covered, anchored loss gap
 	// identifies the packet numbers uniquely. A partial gap must remain missing.
-	if position.reset {
+	if !hasGap {
 		return nil
 	}
 	anchors := stream.history.mediaAnchors(position, header.Timestamp)

@@ -58,7 +58,7 @@ func newTestReceiver(
 }
 
 func newTestReceiverWithOptions(
-	t *testing.T, info *interceptor.StreamInfo, downstream interceptor.RTPReader, opts ...ReceiverOption,
+	t testing.TB, info *interceptor.StreamInfo, downstream interceptor.RTPReader, opts ...ReceiverOption,
 ) interceptor.RTPReader {
 	t.Helper()
 

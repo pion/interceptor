@@ -70,7 +70,7 @@ func runTimestampRecoveryTests(t *testing.T, tests []timestampRecoveryTest, opti
 func TestReceiverTimestampMapping(t *testing.T) {
 	first := makePlainPacket(1, 960, []byte{1})
 	third := makePlainPacket(3, 2_880, []byte{3})
-	lateCarrier := timestampREDPacket(t, 4, 3_840, timestampBlock(960, 3), timestampBlock(1_920, 2))
+	fourthRED := timestampREDPacket(t, 4, 3_840, timestampBlock(960, 3), timestampBlock(1_920, 2))
 	paddingAnchor := makePlainPacket(9, 8_640, []byte{9})
 	wrapAnchor := makePlainPacket(65_534, 4_294_965_856, []byte{0xfe})
 
@@ -133,8 +133,13 @@ func TestReceiverTimestampMapping(t *testing.T) {
 			},
 		},
 		{
+			name:     "ContiguousCarrierRecoversEarlierGap",
+			input:    []rtp.Packet{first, third, fourthRED},
+			expected: []rtp.Packet{first, third, makePlainPacket(2, 1_920, []byte{2}), makePlainPacket(4, 3_840, []byte{4})},
+		},
+		{
 			name:     "ReorderedAnchorWithSeenPrimary",
-			input:    []rtp.Packet{lateCarrier, first, lateCarrier, makePlainPacket(2, 1_920, []byte{0xf2})},
+			input:    []rtp.Packet{fourthRED, first, fourthRED, makePlainPacket(2, 1_920, []byte{0xf2})},
 			expected: []rtp.Packet{makePlainPacket(4, 3_840, []byte{4}), first, makePlainPacket(2, 1_920, []byte{2}), third},
 		},
 		{

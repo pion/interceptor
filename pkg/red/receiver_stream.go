@@ -46,9 +46,9 @@ type receiveHistoryEntry struct {
 }
 
 type receiveHistory struct {
-	entries     [receiveWindowSize]receiveHistoryEntry
-	highest     int64
-	initialized bool
+	entries  [receiveWindowSize]receiveHistoryEntry
+	highest  int64
+	received uint64 // Bit i records the packet at highest-i.
 }
 
 func (stream *receiverStream) Read(
@@ -173,9 +173,10 @@ func (stream *receiverStream) buildOutputs(
 	attributes interceptor.Attributes,
 	includePrimary bool,
 ) ([]receiverOutput, []receiveHistoryEntry, error) {
-	outputs := make([]receiverOutput, 0, len(redPayload.RedundantBlocks)+1)
-	recoveredSequences := make([]receiveHistoryEntry, 0, len(redPayload.RedundantBlocks))
-	for _, candidate := range stream.recoveryCandidates(packet.Header, redPayload.RedundantBlocks, position) {
+	candidates := stream.recoveryCandidates(packet.Header, redPayload.RedundantBlocks, position)
+	outputs := make([]receiverOutput, 0, len(candidates)+1)
+	recoveredSequences := make([]receiveHistoryEntry, 0, len(candidates))
+	for _, candidate := range candidates {
 		if !stream.shouldRecover(candidate.block, position, candidate.extended) {
 			continue
 		}
@@ -277,7 +278,7 @@ func newReceiverOutput(packet rtp.Packet, attributes interceptor.Attributes) (re
 }
 
 func (history *receiveHistory) position(sequenceNumber uint16) sequencePosition {
-	if !history.initialized {
+	if history.received == 0 {
 		return sequencePosition{extended: int64(sequenceNumber)}
 	}
 
@@ -309,25 +310,32 @@ func (history *receiveHistory) contains(extended int64) bool {
 
 func (history *receiveHistory) stale(position sequencePosition, extended int64) bool {
 	reference := history.highest
-	if !history.initialized || position.reset || position.extended > reference {
+	if history.received == 0 || position.reset || position.extended > reference {
 		reference = position.extended
 	}
 
 	return reference-extended >= receiveWindowSize
 }
 
+func (history *receiveHistory) receivedWith(extended int64) uint64 {
+	if extended > history.highest {
+		return history.received<<(extended-history.highest) | 1
+	}
+
+	return history.received | 1<<(history.highest-extended)
+}
+
 func (history *receiveHistory) commit(
 	position sequencePosition, timestamp uint32, media bool, recovered []receiveHistoryEntry,
 ) {
-	if !history.initialized || position.reset {
+	if position.reset {
 		history.entries = [receiveWindowSize]receiveHistoryEntry{}
-		history.highest = position.extended
-		history.initialized = true
-	} else if position.extended > history.highest {
-		history.highest = position.extended
 	}
+	history.received = history.receivedWith(position.extended)
+	history.highest = max(history.highest, position.extended)
 
 	for _, entry := range recovered {
+		history.received |= 1 << (history.highest - entry.extended)
 		history.mark(entry)
 	}
 	history.mark(receiveHistoryEntry{extended: position.extended, timestamp: timestamp, media: media})
