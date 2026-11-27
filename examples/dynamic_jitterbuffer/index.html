@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<!-- SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly> -->
+<!-- SPDX-License-Identifier: MIT -->
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Dynamic jitter buffer</title>
+  <style>
+    body { font-family: sans-serif; max-width: 900px; margin: 2em auto; }
+    label { display: grid; grid-template-columns: 8em 1fr 7em; gap: 1em; align-items: center; margin: .5em 0; }
+    pre { background: #111; color: #0f0; padding: 1em; white-space: pre-wrap; min-height: 3em; }
+  </style>
+</head>
+<body>
+  <h1>Dynamic jitter buffer</h1>
+  <p>
+    This page sends 1000-byte RTP packets to the Go receiver over an unreliable data channel,
+    through the simulated network below. Keep the tab visible: browsers throttle timers in background tabs.
+  </p>
+  <label>Bandwidth <input id="bandwidth" type="range" min="100" max="8000" step="100" value="1000"><output></output></label>
+  <label>Latency <input id="latency" type="range" min="0" max="1000" step="10" value="50"><output></output></label>
+  <label>Jitter <input id="jitter" type="range" min="0" max="500" step="5" value="0"><output></output></label>
+  <label>Packet loss <input id="loss" type="range" min="0" max="50" step="1" value="0"><output></output></label>
+  <p>
+    <label style="display:inline"><input id="reorder" type="checkbox"> Allow reordering</label>
+    <button id="stall" disabled>Stall network for 1s</button>
+  </p>
+  <button id="connect">Connect</button>
+  <button id="stop" disabled>Stop</button>
+  <h2>Receiver</h2>
+  <pre id="status">Not connected</pre>
+
+  <script>
+    const PACKET_SIZE = 1000
+    const CLOCK_RATE = 90000
+    const SEND_TICK_MS = 5
+    const MAX_BUFFERED = 1 << 20
+
+    const $ = id => document.getElementById(id)
+    const params = {}
+    for (const [id, unit] of [['bandwidth', 'kbps'], ['latency', 'ms'], ['jitter', 'ms'], ['loss', '%']]) {
+      const input = $(id)
+      const update = () => {
+        params[id] = Number(input.value)
+        input.nextElementSibling.textContent = `${input.value} ${unit}`
+      }
+      input.oninput = update
+      update()
+    }
+
+    let stallUntil = 0
+    $('stall').onclick = () => { stallUntil = performance.now() + 1000 }
+
+    let peer = null
+    $('stop').onclick = () => {
+      peer.close()
+      peer = null
+      $('status').textContent = 'Stopped'
+      $('stop').disabled = $('stall').disabled = true
+      $('connect').disabled = false
+    }
+
+    $('connect').onclick = async () => {
+      $('connect').disabled = true
+      $('stop').disabled = false
+      const pc = new RTCPeerConnection()
+      peer = pc
+      const channel = pc.createDataChannel('rtp', { ordered: false, maxRetransmits: 0 })
+      channel.onmessage = event => { $('status').textContent = event.data }
+      channel.onopen = () => {
+        $('stall').disabled = false
+        send(channel)
+      }
+      pc.onconnectionstatechange = () => {
+        if (peer !== pc) return
+        $('status').textContent = `Connection ${pc.connectionState}`
+        if (pc.connectionState === 'failed') {
+          $('status').textContent += '. Without camera or microphone permission, Firefox offers only one ' +
+            'address, and for a localhost page that can be a VPN address this server cannot reach. ' +
+            'Run the server with -addr <LAN IP>:8080 and open the page at that address instead.'
+        }
+      }
+
+      await pc.setLocalDescription(await pc.createOffer())
+      await new Promise(resolve => {
+        if (pc.iceGatheringState === 'complete') return resolve()
+        pc.onicegatheringstatechange = () => pc.iceGatheringState === 'complete' && resolve()
+      })
+      const response = await fetch('/offer', { method: 'POST', body: JSON.stringify(pc.localDescription) })
+      await pc.setRemoteDescription(await response.json())
+    }
+
+    // send generates packets at the chosen bandwidth and delivers each one after
+    // the simulated latency and jitter, unless it is lost. Each packet's timestamp
+    // advances by its own duration at the current bitrate, so timestamps track
+    // wall-clock time and the receiver can pace playout by them.
+    function send(channel) {
+      const ssrc = (Math.random() * 2 ** 32) >>> 0
+      let seq = 0, mediaMs = 0, credit = 0, last = performance.now(), lastBase = 0, lastDelivery = 0
+      const queue = []
+
+      const timer = setInterval(() => {
+        if (channel.readyState !== 'open') return clearInterval(timer)
+        const now = performance.now()
+        // bandwidth in kbps is bits per millisecond.
+        credit += (now - last) * params.bandwidth / 8 / PACKET_SIZE
+        last = now
+        for (; credit >= 1; credit--) {
+          const packet = new Uint8Array(PACKET_SIZE)
+          const view = new DataView(packet.buffer)
+          view.setUint8(0, 0x80)
+          view.setUint8(1, 96)
+          view.setUint16(2, seq)
+          view.setUint32(4, Math.round(mediaMs * CLOCK_RATE / 1000) >>> 0)
+          view.setUint32(8, ssrc)
+          seq = (seq + 1) & 0xffff
+          mediaMs += 8 * PACKET_SIZE / params.bandwidth
+
+          if (Math.random() * 100 < params.loss) continue
+          // Latency changes never reorder packets; only jitter can.
+          lastBase = Math.max(now + params.latency, lastBase)
+          let at = lastBase + Math.random() * params.jitter
+          if (!$('reorder').checked) at = Math.max(at, lastDelivery)
+          lastDelivery = at
+          queue.push({ at, packet })
+        }
+
+        queue.sort((a, b) => a.at - b.at)
+        if (now < stallUntil) return
+        while (queue.length && queue[0].at <= now) {
+          const { packet } = queue.shift()
+          if (channel.bufferedAmount < MAX_BUFFERED) channel.send(packet)
+        }
+      }, SEND_TICK_MS)
+    }
+  </script>
+</body>
+</html>

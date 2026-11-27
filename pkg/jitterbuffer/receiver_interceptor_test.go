@@ -96,3 +96,72 @@ func TestReceiverBuffersAndPlaysout(t *testing.T) {
 	err = testInterceptor.Close()
 	assert.NoError(t, err)
 }
+
+func newDynamicStream(t *testing.T, opts ...Option) (*test.MockStream, interceptor.Interceptor) {
+	t.Helper()
+	factory, err := NewInterceptor(WithBufferOptions(opts...))
+	assert.NoError(t, err)
+	testInterceptor, err := factory.NewInterceptor("")
+	assert.NoError(t, err)
+
+	return test.NewMockStream(&interceptor.StreamInfo{SSRC: 123456, ClockRate: 90000}, testInterceptor), testInterceptor
+}
+
+func readSeq(t *testing.T, stream *test.MockStream) uint16 {
+	t.Helper()
+	select {
+	case read := <-stream.ReadRTP():
+		assert.NoError(t, read.Err)
+
+		return read.Packet.SequenceNumber
+	case <-time.After(time.Second):
+		assert.Fail(t, "timed out waiting for packet")
+
+		return 0
+	}
+}
+
+func assertNothingReadable(t *testing.T, stream *test.MockStream) {
+	t.Helper()
+	time.Sleep(50 * time.Millisecond)
+	select {
+	case read := <-stream.ReadRTP():
+		assert.Fail(t, "unexpected packet", "%v", read.Packet)
+	default:
+	}
+}
+
+func TestReceiverDynamicLengthBandwidth(t *testing.T) {
+	stream, testInterceptor := newDynamicStream(t,
+		WithDynamicLength(DynamicLengthConfig{TargetDelay: 100 * time.Millisecond}),
+		WithBandwidthEstimator(&fakeBWE{1_000_000}),
+	)
+	for seq := range uint16(12) {
+		stream.ReceiveRTP(dynPacket(seq))
+	}
+	assertNothingReadable(t, stream)
+
+	stream.ReceiveRTP(dynPacket(12))
+	assert.Equal(t, uint16(0), readSeq(t, stream))
+
+	assert.NoError(t, stream.Close())
+	assert.NoError(t, testInterceptor.Close())
+}
+
+func TestReceiverDynamicLengthLoss(t *testing.T) {
+	stream, testInterceptor := newDynamicStream(t, WithMinimumPacketCount(5), WithDynamicLength(DynamicLengthConfig{}))
+	for seq := range uint16(30) {
+		if seq != 10 {
+			stream.ReceiveRTP(dynPacket(seq))
+		}
+	}
+	for seq := range uint16(26) {
+		if seq != 10 {
+			assert.Equal(t, seq, readSeq(t, stream))
+		}
+	}
+	assertNothingReadable(t, stream)
+
+	assert.NoError(t, stream.Close())
+	assert.NoError(t, testInterceptor.Close())
+}

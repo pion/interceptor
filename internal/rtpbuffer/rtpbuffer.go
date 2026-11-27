@@ -159,3 +159,7 @@ func (r *RTPBuffer) index(seq uint16) (uint16, bool) {
 }
 
 func (r *RTPBuffer) Started() bool { return r.started }
+
+// HighestAdded returns the highest sequence number added since the last
+// packet-buffer start. Clear resets Started, but may leave this value stale.
+func (r *RTPBuffer) HighestAdded() uint16 { return r.highestAdded }

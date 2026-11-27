@@ -82,6 +82,9 @@ type JitterBuffer struct {
 	state            State
 	stats            Stats
 	listeners        map[Event][]EventListener
+	dynamicCfg       *DynamicLengthConfig
+	estimator        BandwidthEstimator
+	dynamic          *dynamicLength
 }
 
 // Stats Track interesting statistics for the life of this JitterBuffer
@@ -90,12 +93,26 @@ type JitterBuffer struct {
 //	without its predecessor being present
 //
 // underflowCount will provide the count of attempts to Pop an empty buffer
+// skippedCount will provide the number of missing packets skipped at playout.
 // overflowCount will track the number of times the jitter buffer exceeds its limit.
 type Stats struct {
 	outOfOrderCount uint32
 	underflowCount  uint32
 	overflowCount   uint32
+	skippedCount    uint32
 }
+
+// OutOfOrderCount returns how many packets were pushed without their predecessor present.
+func (s Stats) OutOfOrderCount() uint32 { return s.outOfOrderCount }
+
+// UnderflowCount returns how many pops found no packet to return.
+func (s Stats) UnderflowCount() uint32 { return s.underflowCount }
+
+// OverflowCount returns how many times the buffer exceeded its size.
+func (s Stats) OverflowCount() uint32 { return s.overflowCount }
+
+// SkippedCount returns how many missing packets were skipped at playout.
+func (s Stats) SkippedCount() uint32 { return s.skippedCount }
 
 var (
 	// ErrInvalidOperation may be returned if a Pop or Find operation is performed on an playback buffer.
@@ -108,7 +125,7 @@ var (
 func New(opts ...Option) *JitterBuffer {
 	jb := &JitterBuffer{
 		state:         Buffering,
-		stats:         Stats{0, 0, 0},
+		stats:         Stats{},
 		minStartCount: 50,
 		overflowLen:   1024,
 		listeners:     make(map[Event][]EventListener),
@@ -119,6 +136,14 @@ func New(opts ...Option) *JitterBuffer {
 	}
 
 	jb.minStartCount = min(jb.minStartCount, jb.overflowLen)
+	if jb.estimator != nil || jb.dynamicCfg != nil {
+		cfg := DynamicLengthConfig{}
+		if jb.dynamicCfg != nil {
+			cfg = *jb.dynamicCfg
+		}
+		jb.dynamic = newDynamicLength(cfg, jb.estimator, jb.minStartCount, jb.overflowLen)
+		jb.minStartCount = jb.dynamic.target()
+	}
 
 	if jb.copyPackets {
 		jb.packetFactory = rtpbuffer.NewPacketFactoryCopy()
@@ -197,6 +222,27 @@ func (jb *JitterBuffer) PlayoutHead() uint16 {
 	return jb.playoutHead
 }
 
+// State returns whether the buffer is Buffering or Emitting.
+func (jb *JitterBuffer) State() State {
+	return jb.state
+}
+
+// Length returns the number of packets ready for playout.
+func (jb *JitterBuffer) Length() uint16 {
+	return jb.playbackBuffer.Length()
+}
+
+// TargetLength returns the number of packets the buffer must hold before it
+// starts Emitting. In dynamic mode it changes over time (see WithDynamicLength).
+func (jb *JitterBuffer) TargetLength() uint16 {
+	return jb.minStartCount
+}
+
+// Stats returns a snapshot of the buffer's statistics.
+func (jb *JitterBuffer) Stats() Stats {
+	return jb.stats
+}
+
 // SetPlayoutHead allows you to manually specify the packet you wish to pop next
 // If you have encountered a packet that hasn't resolved you can skip it.
 func (jb *JitterBuffer) SetPlayoutHead(playoutHead uint16) {
@@ -221,6 +267,9 @@ func (jb *JitterBuffer) Push(packet *rtp.Packet) {
 	rPacket, err := jb.packetFactory.NewPacket(&packet.Header, packet.Payload, 0, 0)
 	if err != nil {
 		return
+	}
+	if jb.dynamic != nil {
+		jb.dynamic.observe(packet)
 	}
 
 	// Without copying, the RetainablePacket references the caller's header and
@@ -253,6 +302,14 @@ func (jb *JitterBuffer) emit(event Event) {
 }
 
 func (jb *JitterBuffer) updateState() {
+	if jb.dynamic != nil && jb.state == Buffering {
+		jb.minStartCount = jb.dynamic.target()
+		for jb.playbackBuffer.Length() < jb.minStartCount && jb.bufferedSpan() >= jb.minStartCount {
+			if !jb.skipGap() {
+				break
+			}
+		}
+	}
 	// For now, we only look at the number of packets captured in the play buffer
 	if jb.playbackBuffer.Length() >= jb.minStartCount && jb.state == Buffering {
 		jb.state = Emitting
@@ -307,10 +364,12 @@ func (jb *JitterBuffer) popRetainable() (*rtpbuffer.RetainablePacket, error) {
 	if jb.state != Emitting {
 		return nil, ErrPopWhileBuffering
 	}
+	if jb.dynamic != nil && jb.playbackBuffer.Empty() {
+		jb.skipGap()
+	}
 	packet := jb.playbackBuffer.Pop()
 	if packet == nil {
-		jb.stats.underflowCount++
-		jb.emit(BufferUnderflow)
+		jb.underflow()
 
 		return nil, ErrNotFound
 	}
@@ -327,8 +386,7 @@ func (jb *JitterBuffer) PopAtSequence(sq uint16) (*rtp.Packet, error) {
 	}
 	packet := jb.playbackBuffer.PopAt(sq)
 	if packet == nil {
-		jb.stats.underflowCount++
-		jb.emit(BufferUnderflow)
+		jb.underflow()
 
 		return nil, ErrNotFound
 	}
@@ -414,8 +472,7 @@ func (jb *JitterBuffer) PopAtTimestamp(ts uint32) (*rtp.Packet, error) {
 	}
 	packet := jb.playbackBuffer.PopAtTimestamp(ts)
 	if packet == nil {
-		jb.stats.underflowCount++
-		jb.emit(BufferUnderflow)
+		jb.underflow()
 
 		return nil, ErrNotFound
 	}
@@ -453,6 +510,59 @@ func (jb *JitterBuffer) view(rPacket *rtpbuffer.RetainablePacket) *rtp.Packet {
 	return pkt
 }
 
+func (jb *JitterBuffer) underflow() {
+	jb.stats.underflowCount++
+	if jb.dynamic != nil && jb.playbackBuffer.Empty() {
+		jb.dynamic.onUnderflow()
+		jb.minStartCount = jb.dynamic.target()
+		jb.state = Buffering
+	}
+	jb.emit(BufferUnderflow)
+}
+
+// bufferedSpan is the number of sequence numbers from the playout head to the
+// newest packet, or 0 if that span is empty or ambiguous.
+func (jb *JitterBuffer) bufferedSpan() uint16 {
+	span := jb.reorderBuffer.HighestAdded() - jb.playoutHead + 1
+	if !jb.reorderBuffer.Started() || span >= rtpbuffer.Uint16SizeHalf {
+		return 0
+	}
+
+	return span
+}
+
+// skipGap moves playout past a missing packet to the next buffered one,
+// reporting whether it did.
+func (jb *JitterBuffer) skipGap() bool {
+	if !jb.reorderBuffer.Started() {
+		return false
+	}
+	highest := jb.reorderBuffer.HighestAdded()
+	gap := highest - jb.expectedSequence
+	if gap == 0 || gap >= rtpbuffer.Uint16SizeHalf {
+		return false
+	}
+	start := jb.expectedSequence + 1
+	if gap >= jb.overflowLen {
+		start = highest - jb.overflowLen + 1
+	}
+	for seq := start; seq != highest+1; seq++ {
+		if jb.reorderBuffer.Peek(seq) == nil {
+			continue
+		}
+		jb.stats.skippedCount += uint32(seq - jb.expectedSequence)
+		jb.expectedSequence = seq
+		if jb.playbackBuffer.Empty() {
+			jb.playoutHead = seq
+		}
+		jb.drain()
+
+		return true
+	}
+
+	return false
+}
+
 // Move the packets into the playback buffer as long as they are in order.
 func (jb *JitterBuffer) drain() {
 	for range jb.overflowLen {
@@ -483,6 +593,10 @@ func (jb *JitterBuffer) Clear(resetState bool) {
 		jb.playoutHead = 0
 		jb.playoutReady = false
 		jb.state = Buffering
-		jb.stats = Stats{0, 0, 0}
+		jb.stats = Stats{}
+		if jb.dynamic != nil {
+			jb.dynamic.reset()
+			jb.minStartCount = jb.dynamic.target()
+		}
 	}
 }
